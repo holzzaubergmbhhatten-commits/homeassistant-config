@@ -15,6 +15,9 @@ automation:
   - condition: template
     value_template: '{{ not (trigger.event.data.text | default('''') | string) is match(''^\s*/?(liste|einkaufsliste|einkauf)\s*\??\s*$'',
       ignorecase=True) }}'
+  - condition: template
+    value_template: '{{ not (trigger.event.data.text | default('''') | string) is match(''^\s*/?(monitor|home|start|zurück|zurueck|dashboard)\s*!?\s*$'',
+      ignorecase=True) }}'
   actions:
   - variables:
       text: '{{ trigger.event.data.text }}'
@@ -191,3 +194,28 @@ automation:
 
         {% endfor %}{% endif %}{% endset %}{{ t | replace(''&'',''&amp;'') | replace(''<'',''&lt;'') | replace(''>'',''&gt;'')
         }}'
+- id: telegram_monitor_zurueck
+  alias: 'Telegram: Monitor zurück zum Dashboard'
+  description: Auf "Monitor", "Start" oder "Zurück" springt der Touchmonitor sofort zum Dashboard.
+  mode: queued
+  triggers:
+  - trigger: event
+    event_type: telegram_text
+  conditions:
+  - condition: template
+    value_template: '{{ (trigger.event.data.text | default('''') | string) is match(''^\s*/?(monitor|home|start|zurück|zurueck|dashboard)\s*!?\s*$'',
+      ignorecase=True) }}'
+  actions:
+  - action: script.turn_off
+    continue_on_error: true
+    target:
+      entity_id:
+      - script.amazon_auf_monitor
+      - script.amazon_startseite
+      - script.stellplaetze_verwalten
+  - action: rest_command.kiosk_dashboard
+  - action: telegram_bot.send_message
+    data:
+      chat_id: '{{ trigger.event.data.chat_id }}'
+      parse_mode: html
+      message: 🏠 Der Monitor zeigt wieder das Dashboard.
