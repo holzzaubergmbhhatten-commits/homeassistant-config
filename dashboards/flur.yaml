@@ -1337,7 +1337,7 @@ views:
       heading_style: title
       icon: mdi:cctv
     - type: picture-entity
-      entity: camera.192_168_0_118
+      entity: camera.hot_tor_kamera
       name: Hof-Tor
       camera_view: auto
       show_name: true
@@ -1347,7 +1347,7 @@ views:
       grid_options:
         columns: full
     - type: picture-entity
-      entity: camera.192_168_0_110
+      entity: camera.giebel_vorne
       name: Giebel vorne
       camera_view: auto
       show_name: true
@@ -1357,7 +1357,7 @@ views:
       grid_options:
         columns: full
     - type: picture-entity
-      entity: camera.192_168_0_108
+      entity: camera.giebel_hinten
       name: Giebel hinten
       camera_view: auto
       show_name: true
@@ -1367,7 +1367,7 @@ views:
       grid_options:
         columns: full
     - type: picture-entity
-      entity: camera.192_168_0_116
+      entity: camera.hof_hinten
       name: Hof hinten
       camera_view: auto
       show_name: true
@@ -1439,7 +1439,7 @@ views:
       grid_options:
         columns: full
     - type: picture-entity
-      entity: camera.192_168_0_118
+      entity: camera.hot_tor_kamera
       name: Hof-Tor (Tapo, live)
       camera_view: live
       show_name: true
