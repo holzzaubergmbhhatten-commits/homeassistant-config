@@ -1309,49 +1309,13 @@ views:
       heading: Hoftor-Klingel
       heading_style: title
       icon: mdi:doorbell-video
-    - type: conditional
-      conditions:
-      - condition: state
-        entity: camera.hoftor_klingel_live_ansicht
-        state_not: unavailable
-      card:
-        type: picture-entity
-        entity: camera.hoftor_klingel_live_ansicht
-        camera_view: auto
-        show_name: false
-        show_state: false
-        tap_action:
-          action: more-info
-      grid_options:
-        columns: full
-    - type: conditional
-      conditions:
-      - condition: state
-        entity: camera.hoftor_klingel_live_view
-        state_not: unavailable
-      card:
-        type: picture-entity
-        entity: camera.hoftor_klingel_live_view
-        camera_view: auto
-        show_name: false
-        show_state: false
-        tap_action:
-          action: more-info
-      grid_options:
-        columns: full
-    - type: conditional
-      conditions:
-      - condition: state
-        entity: camera.hoftor_klingel_live
-        state_not: unavailable
-      card:
-        type: picture-entity
-        entity: camera.hoftor_klingel_live
-        camera_view: auto
-        show_name: false
-        show_state: false
-        tap_action:
-          action: more-info
+    - type: picture-entity
+      entity: camera.hoftor_klingel_live_ansicht
+      camera_view: auto
+      show_name: false
+      show_state: false
+      tap_action:
+        action: more-info
       grid_options:
         columns: full
     - type: button
@@ -1428,49 +1392,13 @@ views:
       heading: Es klingelt am Hoftor
       heading_style: title
       icon: mdi:bell-ring
-    - type: conditional
-      conditions:
-      - condition: state
-        entity: camera.hoftor_klingel_live_ansicht
-        state_not: unavailable
-      card:
-        type: picture-entity
-        entity: camera.hoftor_klingel_live_ansicht
-        camera_view: live
-        show_name: false
-        show_state: false
-        tap_action:
-          action: more-info
-      grid_options:
-        columns: full
-    - type: conditional
-      conditions:
-      - condition: state
-        entity: camera.hoftor_klingel_live_view
-        state_not: unavailable
-      card:
-        type: picture-entity
-        entity: camera.hoftor_klingel_live_view
-        camera_view: live
-        show_name: false
-        show_state: false
-        tap_action:
-          action: more-info
-      grid_options:
-        columns: full
-    - type: conditional
-      conditions:
-      - condition: state
-        entity: camera.hoftor_klingel_live
-        state_not: unavailable
-      card:
-        type: picture-entity
-        entity: camera.hoftor_klingel_live
-        camera_view: live
-        show_name: false
-        show_state: false
-        tap_action:
-          action: more-info
+    - type: picture-entity
+      entity: camera.hoftor_klingel_live_ansicht
+      camera_view: live
+      show_name: false
+      show_state: false
+      tap_action:
+        action: more-info
       grid_options:
         columns: full
     - type: button
