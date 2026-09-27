@@ -36,26 +36,25 @@ einfach so. Möglichkeiten für Punkt 7:
    mit Browser im Kiosk-Modus, das auf `http://homeassistant.local:8123` zeigt.
 3. Mini-PC mit Proxmox: HA als VM + kleines Linux mit Kiosk-Browser.
 
-## Offene Punkte
-0. [x] Git-pull läuft (Repository öffentlich, ohne Token)
-- [ ] Kiosk-Dashboard auf `flur-display/start`, Theme Apple, Sidebar None umstellen
-- [x] Telegram-Bot (Polling) eingerichtet, Chat freigegeben, Test ok
-- [ ] Anthropic-Integration (Claude) + Freigaben für Assist
-- [ ] Feste IP 192.168.0.191 im Omada Controller reservieren
-- [ ] Alten Home Assistant im Docker auf dem Laptop stoppen
-- [ ] 3 Updates (Core 2026.9.4, OS 18.3, Shelly) einspielen
-1. [x] Backup auf dem Mini-PC wiederhergestellt
-2. [ ] Restliche Shelly-Geräte (Garagenlicht, Wegbeleuchtung)
-3. [ ] Matter-Lampen auf dem Mini-PC koppeln
-4. [ ] HACS + card-mod neu einrichten (prüfen, ob aus Backup schon da)
-5. [ ] Geburtstage in den Kalender
-6. [ ] Grundriss: genaue, editierbare Grafik
-7. [x] Touchmonitor am Mini-PC, App „HAOS Kiosk Display“ zeigt `flur-monitor` (27.09.2026)
-8. [ ] Bildschirmtastatur prüfen
-9. [ ] Nachtabschaltung des Displays (Uhrzeit / Sprachbefehl)
-10. [ ] Wisch-Navigation zwischen Dashboard-Seiten (HACS: „Swipe Navigation“)
+## Stand 27.09.2026 abends
+Erledigt:
+- Mini-PC (192.168.0.191) mit HAOS, Backup wiederhergestellt, Git pull aktiv (Repo öffentlich)
+- Touchmonitor über „HAOS Kiosk Display“, Dashboard „Flur“ (`/flur-display/start`) im Apple-Stil, Deutsch
+- Startseite: Termine heute/morgen/übermorgen, Ferienwohnung (Holidu) & Stellplätze (Portal),
+  Einkaufsliste (nur offene), Schnellzugriff (Hoftor, Lichter, Einkauf, Kameras, Amazon, Stellplätze verwalten)
+- Seiten: Einkauf (Schnell hinzufügen), Kalender, Licht (49 Lampen), Kameras, Klingel (Unterseite)
+- Kalender „Geburtstage“ heißt „Termine“ (calendar.geburtstage)
+- Telegram-Bot „Zuhause“ (Marco + Frau freigegeben): Claude, Termine eintragen, „Liste“, „Monitor“
+- Ring-Klingel (Hoftor): beim Klingeln Kamera-Seite auf dem Monitor + Foto per Telegram
+- Tapo-Kameras (Generische Kamera, RTSP stream2): Hof-Tor, Giebel vorne, Giebel hinten, Hof hinten – live
 
-11. [ ] Sprachsteuerung einrichten (siehe `sprache/ANLEITUNG.md`)
+Offen:
+- [ ] Tastatur im Apple-Stil: `|dconf` in Kiosk-Whitelist, dann Skript „Monitor: Tastatur im Apple-Stil“
+- [ ] Kiosk-Konfiguration: HA Dashboard `flur-display/start`, Theme `Apple`
+- [ ] Musik: Sonos + HomePods einbinden, Music Assistant mit Apple Music, Musik-Seite
+- [ ] Ring echtes Live-Bild auf dem Monitor (Ring-MQTT), falls gewünscht
+- [ ] Matter-Lampen, restliche Shellys, Nachtabschaltung Display, Grundriss
+- [ ] Feste IP im Omada Controller, alten Docker-HA auf dem Laptop stoppen, Updates einspielen
 
 ## Stand laut Backup vom 27.09.2026 (HA 2026.8.3)
 - 14 Räume, 49 IKEA-Lampen (Dirigera), 1 Shelly (Hoftor), 3 Kalender,
