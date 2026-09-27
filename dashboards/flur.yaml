@@ -1356,6 +1356,16 @@ views:
         action: more-info
       grid_options:
         columns: full
+    - type: picture-entity
+      entity: camera.192_168_0_116
+      name: Hof hinten
+      camera_view: auto
+      show_name: true
+      show_state: false
+      tap_action:
+        action: more-info
+      grid_options:
+        columns: full
 - type: sections
   max_columns: 4
   title: Grundriss
