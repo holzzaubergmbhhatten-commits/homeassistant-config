@@ -47,3 +47,18 @@ automation:
               message: "🔔 Es klingelt am Hoftor ({{ now().strftime('%H:%M') }} Uhr)"
       - delay: "00:03:00"
       - action: rest_command.kiosk_dashboard
+
+  - id: ring_bild_erneuern
+    alias: "Klingel: Ring-Bild alle 30 Sekunden erneuern"
+    description: >-
+      Fragt bei der Ring-Klingel regelmäßig ein neues Bild an, damit die Kachel auf dem
+      Monitor aktuell bleibt. Bei Akku-Betrieb liefert Ring evtl. nicht jedes Mal ein neues Bild.
+    mode: single
+    triggers:
+      - trigger: time_pattern
+        seconds: "/30"
+    actions:
+      - action: homeassistant.update_entity
+        continue_on_error: true
+        target:
+          entity_id: camera.hoftor_klingel_live_ansicht
