@@ -1,0 +1,31 @@
+# Privater Telegram-Bot: Nachrichten gehen an Claude (Sprachassistent von Home Assistant),
+# die Antwort kommt als Telegram-Nachricht zurück.
+# Beispiele: "Freitag 14 Uhr Zahnarzt Mucki", "Setz Milch auf die Einkaufsliste",
+# "Was steht nächste Woche an?"
+# Nur Chat-IDs, die in der Integration "Telegram bot" erlaubt sind, lösen das aus.
+automation:
+  - id: telegram_an_claude
+    alias: "Telegram: Nachricht an Claude weitergeben"
+    mode: queued
+    max: 10
+    triggers:
+      - trigger: event
+        event_type: telegram_text
+    actions:
+      - action: conversation.process
+        data:
+          text: "{{ trigger.event.data.text }}"
+          language: de
+          # Nimmt automatisch den Claude-Gesprächsagenten, sonst den eingebauten Assistenten
+          agent_id: >-
+            {{ states.conversation | map(attribute='entity_id')
+               | select('search', 'claude|anthropic') | first
+               | default('conversation.home_assistant', true) }}
+        response_variable: antwort
+      - action: telegram_bot.send_message
+        data:
+          chat_id: "{{ trigger.event.data.chat_id }}"
+          message: >-
+            {{ antwort.response.speech.plain.speech
+               if antwort.response is defined and antwort.response.speech.plain is defined
+               else 'Erledigt.' }}

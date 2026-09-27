@@ -47,3 +47,36 @@ Eine von zwei Varianten:
 - „Geburtstag Oma am 14. November eintragen.“
 - „Was steht diese Woche im Kalender?“ / „Welche Buchungen kommen im Oktober?“
 - „Setz Milch und Eier auf die Einkaufsliste.“
+
+---
+
+# Termine per Telegram (privat, getrennt von der Firma)
+
+Ein eigener Telegram-Bot, der nur dir (und freigegebenen Personen) antwortet.
+Die Automation dazu liegt in `packages/telegram.yaml`.
+
+## 1. Bot anlegen (Telegram-App, 2 Minuten)
+1. In Telegram den Chat **@BotFather** öffnen → `/newbot` schicken.
+2. Namen eingeben, z. B. `Zuhause`.
+3. Benutzernamen eingeben, muss auf `bot` enden, z. B. `urlaub_zuhause_bot`.
+4. BotFather schickt einen **Token** (`123456789:ABC…`) → kopieren, nicht weitergeben.
+5. Deine Chat-ID herausfinden: Chat **@userinfobot** öffnen → `/start` → er
+   antwortet mit deiner **Id** (eine Zahl).
+
+## 2. In Home Assistant einbinden
+1. Einstellungen → Geräte & Dienste → Integration hinzufügen → **Telegram bot**.
+2. Plattform: **Polling** (kein Zugriff aus dem Internet nötig).
+3. API-Token vom BotFather einfügen → weiter.
+4. Bei der Integration **„Erlaubte Chat-ID hinzufügen“** → deine Id von @userinfobot.
+5. In Telegram deinem neuen Bot einmal `/start` schreiben.
+
+## 3. Claude als Gesprächsagent
+1. Integration hinzufügen → **Anthropic** → API-Schlüssel.
+2. Beim Gesprächsagenten: **„Home Assistant steuern“ / Assist** aktivieren.
+   Anweisungen (Prompt) z. B.:
+   `Du bist der Assistent der Familie. Antworte kurz und auf Deutsch. Termine trägst du mit dem Skript "Termin eintragen" ein und bestätigst Datum und Uhrzeit.`
+3. Einstellungen → Sprachassistenten → **Entitäten freigeben**: Kalender,
+   Einkaufsliste, Skript „Termin eintragen“, gewünschte Lichter.
+
+Sprachnachrichten: einfach die Diktierfunktion der Handy-Tastatur (Mikrofon) nutzen –
+der Bot bekommt dann Text.
