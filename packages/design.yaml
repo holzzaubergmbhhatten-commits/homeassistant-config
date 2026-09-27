@@ -1,17 +1,41 @@
-# Apple-Design als Standard für alle Geräte (auch den Touchmonitor).
+# Design des Touchmonitors: Hell / Dunkel / Automatisch (tagsüber hell, ab Sonnenuntergang dunkel).
+# Umschaltbar auf der Startseite (Schnellzugriff → Design).
+input_select:
+  design:
+    name: Design
+    icon: mdi:theme-light-dark
+    options:
+      - Hell
+      - Dunkel
+      - Automatisch
+    initial: Hell
+
 automation:
-  - id: apple_theme_beim_start
-    alias: "Design: Apple-Theme beim Start setzen"
+  - id: design_anwenden
+    alias: "Design: Hell/Dunkel anwenden"
+    mode: restart
     triggers:
       - trigger: homeassistant
         event: start
+      - trigger: state
+        entity_id: input_select.design
+      - trigger: sun
+        event: sunrise
+      - trigger: sun
+        event: sunset
     actions:
+      - variables:
+          hell: >-
+            {{ is_state('input_select.design', 'Hell')
+               or (is_state('input_select.design', 'Automatisch') and is_state('sun.sun', 'above_horizon')) }}
+      # Standard für helle Browser
       - action: frontend.set_theme
         data:
-          name: Apple
+          name: "{{ 'Apple Hell' if hell else 'Apple' }}"
+      # Standard für dunkle Browser (der Monitor läuft im Dunkelmodus)
       - action: frontend.set_theme
         data:
-          name: Apple
+          name: "{{ 'Apple Hell' if hell else 'Apple' }}"
           mode: dark
 
 template:

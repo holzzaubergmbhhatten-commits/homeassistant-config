@@ -76,3 +76,45 @@ Apple:
       success-color: '#30D158'
       warning-color: '#FF9F0A'
       error-color: '#FF453A'
+
+# Helle Variante ohne Umschaltung – wird z. B. tagsüber als Standard gesetzt
+Apple Hell:
+  primary-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", Roboto, "Helvetica Neue", sans-serif
+  paper-font-common-base_-_font-family: var(--primary-font-family)
+  ha-font-family-body: var(--primary-font-family)
+  ha-font-family-heading: var(--primary-font-family)
+  ha-card-border-radius: 22px
+  ha-card-border-width: 0px
+  ha-tile-border-radius: 22px
+  ha-badge-border-radius: 18px
+  ha-dialog-border-radius: 28px
+  mdc-shape-medium: 22px
+  mdc-shape-small: 14px
+  ha-section-title-font-size: 22px
+  state-light-active-color: '#FFCC00'
+  state-switch-active-color: '#34C759'
+  state-script-active-color: '#0A84FF'
+  state-icon-active-color: '#FFD60A'
+  primary-color: '#007AFF'
+  accent-color: '#007AFF'
+  primary-background-color: '#F2F2F7'
+  secondary-background-color: '#FFFFFF'
+  lovelace-background: '#F2F2F7'
+  card-background-color: '#FFFFFF'
+  ha-card-background: '#FFFFFF'
+  ha-card-box-shadow: none
+  primary-text-color: '#1C1C1E'
+  secondary-text-color: '#8E8E93'
+  disabled-text-color: '#C7C7CC'
+  divider-color: rgba(60, 60, 67, 0.12)
+  app-header-background-color: '#F2F2F7'
+  app-header-text-color: '#1C1C1E'
+  sidebar-background-color: '#F2F2F7'
+  sidebar-selected-icon-color: '#007AFF'
+  sidebar-selected-text-color: '#007AFF'
+  switch-checked-color: '#34C759'
+  switch-checked-button-color: '#FFFFFF'
+  switch-checked-track-color: '#34C759'
+  success-color: '#34C759'
+  warning-color: '#FF9500'
+  error-color: '#FF3B30'

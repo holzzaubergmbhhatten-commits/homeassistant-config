@@ -286,6 +286,16 @@ views:
       grid_options:
         columns: 6
         rows: 2
+    - type: tile
+      entity: input_select.design
+      name: Design
+      icon: mdi:theme-light-dark
+      features:
+      - type: select-options
+      features_position: bottom
+      grid_options:
+        columns: full
+        rows: 2
 - title: Einkauf
   path: einkauf
   icon: mdi:cart
