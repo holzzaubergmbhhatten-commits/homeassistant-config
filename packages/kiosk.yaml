@@ -14,6 +14,20 @@ rest_command:
     payload: '{"url": "http://localhost:8123/flur-display/start"}'
 
 script:
+  amazon_startseite:
+    alias: Amazon-Startseite auf dem Flur-Monitor
+    description: >-
+      Öffnet amazon.de auf dem Touchmonitor und springt nach 5 Minuten automatisch
+      zurück zum Dashboard (sofort zurück: mit 2 Fingern 3x tippen).
+    icon: mdi:cart
+    mode: restart
+    sequence:
+      - action: rest_command.kiosk_url_oeffnen
+        data:
+          url: https://www.amazon.de/
+      - delay: "00:05:00"
+      - action: rest_command.kiosk_dashboard
+
   amazon_auf_monitor:
     alias: Amazon-Bestellungen auf dem Flur-Monitor
     description: >-

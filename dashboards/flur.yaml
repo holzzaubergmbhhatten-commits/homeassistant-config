@@ -140,7 +140,7 @@ views:
 
         {% set stellplatz = ''stellplatz|wohnmobil|camper|camping|womo'' %}
 
-        {% for bereich, symbol in [(''Ferienwohnung'', ''🏡''), (''Stellplätze'', ''🚐'')] %}
+        {% for bereich, symbol in [(''Ferienwohnung'', ''mdi:home-heart''), (''Stellplätze'', ''mdi:rv-truck'')] %}
 
         {%- set ns = namespace(aktuell=[], naechste=[]) %}
 
@@ -162,20 +162,20 @@ views:
 
         {%- endfor %}
 
-        **{{ symbol }} {{ bereich }}**
+        <ha-icon icon="{{ symbol }}"></ha-icon> **{{ bereich }}**
 
         {%- for e in ns.aktuell %}
 
         {%- set ed = as_datetime(e.ende).date() %}
 
-        - 🔴 **Belegt** bis {{ tage[ed.weekday()] }} {{ ed.strftime(''%d.%m.'') }} · {{ e.titel }} ({{ quelle.get(e.kalender,
-        '''') }})
+        - <font color="#FF453A">●</font> **Belegt** bis {{ tage[ed.weekday()] }} {{ ed.strftime(''%d.%m.'') }} · {{ e.titel
+        }} ({{ quelle.get(e.kalender, '''') }})
 
         {%- endfor %}
 
         {%- if ns.aktuell | count == 0 %}
 
-        - 🟢 **Heute frei**
+        - <font color="#30D158">●</font> **Heute frei**
 
         {%- endif %}
 
@@ -239,8 +239,8 @@ views:
         columns: full
         rows: 2
     - type: button
-      name: Licht
-      icon: mdi:lightbulb
+      name: Alle Lampen
+      icon: mdi:lightbulb-group
       show_state: false
       tap_action:
         action: navigate
@@ -259,6 +259,16 @@ views:
         columns: 6
         rows: 2
     - type: button
+      name: Amazon
+      icon: mdi:cart
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: script.amazon_startseite
+      grid_options:
+        columns: 6
+        rows: 2
+    - type: button
       name: Amazon-Bestellungen
       icon: mdi:package-variant
       show_state: false
@@ -266,7 +276,7 @@ views:
         action: perform-action
         perform_action: script.amazon_auf_monitor
       grid_options:
-        columns: full
+        columns: 6
         rows: 2
 - title: Kalender & Buchungen
   path: kalender-buchungen
