@@ -130,85 +130,27 @@ views:
     - type: markdown
       grid_options:
         columns: full
-      content: '{% set b = state_attr(''sensor.termine_vorschau'', ''buchungen'') or [] %}
-
-        {% set heute = now().date() %}
-
-        {% set tage = [''Mo'',''Di'',''Mi'',''Do'',''Fr'',''Sa'',''So''] %}
-
-        {# Buchungen, die zeitgleich im Holidu-Kalender stehen, gehören zur Ferienwohnung #}
-
-        {% set ns_fw = namespace(z=[]) %}
-
-        {% set ns_name = namespace(d={}) %}
-
-        {% for e in b if e.kalender == ''calendar.privat_mit_buchung'' %}{% set ns_name.d = dict(ns_name.d, **{(e.start |
-        string)[:10] ~ ''|'' ~ (e.ende | string)[:10]: e.titel}) %}{% endfor %}
-
-        {% for e in b if e.kalender == ''calendar.holidu'' %}{% set ns_fw.z = ns_fw.z + [(e.start | string)[:10] ~ ''|'' ~
-        (e.ende | string)[:10]] %}{% endfor %}
-
-        {% for bereich, symbol, kal in [(''Ferienwohnung'', ''mdi:home-heart'', ''calendar.holidu''), (''Stellplätze'', ''mdi:rv-truck'',
-        ''calendar.privat_mit_buchung'')] %}
-
-        {%- set ns = namespace(aktuell=[], naechste=[]) %}
-
-        {%- for e in b %}
-
-        {%- if e.kalender == kal and not (kal == ''calendar.privat_mit_buchung'' and ((e.start | string)[:10] ~ ''|'' ~ (e.ende
-        | string)[:10]) in ns_fw.z) %}
-
-        {%- set sd = as_datetime(e.start).date() %}
-
-        {%- set ed = as_datetime(e.ende).date() %}
-
-        {%- if sd <= heute and ed > heute %}{% set ns.aktuell = ns.aktuell + [e] %}
-
-        {%- elif sd > heute %}{% set ns.naechste = ns.naechste + [e] %}{% endif %}
-
-        {%- endif %}
-
-        {%- endfor %}
-
-        <ha-icon icon="{{ symbol }}"></ha-icon> **{{ bereich }}**
-
-        {%- for e in ns.aktuell %}
-
-        {%- set ed = as_datetime(e.ende).date() %}
-
-        - <font color="#FF453A">●</font> **Belegt** bis {{ tage[ed.weekday()] }} {{ ed.strftime(''%d.%m.'') }} · {{ ns_name.d.get((e.start
-        | string)[:10] ~ ''|'' ~ (e.ende | string)[:10], e.titel) if e.kalender == ''calendar.holidu'' else e.titel }}
-
-        {%- endfor %}
-
-        {%- if ns.aktuell | count == 0 %}
-
-        - <font color="#30D158">●</font> **Heute frei**
-
-        {%- endif %}
-
-        {%- for e in ns.naechste[:2] %}
-
-        {%- set sd = as_datetime(e.start).date() %}
-
-        {%- set ed = as_datetime(e.ende).date() %}
-
-        - {{ ''Nächste Anreise'' if loop.first else ''Danach'' }}: {{ tage[sd.weekday()] }} {{ sd.strftime(''%d.%m.'') }}
-        – {{ tage[ed.weekday()] }} {{ ed.strftime(''%d.%m.'') }} · {{ ns_name.d.get((e.start | string)[:10] ~ ''|'' ~ (e.ende
-        | string)[:10], e.titel) if e.kalender == ''calendar.holidu'' else e.titel }}
-
-        {%- endfor %}
-
-        {%- if ns.naechste | count == 0 %}
-
-        - keine weiteren Buchungen
-
-        {%- endif %}
-
-
-        {% endfor %}
-
-        '
+      content: "{% set b = state_attr('sensor.termine_vorschau', 'buchungen') or [] %}\n{% set heute = now().date() %}\n{%\
+        \ set tage = ['Mo','Di','Mi','Do','Fr','Sa','So'] %}\n{% set fw_kal = ['calendar.holidu', 'calendar.privat_mit_buchung']\
+        \ %}\n{% set ns = namespace(fw=[], fw_keys=[], sp=[], hat_sp=false) %}\n{# Ferienwohnung: Portal zuerst (hat die Gästenamen),\
+        \ Holidu nur wenn nicht schon enthalten #}\n{% for kal in ['calendar.privat_mit_buchung', 'calendar.holidu'] %}\n\
+        \  {% for e in b if e.kalender == kal %}\n    {% set key = (e.start | string)[:10] ~ '|' ~ (e.ende | string)[:10]\
+        \ %}\n    {% if key not in ns.fw_keys %}{% set ns.fw = ns.fw + [e] %}{% set ns.fw_keys = ns.fw_keys + [key] %}{% endif\
+        \ %}\n  {% endfor %}\n{% endfor %}\n{% for e in b if 'stellpl' in e.kalender %}{% set ns.sp = ns.sp + [e] %}{% endfor\
+        \ %}\n{% set ns.hat_sp = states.calendar | selectattr('entity_id', 'search', 'stellpl') | list | count > 0 %}\n{%\
+        \ for bereich, symbol, liste in [('Ferienwohnung', 'mdi:home-heart', ns.fw | sort(attribute='start')), ('Stellplätze',\
+        \ 'mdi:rv-truck', ns.sp | sort(attribute='start'))] %}\n{%- set ns2 = namespace(aktuell=[], naechste=[]) %}\n{%- for\
+        \ e in liste %}\n{%- set sd = as_datetime(e.start).date() %}\n{%- set ed = as_datetime(e.ende).date() %}\n{%- if sd\
+        \ <= heute and ed > heute %}{% set ns2.aktuell = ns2.aktuell + [e] %}\n{%- elif sd > heute %}{% set ns2.naechste =\
+        \ ns2.naechste + [e] %}{% endif %}\n{%- endfor %}\n<ha-icon icon=\"{{ symbol }}\"></ha-icon> **{{ bereich }}**\n{%-\
+        \ if bereich == 'Stellplätze' and not ns.hat_sp %}\n- Kalender „Stellplätze“ ist noch nicht eingebunden\n{%- else\
+        \ %}\n{%- for e in ns2.aktuell %}\n{%- set ed = as_datetime(e.ende).date() %}\n- <font color=\"#FF453A\">●</font>\
+        \ **Belegt** bis {{ tage[ed.weekday()] }} {{ ed.strftime('%d.%m.') }} · {{ e.titel }}\n{%- endfor %}\n{%- if ns2.aktuell\
+        \ | count == 0 %}\n- <font color=\"#30D158\">●</font> **Heute frei**\n{%- endif %}\n{%- for e in ns2.naechste[:2]\
+        \ %}\n{%- set sd = as_datetime(e.start).date() %}\n{%- set ed = as_datetime(e.ende).date() %}\n- {{ 'Nächste Anreise'\
+        \ if loop.first else 'Danach' }}: {{ tage[sd.weekday()] }} {{ sd.strftime('%d.%m.') }} – {{ tage[ed.weekday()] }}\
+        \ {{ ed.strftime('%d.%m.') }} · {{ e.titel }}\n{%- endfor %}\n{%- if ns2.naechste | count == 0 %}\n- keine weiteren\
+        \ Buchungen\n{%- endif %}\n{%- endif %}\n\n{% endfor %}"
     - type: button
       name: Stellplätze verwalten
       icon: mdi:rv-truck

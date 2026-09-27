@@ -2,12 +2,16 @@
 # - Der lokale Kalender "Geburtstage" heißt in der Oberfläche jetzt "Termine"
 #   (Familientermine, Geburtstage, alles zusammen; die Entität bleibt calendar.geburtstage).
 # - Leichte Vorschau für die Startseite: Familientermine der nächsten 3 Wochen und
-#   Buchungen der nächsten 4 Monate: Holidu = Ferienwohnung, eigene Homepage = Stellplätze.
+#   Buchungen der nächsten 4 Monate: Ferienwohnung = Holidu + Portal-Kalender Ferienwohnung,
+#   Stellplätze = Portal-Kalender Stellplätze (Entität mit "stellpl" im Namen).
 homeassistant:
   customize:
     calendar.geburtstage:
       friendly_name: Termine
       icon: mdi:calendar-heart
+    calendar.privat_mit_buchung:
+      friendly_name: Ferienwohnung (Portal)
+      icon: mdi:home-heart
 
 template:
   - triggers:
@@ -31,9 +35,11 @@ template:
         response_variable: familie
       - action: calendar.get_events
         target:
-          entity_id:
-            - calendar.holidu
-            - calendar.privat_mit_buchung
+          # Ferienwohnung: Holidu + Portal (export-ical-ferienwohnung.php = "Privat mit Buchung")
+          # Stellplätze: jeder Kalender mit "stellpl" im Namen (Portal-Export Stellplätze)
+          entity_id: >-
+            {{ ['calendar.holidu', 'calendar.privat_mit_buchung']
+               + (states.calendar | map(attribute='entity_id') | select('search', 'stellpl') | list) }}
         data:
           duration:
             days: 120
@@ -63,7 +69,7 @@ automation:
   - id: buchungen_aktualisieren
     alias: "Kalender: Buchungen alle 15 Minuten neu laden"
     description: >-
-      Holt Holidu (Ferienwohnung) und die eigene Homepage (Stellplätze) häufiger ab,
+      Holt Holidu, den Portal-Kalender Ferienwohnung und den Stellplatz-Kalender häufiger ab,
       damit neue Buchungen schnell auf dem Monitor erscheinen.
     triggers:
       - trigger: time_pattern
@@ -72,6 +78,6 @@ automation:
       - action: homeassistant.update_entity
         continue_on_error: true
         target:
-          entity_id:
-            - calendar.holidu
-            - calendar.privat_mit_buchung
+          entity_id: >-
+            {{ ['calendar.holidu', 'calendar.privat_mit_buchung']
+               + (states.calendar | map(attribute='entity_id') | select('search', 'stellpl') | list) }}
