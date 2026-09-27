@@ -1485,6 +1485,30 @@ views:
       heading: Küche
       heading_style: title
       icon: mdi:stove
+    - type: button
+      name: ＋ Musik hierher
+      icon: mdi:speaker-multiple
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: script.musik_dazuholen
+        data:
+          raum: Küche
+      grid_options:
+        columns: 6
+        rows: 1
+    - type: button
+      name: Hier aus
+      icon: mdi:speaker-off
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: script.musik_hier_aus
+        data:
+          raum: Küche
+      grid_options:
+        columns: 6
+        rows: 1
     - type: media-control
       entity: media_player.kuche_kuche
       name: Küche · HomePod
@@ -1496,6 +1520,30 @@ views:
       heading: Muckis Zimmer
       heading_style: title
       icon: mdi:teddy-bear
+    - type: button
+      name: ＋ Musik hierher
+      icon: mdi:speaker-multiple
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: script.musik_dazuholen
+        data:
+          raum: Muckis Zimmer
+      grid_options:
+        columns: 6
+        rows: 1
+    - type: button
+      name: Hier aus
+      icon: mdi:speaker-off
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: script.musik_hier_aus
+        data:
+          raum: Muckis Zimmer
+      grid_options:
+        columns: 6
+        rows: 1
     - type: media-control
       entity: media_player.muckis_zimmer_muckis_zimmer
       name: Muckis Zimmer · HomePod
@@ -1507,6 +1555,30 @@ views:
       heading: Badezimmer
       heading_style: title
       icon: mdi:shower
+    - type: button
+      name: ＋ Musik hierher
+      icon: mdi:speaker-multiple
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: script.musik_dazuholen
+        data:
+          raum: Badezimmer
+      grid_options:
+        columns: 6
+        rows: 1
+    - type: button
+      name: Hier aus
+      icon: mdi:speaker-off
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: script.musik_hier_aus
+        data:
+          raum: Badezimmer
+      grid_options:
+        columns: 6
+        rows: 1
     - type: media-control
       entity: media_player.badezimmer_badezimmer
       name: Badezimmer · Sonos
@@ -1523,6 +1595,30 @@ views:
       heading: Schlafzimmer
       heading_style: title
       icon: mdi:bed
+    - type: button
+      name: ＋ Musik hierher
+      icon: mdi:speaker-multiple
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: script.musik_dazuholen
+        data:
+          raum: Schlafzimmer
+      grid_options:
+        columns: 6
+        rows: 1
+    - type: button
+      name: Hier aus
+      icon: mdi:speaker-off
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: script.musik_hier_aus
+        data:
+          raum: Schlafzimmer
+      grid_options:
+        columns: 6
+        rows: 1
     - type: media-control
       entity: media_player.schlafzimmer_schlafzimmer
       name: Schlafzimmer · Sonos
@@ -1539,6 +1635,30 @@ views:
       heading: Terrasse
       heading_style: title
       icon: mdi:table-chair
+    - type: button
+      name: ＋ Musik hierher
+      icon: mdi:speaker-multiple
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: script.musik_dazuholen
+        data:
+          raum: Terrasse
+      grid_options:
+        columns: 6
+        rows: 1
+    - type: button
+      name: Hier aus
+      icon: mdi:speaker-off
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: script.musik_hier_aus
+        data:
+          raum: Terrasse
+      grid_options:
+        columns: 6
+        rows: 1
     - type: media-control
       entity: media_player.terrasse_terrasse
       name: Terrasse · Sonos
