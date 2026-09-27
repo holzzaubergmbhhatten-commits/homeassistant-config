@@ -1337,6 +1337,16 @@ views:
       heading_style: title
       icon: mdi:cctv
     - type: picture-entity
+      entity: camera.192_168_0_118
+      name: Hof-Tor
+      camera_view: auto
+      show_name: true
+      show_state: false
+      tap_action:
+        action: more-info
+      grid_options:
+        columns: full
+    - type: picture-entity
       entity: camera.192_168_0_110
       name: Giebel vorne
       camera_view: auto
@@ -1423,6 +1433,16 @@ views:
       entity: camera.hoftor_klingel_live_ansicht
       camera_view: auto
       show_name: false
+      show_state: false
+      tap_action:
+        action: more-info
+      grid_options:
+        columns: full
+    - type: picture-entity
+      entity: camera.192_168_0_118
+      name: Hof-Tor (Tapo, live)
+      camera_view: live
+      show_name: true
       show_state: false
       tap_action:
         action: more-info
