@@ -1352,6 +1352,75 @@ views:
         columns: full
         rows: 1
     - type: heading
+      heading: Meine Favoriten
+      heading_style: subtitle
+      icon: mdi:heart
+    - type: button
+      name: ♥ Küche
+      icon: mdi:heart
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: script.musik_playlist
+        data:
+          raum: Küche
+          playlist: Favoriten
+      grid_options:
+        columns: 6
+        rows: 1
+    - type: button
+      name: ♥ Terrasse
+      icon: mdi:heart
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: script.musik_playlist
+        data:
+          raum: Terrasse
+          playlist: Favoriten
+      grid_options:
+        columns: 6
+        rows: 1
+    - type: button
+      name: ♥ Badezimmer
+      icon: mdi:heart
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: script.musik_playlist
+        data:
+          raum: Badezimmer
+          playlist: Favoriten
+      grid_options:
+        columns: 6
+        rows: 1
+    - type: button
+      name: ♥ Schlafzimmer
+      icon: mdi:heart
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: script.musik_playlist
+        data:
+          raum: Schlafzimmer
+          playlist: Favoriten
+      grid_options:
+        columns: 6
+        rows: 1
+    - type: button
+      name: ♥ Muckis Zimmer
+      icon: mdi:heart
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: script.musik_playlist
+        data:
+          raum: Muckis Zimmer
+          playlist: Favoriten
+      grid_options:
+        columns: 6
+        rows: 1
+    - type: heading
       heading: Sonos-Favoriten
       heading_style: subtitle
     - type: button
