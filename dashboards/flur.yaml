@@ -42,23 +42,6 @@ views:
         {{ now().strftime(''%H:%M'') }} · {{ [''Montag'',''Dienstag'',''Mittwoch'',''Donnerstag'',''Freitag'',''Samstag'',''Sonntag''][now().weekday()]
         }}, {{ now().day }}. {{ [''Januar'',''Februar'',''März'',''April'',''Mai'',''Juni'',''Juli'',''August'',''September'',''Oktober'',''November'',''Dezember''][now().month-1]
         }}'
-  background:
-    opacity: 33
-    alignment: center
-    size: cover
-    repeat: no-repeat
-    attachment: scroll
-    image:
-      media_content_id: media-source://image_upload/f15a5ff16a39533008ac2f410fca7a21
-      media_content_type: image/jpeg
-      metadata:
-        title: Hintergund.jpg
-        thumbnail: /api/image/serve/f15a5ff16a39533008ac2f410fca7a21/256x256
-        media_class: image
-        navigateIds:
-        - {}
-        - media_content_type: app
-          media_content_id: media-source://image_upload
   sections:
   - type: grid
     cards:
@@ -71,15 +54,28 @@ views:
       show_forecast: true
       grid_options:
         columns: full
-    - type: calendar
-      initial_view: listWeek
-      entities:
-      - calendar.privat_mit_buchung
-      - calendar.holidu
-      - calendar.geburtstage
+    - type: markdown
       grid_options:
         columns: full
-        rows: 6
+      content: '{% set t = state_attr(''sensor.termine_vorschau'', ''termine'') or [] %}
+
+        {% set tage = [''Mo'',''Di'',''Mi'',''Do'',''Fr'',''Sa'',''So''] %}
+
+        {% set symbol = {''calendar.geburtstage'': ''📅'', ''calendar.holidu'': ''🧳'', ''calendar.privat_mit_buchung'': ''🏡''}
+        %}
+
+        {% if t | count == 0 %}Keine Termine in den nächsten 14 Tagen.{% endif %}
+
+        {% for e in t %}
+
+        {%- set d = as_datetime(e.start) -%}
+
+        {%- set zeit = ('' · '' ~ d.strftime(''%H:%M'')) if ''T'' in (e.start | string) else '''' -%}
+
+        - {{ symbol.get(e.kalender, ''📅'') }} **{{ tage[d.weekday()] }} {{ d.strftime(''%d.%m.'') }}**{{ zeit }} · {{ e.titel
+        }}
+
+        {% endfor %}'
   - type: grid
     cards:
     - type: heading
@@ -155,23 +151,6 @@ views:
   icon: mdi:calendar-month
   type: sections
   max_columns: 1
-  background:
-    opacity: 33
-    alignment: center
-    size: cover
-    repeat: no-repeat
-    attachment: scroll
-    image:
-      media_content_id: media-source://image_upload/f15a5ff16a39533008ac2f410fca7a21
-      media_content_type: image/jpeg
-      metadata:
-        title: Hintergund.jpg
-        thumbnail: /api/image/serve/f15a5ff16a39533008ac2f410fca7a21/256x256
-        media_class: image
-        navigateIds:
-        - {}
-        - media_content_type: app
-          media_content_id: media-source://image_upload
   sections:
   - type: grid
     cards:

@@ -1,0 +1,34 @@
+# Leichte Terminvorschau für die Startseite des Touchmonitors.
+# Holt alle 5 Minuten die Termine der nächsten 14 Tage aus allen Kalendern.
+# (Die große Kalender-Karte ist für den Kiosk-Browser zu schwer.)
+template:
+  - triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/5"
+    actions:
+      - action: calendar.get_events
+        target:
+          entity_id:
+            - calendar.geburtstage
+            - calendar.holidu
+            - calendar.privat_mit_buchung
+        data:
+          duration:
+            days: 14
+        response_variable: kal
+    sensor:
+      - name: Termine Vorschau
+        unique_id: termine_vorschau
+        icon: mdi:calendar-month
+        state: "{{ kal.values() | map(attribute='events') | map('count') | sum }}"
+        attributes:
+          termine: >-
+            {% set ns = namespace(l=[]) %}
+            {% for kalender, inhalt in kal.items() %}
+              {% for e in inhalt.events %}
+                {% set ns.l = ns.l + [{'start': e.start, 'titel': e.summary, 'kalender': kalender}] %}
+              {% endfor %}
+            {% endfor %}
+            {{ (ns.l | sort(attribute='start'))[:10] }}
