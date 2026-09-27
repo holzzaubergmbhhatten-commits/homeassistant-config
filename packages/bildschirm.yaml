@@ -1,7 +1,7 @@
 # Nachtmodus des Touchmonitors (Kiosk-App REST-API):
 # Tagsüber bleibt der Bildschirm an. Nachts geht er nach 1 Minute ohne Berührung aus,
 # ein Antippen weckt ihn wieder. Klingelt es, geht er sofort an (siehe klingel.yaml).
-# Zeiten: Nacht von 22:30 bis 6:30.
+# Zeiten: Nacht von 21:15 bis 6:30.
 rest_command:
   kiosk_display_on:
     url: "http://localhost:8080/display_on"
@@ -16,7 +16,7 @@ template:
         icon: mdi:weather-night
         state: >-
           {% set t = now().strftime('%H:%M') %}
-          {{ t >= '22:30' or t < '06:30' }}
+          {{ t >= '21:15' or t < '06:30' }}
 
 automation:
   - id: monitor_nachtmodus
@@ -26,7 +26,7 @@ automation:
       - trigger: homeassistant
         event: start
       - trigger: time
-        at: "22:30:00"
+        at: "21:15:00"
       - trigger: time
         at: "06:30:00"
     actions:
