@@ -3,9 +3,9 @@
 Ziel: „Mach im Wohnzimmer das Licht aus“, „Trag Zahnarzt Mucki am Dienstag um
 10 Uhr ein“, „Setz Milch auf die Einkaufsliste“, „Was steht diese Woche an?“
 
-## 1. Kalender „Termine“ anlegen
-Einstellungen → Geräte & Dienste → Integration hinzufügen → **Lokaler Kalender**
-→ Name: `Termine` → ergibt `calendar.termine`.
+## 1. Kalender
+Neue Termine landen im vorhandenen lokalen Kalender „Geburtstage“
+(`calendar.geburtstage`) – der dient als Familienkalender.
 (Holidu und die Website sind Abo-Kalender – die kann man nur lesen, nicht beschreiben.)
 
 ## 2. Claude als Gesprächspartner einbinden
@@ -22,7 +22,7 @@ Einstellungen → Geräte & Dienste → Integration hinzufügen → **Lokaler Ka
 ## 3. Was darf die Sprache steuern?
 Einstellungen → Sprachassistenten → Reiter **Entitäten freigeben**:
 - alle Lichter ✅
-- `calendar.termine`, `calendar.holidu`, `calendar.privat_mit_buchung`, `calendar.geburtstage` ✅ (zum Vorlesen)
+- `calendar.holidu`, `calendar.privat_mit_buchung`, `calendar.geburtstage` ✅ (zum Vorlesen)
 - `todo.einkaufsliste` ✅
 - Skript „Termin eintragen“ ✅ (kommt automatisch aus `packages/termine.yaml`)
 - Hoftor: bewusst **nicht** freigeben, solange niemand per Sprache das Tor öffnen soll

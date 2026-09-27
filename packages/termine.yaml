@@ -1,5 +1,4 @@
 # Sprachsteuerung: Termine per Sprache in den lokalen Kalender "Geburtstage" (Familienkalender) eintragen.
-# Voraussetzung: Integration "Lokaler Kalender" mit Namen "Termine" (calendar.geburtstage).
 # Das Skript muss unter Einstellungen → Sprachassistenten → Entitäten freigeben für Assist freigegeben sein.
 
 script:
