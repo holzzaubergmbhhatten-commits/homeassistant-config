@@ -8,7 +8,6 @@ input_select:
       - Hell
       - Dunkel
       - Automatisch
-    initial: Hell
 
 automation:
   - id: design_anwenden
