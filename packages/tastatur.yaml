@@ -36,3 +36,41 @@ script:
         data:
           title: Tastatur im Apple-Stil
           message: "Antwort der Kiosk-App: {{ ergebnis.content | default(ergebnis) }}"
+
+  tastatur_variante_b:
+    alias: "Monitor: Tastatur Variante B (Droid, kompakt)"
+    icon: mdi:keyboard-outline
+    sequence:
+      - action: rest_command.kiosk_befehle
+        data:
+          befehle:
+            - "dconf write /org/onboard/layout \"'/usr/share/onboard/layouts/Compact.onboard'\""
+            - "dconf write /org/onboard/theme \"'/usr/share/onboard/themes/Droid.theme'\""
+            - "dconf write /org/onboard/theme-settings/color-scheme \"'/usr/share/onboard/themes/Droid.colors'\""
+            - "dconf write /org/onboard/theme-settings/key-style \"'flat'\""
+            - "dconf write /org/onboard/theme-settings/roundrect-radius 25.0"
+            - "dconf write /org/onboard/theme-settings/key-label-font \"'Sans'\""
+            - "dconf write /org/onboard/keyboard/show-click-buttons false"
+            - "dconf write /org/onboard/window/landscape/width 1400"
+            - "dconf write /org/onboard/window/landscape/height 420"
+            - "dconf write /org/onboard/window/landscape/x 260"
+            - "dconf write /org/onboard/window/landscape/y 660"
+
+  tastatur_variante_c:
+    alias: "Monitor: Tastatur Variante C (dunkel, groß)"
+    icon: mdi:keyboard-variant
+    sequence:
+      - action: rest_command.kiosk_befehle
+        data:
+          befehle:
+            - "dconf write /org/onboard/layout \"'/usr/share/onboard/layouts/Small.onboard'\""
+            - "dconf write /org/onboard/theme \"'/usr/share/onboard/themes/Nightshade.theme'\""
+            - "dconf write /org/onboard/theme-settings/color-scheme \"'/usr/share/onboard/themes/Nightshade.colors'\""
+            - "dconf write /org/onboard/theme-settings/key-style \"'flat'\""
+            - "dconf write /org/onboard/theme-settings/roundrect-radius 35.0"
+            - "dconf write /org/onboard/theme-settings/key-label-font \"'Sans Bold'\""
+            - "dconf write /org/onboard/keyboard/show-click-buttons false"
+            - "dconf write /org/onboard/window/landscape/width 1600"
+            - "dconf write /org/onboard/window/landscape/height 460"
+            - "dconf write /org/onboard/window/landscape/x 160"
+            - "dconf write /org/onboard/window/landscape/y 620"
