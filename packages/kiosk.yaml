@@ -6,12 +6,12 @@ rest_command:
     method: POST
     content_type: "application/json"
     payload: '{"url": "{{ url }}"}'
-  # Ohne Adresse lädt der Kiosk wieder sein Start-Dashboard
+  # Zurück zum neuen Start-Dashboard
   kiosk_dashboard:
     url: "http://localhost:8080/launch_url"
     method: POST
     content_type: "application/json"
-    payload: "{}"
+    payload: '{"url": "http://localhost:8123/flur-display/start"}'
 
 script:
   amazon_auf_monitor:
@@ -26,4 +26,35 @@ script:
         data:
           url: https://www.amazon.de/gp/css/order-history
       - delay: "00:02:00"
+      - action: rest_command.kiosk_dashboard
+
+input_boolean:
+  kiosk_sprache_eingestellt:
+    name: Monitor-Sprache eingestellt
+    icon: mdi:translate
+
+automation:
+  - id: kiosk_nach_start
+    alias: "Monitor: nach dem Start das neue Dashboard anzeigen"
+    description: >-
+      Zeigt nach jedem Start von Home Assistant das Dashboard "Flur" auf dem Monitor.
+      Einmalig wird vorher die Profilseite geöffnet, damit dort die Sprache auf Deutsch
+      gestellt werden kann (die Sprache speichert der Browser des Monitors selbst).
+    triggers:
+      - trigger: homeassistant
+        event: start
+    actions:
+      - delay: "00:01:30"
+      - if:
+          - condition: state
+            entity_id: input_boolean.kiosk_sprache_eingestellt
+            state: "off"
+        then:
+          - action: rest_command.kiosk_url_oeffnen
+            data:
+              url: http://localhost:8123/profile/general
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.kiosk_sprache_eingestellt
+          - delay: "00:10:00"
       - action: rest_command.kiosk_dashboard
