@@ -48,10 +48,14 @@ Erledigt:
 - Ring-Klingel (Hoftor): beim Klingeln Kamera-Seite auf dem Monitor + Foto per Telegram
 - Tapo-Kameras (Generische Kamera, RTSP stream2): Hof-Tor, Giebel vorne, Giebel hinten, Hof hinten – live
 
-Offen:
-- [ ] Tastatur im Apple-Stil: `|dconf` in Kiosk-Whitelist, dann Skript „Monitor: Tastatur im Apple-Stil“
-- [ ] Kiosk-Konfiguration: HA Dashboard `flur-display/start`, Theme `Apple`
-- [ ] Musik: Sonos + HomePods einbinden, Music Assistant mit Apple Music, Musik-Seite
+- Musik: Music Assistant + Apple Music, Seite „Musik“ (Räume, Favoriten, Musik hierher), Einkaufsliste per Telegram
+- Kalender: Ferienwohnung = Holidu + Portal (export-ical-ferienwohnung.php, gleicher Anreisetag), Rest = Stellplätze
+- Design umschaltbar Hell/Dunkel/Automatisch, Nachtmodus Monitor (Test: ab 21:15, später 22:30), Tastatur-Varianten A/B/C
+
+Offen / morgen prüfen:
+- [ ] Nachtmodus: geht der Monitor morgens um 6:30 wieder an, weckt Antippen? Danach Startzeit auf 22:30 zurück
+- [ ] Design-Entscheidung (Hell/Dunkel/Automatisch), Tastatur-Variante wählen
+- [ ] Music-Assistant-Gruppe „Ganzes Haus“ + Knopf „Favoriten überall“; Name der Favoriten-Playlist prüfen
 - [ ] Ring echtes Live-Bild auf dem Monitor (Ring-MQTT), falls gewünscht
 - [ ] Matter-Lampen, restliche Shellys, Nachtabschaltung Display, Grundriss
 - [ ] Feste IP im Omada Controller, alten Docker-HA auf dem Laptop stoppen, Updates einspielen
