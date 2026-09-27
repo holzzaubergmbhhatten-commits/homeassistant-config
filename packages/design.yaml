@@ -30,11 +30,11 @@ automation:
       # Standard für helle Browser
       - action: frontend.set_theme
         data:
-          name: "{{ 'Apple Hell' if hell else 'Apple' }}"
+          name: "{{ 'Apple' if hell else 'Apple Dunkel' }}"
       # Standard für dunkle Browser (der Monitor läuft im Dunkelmodus)
       - action: frontend.set_theme
         data:
-          name: "{{ 'Apple Hell' if hell else 'Apple' }}"
+          name: "{{ 'Apple' if hell else 'Apple Dunkel' }}"
           mode: dark
 
 template:

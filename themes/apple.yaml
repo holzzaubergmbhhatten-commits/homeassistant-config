@@ -1,14 +1,12 @@
 # Apple-Stil: Farben und Formen wie in der Home-App von iOS.
-# Bewusst ohne Transparenz, Schatten und Verläufe – der Kiosk-Browser auf dem
-# Mini-PC zeichnet ohne Grafikbeschleunigung, so bleibt das Wischen flüssig.
+# Bewusst ohne Transparenz, Schatten und Verläufe (Kiosk-Browser ohne Grafikbeschleunigung).
+# "Apple" ist die helle Variante (falls die Kiosk-App das Theme "Apple" fest vorgibt, bleibt es hell),
+# "Apple Dunkel" die dunkle. Umschalten: packages/design.yaml (Hell/Dunkel/Automatisch).
 Apple:
-  # SF-Schrift auf Apple-Geräten, sonst die nächstbeste Systemschrift
-  primary-font-family: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", Roboto, "Helvetica Neue", sans-serif'
-  paper-font-common-base_-_font-family: 'var(--primary-font-family)'
-  ha-font-family-body: 'var(--primary-font-family)'
-  ha-font-family-heading: 'var(--primary-font-family)'
-
-  # Karten: stark abgerundet, ohne Rahmen, weicher Schatten
+  primary-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", Roboto, "Helvetica Neue", sans-serif
+  paper-font-common-base_-_font-family: var(--primary-font-family)
+  ha-font-family-body: var(--primary-font-family)
+  ha-font-family-heading: var(--primary-font-family)
   ha-card-border-radius: 22px
   ha-card-border-width: 0px
   ha-tile-border-radius: 22px
@@ -17,67 +15,73 @@ Apple:
   mdc-shape-medium: 22px
   mdc-shape-small: 14px
   ha-section-title-font-size: 22px
-
-  # Zustandsfarben wie iOS
+  state-light-active-color: '#FFCC00'
+  state-switch-active-color: '#34C759'
+  state-script-active-color: '#0A84FF'
+  state-icon-active-color: '#FFD60A'
+  primary-color: '#007AFF'
+  accent-color: '#007AFF'
+  primary-background-color: '#F2F2F7'
+  secondary-background-color: '#FFFFFF'
+  lovelace-background: '#F2F2F7'
+  card-background-color: '#FFFFFF'
+  ha-card-background: '#FFFFFF'
+  ha-card-box-shadow: none
+  primary-text-color: '#1C1C1E'
+  secondary-text-color: '#8E8E93'
+  disabled-text-color: '#C7C7CC'
+  divider-color: rgba(60, 60, 67, 0.12)
+  app-header-background-color: '#F2F2F7'
+  app-header-text-color: '#1C1C1E'
+  sidebar-background-color: '#F2F2F7'
+  sidebar-selected-icon-color: '#007AFF'
+  sidebar-selected-text-color: '#007AFF'
+  switch-checked-color: '#34C759'
+  switch-checked-button-color: '#FFFFFF'
+  switch-checked-track-color: '#34C759'
+  success-color: '#34C759'
+  warning-color: '#FF9500'
+  error-color: '#FF3B30'
+Apple Dunkel:
+  primary-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", Roboto, "Helvetica Neue", sans-serif
+  paper-font-common-base_-_font-family: var(--primary-font-family)
+  ha-font-family-body: var(--primary-font-family)
+  ha-font-family-heading: var(--primary-font-family)
+  ha-card-border-radius: 22px
+  ha-card-border-width: 0px
+  ha-tile-border-radius: 22px
+  ha-badge-border-radius: 18px
+  ha-dialog-border-radius: 28px
+  mdc-shape-medium: 22px
+  mdc-shape-small: 14px
+  ha-section-title-font-size: 22px
   state-light-active-color: '#FFD60A'
   state-switch-active-color: '#30D158'
   state-script-active-color: '#0A84FF'
   state-icon-active-color: '#FFD60A'
-
-
-  modes:
-    light:
-      primary-color: '#007AFF'
-      accent-color: '#007AFF'
-      primary-background-color: '#F2F2F7'
-      secondary-background-color: '#FFFFFF'
-      lovelace-background: '#F2F2F7'
-      card-background-color: '#FFFFFF'
-      ha-card-background: '#FFFFFF'
-      ha-card-box-shadow: 'none'
-      primary-text-color: '#1C1C1E'
-      secondary-text-color: '#8E8E93'
-      disabled-text-color: '#C7C7CC'
-      divider-color: 'rgba(60, 60, 67, 0.12)'
-      app-header-background-color: '#F2F2F7'
-      app-header-text-color: '#1C1C1E'
-      sidebar-background-color: '#F2F2F7'
-      sidebar-selected-icon-color: '#007AFF'
-      sidebar-selected-text-color: '#007AFF'
-      switch-checked-color: '#34C759'
-      switch-checked-button-color: '#FFFFFF'
-      switch-checked-track-color: '#34C759'
-      success-color: '#34C759'
-      warning-color: '#FF9500'
-      error-color: '#FF3B30'
-      state-light-active-color: '#FFCC00'
-      state-switch-active-color: '#34C759'
-    dark:
-      primary-color: '#0A84FF'
-      accent-color: '#0A84FF'
-      primary-background-color: '#2C2C2E'
-      secondary-background-color: '#3A3A3C'
-      lovelace-background: '#2C2C2E'
-      card-background-color: '#3A3A3C'
-      ha-card-background: '#3A3A3C'
-      ha-card-box-shadow: 'none'
-      primary-text-color: '#FFFFFF'
-      secondary-text-color: '#AEAEB2'
-      disabled-text-color: '#48484A'
-      divider-color: 'rgba(84, 84, 88, 0.45)'
-      app-header-background-color: '#2C2C2E'
-      app-header-text-color: '#FFFFFF'
-      sidebar-background-color: '#2C2C2E'
-      sidebar-selected-icon-color: '#0A84FF'
-      sidebar-selected-text-color: '#0A84FF'
-      switch-checked-color: '#30D158'
-      switch-checked-button-color: '#FFFFFF'
-      switch-checked-track-color: '#30D158'
-      success-color: '#30D158'
-      warning-color: '#FF9F0A'
-      error-color: '#FF453A'
-
-# Helle Variante ohne Umschaltung – wird z. B. tagsüber als Standard gesetzt
+  primary-color: '#0A84FF'
+  accent-color: '#0A84FF'
+  primary-background-color: '#2C2C2E'
+  secondary-background-color: '#3A3A3C'
+  lovelace-background: '#2C2C2E'
+  card-background-color: '#3A3A3C'
+  ha-card-background: '#3A3A3C'
+  ha-card-box-shadow: none
+  primary-text-color: '#FFFFFF'
+  secondary-text-color: '#AEAEB2'
+  disabled-text-color: '#48484A'
+  divider-color: rgba(84, 84, 88, 0.45)
+  app-header-background-color: '#2C2C2E'
+  app-header-text-color: '#FFFFFF'
+  sidebar-background-color: '#2C2C2E'
+  sidebar-selected-icon-color: '#0A84FF'
+  sidebar-selected-text-color: '#0A84FF'
+  switch-checked-color: '#30D158'
+  switch-checked-button-color: '#FFFFFF'
+  switch-checked-track-color: '#30D158'
+  success-color: '#30D158'
+  warning-color: '#FF9F0A'
+  error-color: '#FF453A'
 Apple Hell:
   primary-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", Roboto, "Helvetica Neue", sans-serif
   paper-font-common-base_-_font-family: var(--primary-font-family)
