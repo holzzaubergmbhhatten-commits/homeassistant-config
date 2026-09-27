@@ -33,10 +33,7 @@ script:
         name: Dauer in Minuten
         description: Dauer in Minuten. Weglassen, wenn nicht genannt (dann 60).
         selector:
-          number:
-            min: 5
-            max: 1440
-            unit_of_measurement: min
+          text:
       beschreibung:
         name: Notiz
         description: Optionale Zusatzinfos zum Termin.

@@ -67,9 +67,7 @@ automation:
         dauer_minuten:
           description: Dauer in Minuten
           selector:
-            number:
-              min: 5
-              max: 1440
+            text:
         rest:
           description: Alles aus der Nachricht, was KEIN Termin ist (z. B. Einkaufsliste, Licht, Fragen), als eigene
             kurze Aufforderung. Leer, wenn es nichts weiter gibt.
