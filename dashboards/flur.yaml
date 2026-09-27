@@ -195,6 +195,16 @@ views:
         {% endfor %}
 
         '
+    - type: button
+      name: Stellplätze verwalten
+      icon: mdi:rv-truck
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: script.stellplaetze_verwalten
+      grid_options:
+        columns: full
+        rows: 1
     - type: heading
       heading: Einkaufsliste
       heading_style: title

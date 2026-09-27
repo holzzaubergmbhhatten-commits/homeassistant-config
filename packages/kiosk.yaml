@@ -14,6 +14,25 @@ rest_command:
     payload: '{"url": "http://localhost:8123/flur-display/start"}'
 
 script:
+  stellplaetze_verwalten:
+    alias: Stellplätze verwalten (Homepage) auf dem Flur-Monitor
+    description: >-
+      Öffnet den Verwaltungsbereich von urlaub-wie-zuhause.eu auf dem Touchmonitor und
+      springt nach 10 Minuten zurück zum Dashboard (sofort zurück: mit 2 Fingern 3x tippen).
+    icon: mdi:rv-truck
+    mode: restart
+    sequence:
+      - action: rest_command.kiosk_url_oeffnen
+        data:
+          url: https://urlaub-wie-zuhause.eu/verwaltung.html
+      - delay: "00:10:00"
+      - action: rest_command.kiosk_dashboard
+      # Neue Buchungen gleich abholen
+      - action: homeassistant.update_entity
+        continue_on_error: true
+        target:
+          entity_id: calendar.privat_mit_buchung
+
   amazon_startseite:
     alias: Amazon-Startseite auf dem Flur-Monitor
     description: >-
