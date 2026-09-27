@@ -1,0 +1,38 @@
+# Bildschirmtastatur (Onboard) des Touchmonitors im Apple-Stil:
+# dunkle, flache Tasten, runde Ecken, schlichte Schrift, Handy-Layout ohne Maus-Tasten.
+# Wird über die REST-API der Kiosk-App gesetzt. Voraussetzung: In der Kiosk-App unter
+# Konfiguration → "Command Whitelist" am Ende "|dconf" ergänzen.
+# Die Kiosk-App speichert die Einstellung beim Beenden selbst, sie bleibt also erhalten.
+rest_command:
+  kiosk_befehle:
+    url: "http://localhost:8080/run_commands"
+    method: POST
+    content_type: "application/json"
+    payload: '{{ {"cmds": befehle, "cmd_timeout": 15} | to_json }}'
+
+script:
+  tastatur_apple_stil:
+    alias: "Monitor: Tastatur im Apple-Stil"
+    icon: mdi:keyboard-variant
+    sequence:
+      - action: rest_command.kiosk_befehle
+        data:
+          befehle:
+            - "dconf write /org/onboard/layout \"'/usr/share/onboard/layouts/Phone.onboard'\""
+            - "dconf write /org/onboard/theme \"'/usr/share/onboard/themes/Nightshade.theme'\""
+            - "dconf write /org/onboard/theme-settings/color-scheme \"'/usr/share/onboard/themes/Nightshade.colors'\""
+            - "dconf write /org/onboard/theme-settings/key-style \"'flat'\""
+            - "dconf write /org/onboard/theme-settings/roundrect-radius 40.0"
+            - "dconf write /org/onboard/theme-settings/key-label-font \"'Sans'\""
+            - "dconf write /org/onboard/theme-settings/key-shadow-strength 0.0"
+            - "dconf write /org/onboard/theme-settings/background-gradient 0.0"
+            - "dconf write /org/onboard/keyboard/show-click-buttons false"
+            - "dconf write /org/onboard/window/landscape/width 1000"
+            - "dconf write /org/onboard/window/landscape/height 400"
+            - "dconf write /org/onboard/window/landscape/x 460"
+            - "dconf write /org/onboard/window/landscape/y 680"
+        response_variable: ergebnis
+      - action: persistent_notification.create
+        data:
+          title: Tastatur im Apple-Stil
+          message: "Antwort der Kiosk-App: {{ ergebnis.content | default(ergebnis) }}"

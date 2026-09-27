@@ -1,34 +1,60 @@
-# Leichte Terminvorschau für die Startseite des Touchmonitors.
-# Holt alle 5 Minuten die Termine der nächsten 14 Tage aus allen Kalendern.
-# (Die große Kalender-Karte ist für den Kiosk-Browser zu schwer.)
+# Kalender für den Touchmonitor.
+# - Der lokale Kalender "Geburtstage" heißt in der Oberfläche jetzt "Termine"
+#   (Familientermine, Geburtstage, alles zusammen; die Entität bleibt calendar.geburtstage).
+# - Leichte Vorschau für die Startseite: Familientermine der nächsten 3 Wochen und
+#   Buchungen (Holidu + Direktbuchungen) der nächsten 4 Monate.
+homeassistant:
+  customize:
+    calendar.geburtstage:
+      friendly_name: Termine
+      icon: mdi:calendar-heart
+
 template:
   - triggers:
       - trigger: homeassistant
         event: start
       - trigger: time_pattern
         minutes: "/5"
+      # Sofort aktualisieren, wenn ein Termin angelegt wurde (Telegram, Monitor, App)
+      - trigger: event
+        event_type: call_service
+        event_data:
+          domain: calendar
     actions:
+      - delay: 2
+      - action: calendar.get_events
+        target:
+          entity_id: calendar.geburtstage
+        data:
+          duration:
+            days: 21
+        response_variable: familie
       - action: calendar.get_events
         target:
           entity_id:
-            - calendar.geburtstage
             - calendar.holidu
             - calendar.privat_mit_buchung
         data:
           duration:
-            days: 14
-        response_variable: kal
+            days: 120
+        response_variable: buchungen
     sensor:
       - name: Termine Vorschau
         unique_id: termine_vorschau
         icon: mdi:calendar-month
-        state: "{{ kal.values() | map(attribute='events') | map('count') | sum }}"
+        state: "{{ familie['calendar.geburtstage'].events | count }}"
         attributes:
-          termine: >-
+          familie: >-
             {% set ns = namespace(l=[]) %}
-            {% for kalender, inhalt in kal.items() %}
+            {% for e in familie['calendar.geburtstage'].events %}
+              {% set ns.l = ns.l + [{'start': e.start, 'ende': e.end, 'titel': e.summary}] %}
+            {% endfor %}
+            {{ (ns.l | sort(attribute='start'))[:25] }}
+          buchungen: >-
+            {% set ns = namespace(l=[]) %}
+            {% for kalender, inhalt in buchungen.items() %}
               {% for e in inhalt.events %}
-                {% set ns.l = ns.l + [{'start': e.start, 'titel': e.summary, 'kalender': kalender}] %}
+                {% set ns.l = ns.l + [{'start': e.start, 'ende': e.end, 'titel': e.summary, 'kalender': kalender}] %}
               {% endfor %}
             {% endfor %}
-            {{ (ns.l | sort(attribute='start'))[:10] }}
+            {{ (ns.l | sort(attribute='start'))[:25] }}

@@ -57,27 +57,149 @@ views:
     - type: markdown
       grid_options:
         columns: full
-      content: '{% set t = state_attr(''sensor.termine_vorschau'', ''termine'') or [] %}
+      content: '{% set t = state_attr(''sensor.termine_vorschau'', ''familie'') or [] %}
+
+        {% set heute = now().date() %}
 
         {% set tage = [''Mo'',''Di'',''Mi'',''Do'',''Fr'',''Sa'',''So''] %}
 
-        {% set symbol = {''calendar.geburtstage'': ''📅'', ''calendar.holidu'': ''🧳'', ''calendar.privat_mit_buchung'': ''🏡''}
-        %}
+        {% set ns = namespace(spaeter=[]) %}
 
-        {% if t | count == 0 %}Keine Termine in den nächsten 14 Tagen.{% endif %}
+        {% for name, versatz in [(''Heute'', 0), (''Morgen'', 1), (''Übermorgen'', 2)] %}
 
-        {% for e in t %}
+        {%- set d = heute + timedelta(days=versatz) %}
 
-        {%- set d = as_datetime(e.start) -%}
+        **{{ name }}** · {{ tage[d.weekday()] }} {{ d.strftime(''%d.%m.'') }}
 
-        {%- set zeit = ('' · '' ~ d.strftime(''%H:%M'')) if ''T'' in (e.start | string) else '''' -%}
+        {%- set ns2 = namespace(n=0) %}
 
-        - {{ symbol.get(e.kalender, ''📅'') }} **{{ tage[d.weekday()] }} {{ d.strftime(''%d.%m.'') }}**{{ zeit }} · {{ e.titel
-        }}
+        {%- for e in t %}
 
-        {% endfor %}'
+        {%- set sd = as_datetime(e.start).date() %}
+
+        {%- set ed = as_datetime(e.ende).date() %}
+
+        {%- if sd <= d and (ed > d or sd == d) %}
+
+        {%- set ns2.n = ns2.n + 1 %}
+
+        - {{ as_datetime(e.start).strftime(''%H:%M'') ~ '' · '' if ''T'' in (e.start | string) else '''' }}{{ e.titel }}
+
+        {%- endif %}
+
+        {%- endfor %}
+
+        {%- if ns2.n == 0 %}
+
+        - <font color="#8E8E93">nichts geplant</font>
+
+        {%- endif %}
+
+
+        {% endfor %}
+
+        {%- for e in t %}
+
+        {%- set sd = as_datetime(e.start).date() %}
+
+        {%- if sd > heute + timedelta(days=2) %}{% set ns.spaeter = ns.spaeter + [e] %}{% endif %}
+
+        {%- endfor %}
+
+        {%- if ns.spaeter | count > 0 %}
+
+        **Demnächst**
+
+        {%- for e in ns.spaeter[:5] %}
+
+        {%- set d = as_datetime(e.start) %}
+
+        - {{ tage[d.weekday()] }} {{ d.strftime(''%d.%m.'') }}{{ '' · '' ~ d.strftime(''%H:%M'') if ''T'' in (e.start | string)
+        else '''' }} · {{ e.titel }}
+
+        {%- endfor %}
+
+        {%- endif %}
+
+        '
   - type: grid
     cards:
+    - type: heading
+      heading: Ferienwohnung & Stellplätze
+      heading_style: title
+    - type: markdown
+      grid_options:
+        columns: full
+      content: '{% set b = state_attr(''sensor.termine_vorschau'', ''buchungen'') or [] %}
+
+        {% set heute = now().date() %}
+
+        {% set tage = [''Mo'',''Di'',''Mi'',''Do'',''Fr'',''Sa'',''So''] %}
+
+        {% set quelle = {''calendar.holidu'': ''Holidu'', ''calendar.privat_mit_buchung'': ''Direkt''} %}
+
+        {% set stellplatz = ''stellplatz|wohnmobil|camper|camping|womo'' %}
+
+        {% for bereich, symbol in [(''Ferienwohnung'', ''🏡''), (''Stellplätze'', ''🚐'')] %}
+
+        {%- set ns = namespace(aktuell=[], naechste=[]) %}
+
+        {%- for e in b %}
+
+        {%- set ist_sp = e.titel is search(stellplatz, ignorecase=True) %}
+
+        {%- if (bereich == ''Stellplätze'') == ist_sp %}
+
+        {%- set sd = as_datetime(e.start).date() %}
+
+        {%- set ed = as_datetime(e.ende).date() %}
+
+        {%- if sd <= heute and ed > heute %}{% set ns.aktuell = ns.aktuell + [e] %}
+
+        {%- elif sd > heute %}{% set ns.naechste = ns.naechste + [e] %}{% endif %}
+
+        {%- endif %}
+
+        {%- endfor %}
+
+        **{{ symbol }} {{ bereich }}**
+
+        {%- for e in ns.aktuell %}
+
+        {%- set ed = as_datetime(e.ende).date() %}
+
+        - 🔴 **Belegt** bis {{ tage[ed.weekday()] }} {{ ed.strftime(''%d.%m.'') }} · {{ e.titel }} ({{ quelle.get(e.kalender,
+        '''') }})
+
+        {%- endfor %}
+
+        {%- if ns.aktuell | count == 0 %}
+
+        - 🟢 **Heute frei**
+
+        {%- endif %}
+
+        {%- for e in ns.naechste[:2] %}
+
+        {%- set sd = as_datetime(e.start).date() %}
+
+        {%- set ed = as_datetime(e.ende).date() %}
+
+        - {{ ''Nächste Anreise'' if loop.first else ''Danach'' }}: {{ tage[sd.weekday()] }} {{ sd.strftime(''%d.%m.'') }}
+        – {{ tage[ed.weekday()] }} {{ ed.strftime(''%d.%m.'') }} · {{ e.titel }} ({{ quelle.get(e.kalender, '''') }})
+
+        {%- endfor %}
+
+        {%- if ns.naechste | count == 0 %}
+
+        - keine weiteren Buchungen
+
+        {%- endif %}
+
+
+        {% endfor %}
+
+        '
     - type: heading
       heading: Einkaufsliste
       heading_style: title
