@@ -186,12 +186,35 @@ views:
       grid_options:
         columns: full
         rows: 10
+  badges:
+  - type: entity
+    entity: weather.touchmonitor_home
+    name: Start
+    icon: mdi:home
+    show_name: true
+    show_state: false
+    show_icon: true
+    color: blue
+    tap_action:
+      action: navigate
+      navigation_path: /flur-display/start
 - title: Licht
   path: licht
   icon: mdi:lightbulb
   type: sections
   max_columns: 4
   badges:
+  - type: entity
+    entity: weather.touchmonitor_home
+    name: Start
+    icon: mdi:home
+    show_name: true
+    show_state: false
+    show_icon: true
+    color: blue
+    tap_action:
+      action: navigate
+      navigation_path: /flur-display/start
   - type: entity
     entity: sensor.lichter_an
     name: Lichter an
@@ -940,3 +963,15 @@ views:
       grid_options:
         rows: auto
   icon: mdi:floor-plan
+  badges:
+  - type: entity
+    entity: weather.touchmonitor_home
+    name: Start
+    icon: mdi:home
+    show_name: true
+    show_state: false
+    show_icon: true
+    color: blue
+    tap_action:
+      action: navigate
+      navigation_path: /flur-display/start
