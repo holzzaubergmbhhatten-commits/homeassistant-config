@@ -1,0 +1,43 @@
+# Musik über Music Assistant (Apple Music → HomePods/Sonos).
+# Die Music-Assistant-Lautsprecher werden über ihren Namen gefunden (wie in Music Assistant:
+# "Küche", "Terrasse", "Badezimmer", "Schlafzimmer", "Muckis Zimmer", …).
+script:
+  musik_playlist:
+    alias: "Musik: Playlist in einem Raum abspielen"
+    icon: mdi:playlist-music
+    mode: parallel
+    fields:
+      raum:
+        name: Raum
+        description: Name des Lautsprechers in Music Assistant, z. B. Küche
+        required: true
+        selector:
+          text:
+      playlist:
+        name: Playlist
+        description: Name der Playlist in Apple Music / Music Assistant
+        default: Favoriten
+        selector:
+          text:
+    sequence:
+      - variables:
+          ziel: >-
+            {{ integration_entities('music_assistant')
+               | select('match', 'media_player\.')
+               | select('is_state_attr', 'friendly_name', raum) | list }}
+      - if:
+          - condition: template
+            value_template: "{{ ziel | count > 0 }}"
+        then:
+          - action: music_assistant.play_media
+            target:
+              entity_id: "{{ ziel }}"
+            data:
+              media_id: "{{ playlist | default('Favoriten', true) }}"
+              media_type: playlist
+              enqueue: replace
+        else:
+          - action: persistent_notification.create
+            data:
+              title: Musik
+              message: "Lautsprecher „{{ raum }}“ wurde in Music Assistant nicht gefunden."
