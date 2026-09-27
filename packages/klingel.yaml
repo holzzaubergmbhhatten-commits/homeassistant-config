@@ -2,7 +2,7 @@
 # Klingelt es, zeigt der Touchmonitor sofort das Kamerabild mit Knopf "Hoftor öffnen"
 # und nach 3 Minuten wieder das Dashboard. Zusätzlich Telegram-Nachricht mit Foto.
 # Die Klingel-Entität wird am Namen erkannt (event.hoftor_klingel_ding / _klingeln),
-# die Kamera ebenso (camera.hoftor_klingel_live_…).
+# Auf dem Monitor: Ring "Letzte Aufnahme" (camera.hoftor_letzte_aufnahme) + Tapo Hof-Tor.
 automation:
   - id: ring_klingel_hoftor
     alias: "Klingel: Hoftor – Kamera auf dem Monitor zeigen"
@@ -20,9 +20,10 @@ automation:
              and trigger.event.data.new_state.state not in ['unavailable', 'unknown'] }}
     actions:
       - variables:
+          # Foto von der Tapo-Kamera am Hof-Tor (Dauerstrom, sofort aktuell), sonst Ring
           kamera: >-
-            {{ states.camera | map(attribute='entity_id')
-               | select('search', 'hoftor_klingel') | first | default('', true) }}
+            {{ 'camera.draussen_hot_tor_kamera' if states('camera.draussen_hot_tor_kamera') not in ['unknown', 'unavailable']
+               else (states.camera | map(attribute='entity_id') | select('search', 'hoftor') | first | default('', true)) }}
       - action: rest_command.kiosk_url_oeffnen
         continue_on_error: true
         data:
@@ -48,17 +49,3 @@ automation:
       - delay: "00:03:00"
       - action: rest_command.kiosk_dashboard
 
-  - id: ring_bild_erneuern
-    alias: "Klingel: Ring-Bild alle 30 Sekunden erneuern"
-    description: >-
-      Fragt bei der Ring-Klingel regelmäßig ein neues Bild an, damit die Kachel auf dem
-      Monitor aktuell bleibt. Bei Akku-Betrieb liefert Ring evtl. nicht jedes Mal ein neues Bild.
-    mode: single
-    triggers:
-      - trigger: time_pattern
-        seconds: "/30"
-    actions:
-      - action: homeassistant.update_entity
-        continue_on_error: true
-        target:
-          entity_id: camera.hoftor_klingel_live_ansicht

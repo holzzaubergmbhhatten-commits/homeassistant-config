@@ -1627,7 +1627,7 @@ views:
       square: false
       cards:
       - type: picture-entity
-        entity: camera.hoftor_klingel_live_ansicht
+        entity: camera.hoftor_letzte_aufnahme
         name: Hoftor · Klingel
         camera_view: auto
         show_name: true
@@ -1739,7 +1739,7 @@ views:
       heading_style: title
       icon: mdi:bell-ring
     - type: picture-entity
-      entity: camera.hoftor_klingel_live_ansicht
+      entity: camera.hoftor_letzte_aufnahme
       name: Klingel
       camera_view: auto
       show_name: true
