@@ -1339,7 +1339,7 @@ views:
     - type: picture-entity
       entity: camera.hot_tor_kamera
       name: Hof-Tor
-      camera_view: auto
+      camera_view: live
       show_name: true
       show_state: false
       tap_action:
@@ -1349,7 +1349,7 @@ views:
     - type: picture-entity
       entity: camera.giebel_vorne
       name: Giebel vorne
-      camera_view: auto
+      camera_view: live
       show_name: true
       show_state: false
       tap_action:
@@ -1359,7 +1359,7 @@ views:
     - type: picture-entity
       entity: camera.giebel_hinten
       name: Giebel hinten
-      camera_view: auto
+      camera_view: live
       show_name: true
       show_state: false
       tap_action:
@@ -1369,7 +1369,7 @@ views:
     - type: picture-entity
       entity: camera.hof_hinten
       name: Hof hinten
-      camera_view: auto
+      camera_view: live
       show_name: true
       show_state: false
       tap_action:
