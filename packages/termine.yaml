@@ -1,11 +1,11 @@
-# Sprachsteuerung: Termine per Sprache in den lokalen Kalender "Termine" eintragen.
-# Voraussetzung: Integration "Lokaler Kalender" mit Namen "Termine" (calendar.termine).
+# Sprachsteuerung: Termine per Sprache in den lokalen Kalender "Geburtstage" (Familienkalender) eintragen.
+# Voraussetzung: Integration "Lokaler Kalender" mit Namen "Termine" (calendar.geburtstage).
 # Das Skript muss unter Einstellungen → Sprachassistenten → Entitäten freigeben für Assist freigegeben sein.
 
 script:
   termin_eintragen:
     alias: Termin eintragen
-    description: Trägt einen neuen Termin in den Familienkalender "Termine" ein. Nutze dieses Skript immer,
+    description: Trägt einen neuen Termin in den Familienkalender (calendar.geburtstage) ein. Nutze dieses Skript immer,
       wenn jemand einen Termin, eine Verabredung, einen Geburtstag oder eine Erinnerung für ein bestimmtes
       Datum anlegen möchte. Relative Angaben wie "morgen" oder "nächsten Dienstag" rechnest du vorher
       in ein konkretes Datum um.
@@ -56,7 +56,7 @@ script:
           minuten: '{{ (dauer_minuten | default(60, true)) | int }}'
       - action: calendar.create_event
         target:
-          entity_id: calendar.termine
+          entity_id: calendar.geburtstage
         data:
           summary: '{{ titel }}'
           description: '{{ notiz }}'
@@ -66,7 +66,7 @@ script:
       else:
       - action: calendar.create_event
         target:
-          entity_id: calendar.termine
+          entity_id: calendar.geburtstage
         data:
           summary: '{{ titel }}'
           description: '{{ notiz }}'

@@ -1,6 +1,6 @@
 # Dashboard "Flur" (Touchmonitor) im Apple-Stil – wird aus GitHub eingespielt.
 # Adresse: /flur-display/start   Änderungen bitte im Repository, nicht in der Oberfläche.
-# Voraussetzung: lokaler Kalender "Termine" (calendar.termine) ist angelegt.
+# Termine landen im lokalen Kalender "Geburtstage" (calendar.geburtstage).
 
 views:
 - title: Zuhause
@@ -74,7 +74,6 @@ views:
     - type: calendar
       initial_view: listWeek
       entities:
-      - calendar.termine
       - calendar.privat_mit_buchung
       - calendar.holidu
       - calendar.geburtstage
@@ -179,7 +178,6 @@ views:
     - type: calendar
       initial_view: dayGridMonth
       entities:
-      - calendar.termine
       - calendar.privat_mit_buchung
       - calendar.holidu
       - calendar.geburtstage
