@@ -141,13 +141,13 @@ views:
       grid_options:
         columns: 6
         rows: 2
-    - type: shortcut
-      label: Amazon
-      icon: mdi:web
-      vertical: false
+    - type: button
+      name: Amazon-Bestellungen
+      icon: mdi:package-variant
+      show_state: false
       tap_action:
-        action: url
-        url_path: https://www.amazon.de
+        action: perform-action
+        perform_action: script.amazon_auf_monitor
       grid_options:
         columns: full
         rows: 2

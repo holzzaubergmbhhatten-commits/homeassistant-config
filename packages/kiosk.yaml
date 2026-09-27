@@ -1,0 +1,28 @@
+# Steuerung des Touchmonitors über die App "HAOS Kiosk Display" (REST-API, Port 8080).
+rest_command:
+  kiosk_url_oeffnen:
+    url: "http://localhost:8080/launch_url"
+    method: POST
+    content_type: "application/json"
+    payload: '{"url": "{{ url }}"}'
+  # Ohne Adresse lädt der Kiosk wieder sein Start-Dashboard
+  kiosk_dashboard:
+    url: "http://localhost:8080/launch_url"
+    method: POST
+    content_type: "application/json"
+    payload: "{}"
+
+script:
+  amazon_auf_monitor:
+    alias: Amazon-Bestellungen auf dem Flur-Monitor
+    description: >-
+      Öffnet die Amazon-Bestellübersicht auf dem Touchmonitor und springt nach
+      3 Minuten automatisch zurück zum Dashboard.
+    icon: mdi:package-variant
+    mode: restart
+    sequence:
+      - action: rest_command.kiosk_url_oeffnen
+        data:
+          url: https://www.amazon.de/gp/css/order-history
+      - delay: "00:03:00"
+      - action: rest_command.kiosk_dashboard
