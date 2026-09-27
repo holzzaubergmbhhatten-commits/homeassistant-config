@@ -203,8 +203,22 @@ views:
     - type: heading
       heading: Einkaufsliste
       heading_style: title
+      icon: mdi:cart
+      tap_action:
+        action: navigate
+        navigation_path: /flur-display/einkauf
+      badges:
+      - type: entity
+        entity: todo.einkaufsliste
+        show_state: true
+        show_icon: false
+        color: amber
+        tap_action:
+          action: navigate
+          navigation_path: /flur-display/einkauf
     - type: todo-list
       entity: todo.einkaufsliste
+      hide_completed: true
       hide_create: true
       display_order: none
       grid_options:
@@ -259,6 +273,16 @@ views:
         columns: 6
         rows: 2
     - type: button
+      name: Einkauf
+      icon: mdi:cart
+      show_state: false
+      tap_action:
+        action: navigate
+        navigation_path: /flur-display/einkauf
+      grid_options:
+        columns: 6
+        rows: 2
+    - type: button
       name: Amazon
       icon: mdi:cart
       show_state: false
@@ -277,6 +301,192 @@ views:
         perform_action: script.amazon_auf_monitor
       grid_options:
         columns: 6
+        rows: 2
+- title: Einkauf
+  path: einkauf
+  icon: mdi:cart
+  type: sections
+  max_columns: 2
+  badges:
+  - type: entity
+    entity: weather.touchmonitor_home
+    name: Start
+    icon: mdi:home
+    show_name: true
+    show_state: false
+    show_icon: true
+    color: blue
+    tap_action:
+      action: navigate
+      navigation_path: /flur-display/start
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Einkaufsliste
+      heading_style: title
+      icon: mdi:cart
+      badges:
+      - type: entity
+        entity: todo.einkaufsliste
+        show_state: true
+        show_icon: false
+        color: amber
+    - type: markdown
+      text_only: true
+      content: Erledigtes steht unten unter **Erledigt** – antippen, und es ist wieder auf der Liste.
+    - type: todo-list
+      entity: todo.einkaufsliste
+      hide_create: false
+      hide_completed: false
+      display_order: none
+      grid_options:
+        columns: full
+  - type: grid
+    cards:
+    - type: heading
+      heading: Schnell hinzufügen
+      heading_style: title
+      icon: mdi:cart-plus
+    - type: button
+      name: Milch
+      icon: mdi:cup
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: todo.add_item
+        target:
+          entity_id: todo.einkaufsliste
+        data:
+          item: Milch
+      grid_options:
+        columns: 4
+        rows: 2
+    - type: button
+      name: Brot
+      icon: mdi:bread-slice
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: todo.add_item
+        target:
+          entity_id: todo.einkaufsliste
+        data:
+          item: Brot
+      grid_options:
+        columns: 4
+        rows: 2
+    - type: button
+      name: Eier
+      icon: mdi:egg-outline
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: todo.add_item
+        target:
+          entity_id: todo.einkaufsliste
+        data:
+          item: Eier
+      grid_options:
+        columns: 4
+        rows: 2
+    - type: button
+      name: Butter
+      icon: mdi:cube-outline
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: todo.add_item
+        target:
+          entity_id: todo.einkaufsliste
+        data:
+          item: Butter
+      grid_options:
+        columns: 4
+        rows: 2
+    - type: button
+      name: Käse
+      icon: mdi:cheese
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: todo.add_item
+        target:
+          entity_id: todo.einkaufsliste
+        data:
+          item: Käse
+      grid_options:
+        columns: 4
+        rows: 2
+    - type: button
+      name: Kaffee
+      icon: mdi:coffee
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: todo.add_item
+        target:
+          entity_id: todo.einkaufsliste
+        data:
+          item: Kaffee
+      grid_options:
+        columns: 4
+        rows: 2
+    - type: button
+      name: Obst
+      icon: mdi:food-apple
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: todo.add_item
+        target:
+          entity_id: todo.einkaufsliste
+        data:
+          item: Obst
+      grid_options:
+        columns: 4
+        rows: 2
+    - type: button
+      name: Gemüse
+      icon: mdi:carrot
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: todo.add_item
+        target:
+          entity_id: todo.einkaufsliste
+        data:
+          item: Gemüse
+      grid_options:
+        columns: 4
+        rows: 2
+    - type: button
+      name: Wasser
+      icon: mdi:bottle-soda-classic
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: todo.add_item
+        target:
+          entity_id: todo.einkaufsliste
+        data:
+          item: Wasser
+      grid_options:
+        columns: 4
+        rows: 2
+    - type: button
+      name: Klopapier
+      icon: mdi:paper-roll
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: todo.add_item
+        target:
+          entity_id: todo.einkaufsliste
+        data:
+          item: Klopapier
+      grid_options:
+        columns: 4
         rows: 2
 - title: Kalender & Buchungen
   path: kalender-buchungen
