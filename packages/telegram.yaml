@@ -1,8 +1,11 @@
 # Privater Telegram-Bot "Zuhause".
-# 1. Claude prüft, ob die Nachricht ein Termin ist → Termin wird direkt in den
-#    Familienkalender (calendar.geburtstage) eingetragen und bestätigt.
+# 1. Claude prüft, ob die Nachricht einen Termin anlegen, ändern oder löschen will →
+#    das passiert direkt im Familienkalender (calendar.geburtstage) und wird bestätigt.
 # 2. Alles andere (Licht, Einkaufsliste, Fragen) geht an den Claude-Gesprächsagenten.
 # Nur Chat-IDs, die in der Integration "Telegram bot" erlaubt sind, lösen das aus.
+shell_command:
+  kalender_bearbeiten: python3 /config/claude_tools/kalender.py {{ auftrag }}
+
 automation:
 - id: telegram_an_claude
   alias: 'Telegram: Nachricht an Claude weitergeben'
@@ -13,62 +16,92 @@ automation:
     event_type: telegram_text
   conditions:
   - condition: template
-    value_template: '{{ not (trigger.event.data.text | default('''') | string) is match(''^\s*/?(liste|einkaufsliste|einkauf)\s*\??\s*$'',
-      ignorecase=True) }}'
+    value_template: >-
+      {{ not (trigger.event.data.text | default('') | string)
+         is match('^\s*/?(liste|einkaufsliste|einkauf)\s*\??\s*$', ignorecase=True) }}
   - condition: template
-    value_template: '{{ not (trigger.event.data.text | default('''') | string) is match(''^\s*/?(monitor|home|start|zurück|zurueck|dashboard)\s*!?\s*$'',
-      ignorecase=True) }}'
+    value_template: >-
+      {{ not (trigger.event.data.text | default('') | string)
+         is match('^\s*/?(monitor|home|start|zurück|zurueck|dashboard)\s*!?\s*$', ignorecase=True) }}
   actions:
   - variables:
       text: '{{ trigger.event.data.text }}'
       chat: '{{ trigger.event.data.chat_id }}'
       kalender: calendar.geburtstage
-      heute: '{{ [''Montag'',''Dienstag'',''Mittwoch'',''Donnerstag'',''Freitag'',''Samstag'',''Sonntag''][now().weekday()]
-        }}, {{ now().strftime(''%Y-%m-%d, %H:%M'') }} Uhr'
-      ai_entity: "{{ states.ai_task | map(attribute='entity_id')\n   | select('search', 'claude|anthropic') | first\
-        \ | default('', true) }}"
-      agent: "{{ states.conversation | map(attribute='entity_id')\n   | select('search', 'claude|anthropic') | first\n\
-        \   | default('conversation.home_assistant', true) }}"
+      heute: >-
+        {{ ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'][now().weekday()] }},
+        {{ now().strftime('%Y-%m-%d, %H:%M') }} Uhr
+      ai_entity: >-
+        {{ states.ai_task | map(attribute='entity_id') | select('search', 'claude|anthropic')
+           | first | default('', true) }}
+      agent: >-
+        {{ states.conversation | map(attribute='entity_id') | select('search', 'claude|anthropic')
+           | first | default('conversation.home_assistant', true) }}
+  # Bestehende Termine mitschicken, damit Claude weiß, welcher geändert/gelöscht werden soll
+  - action: calendar.get_events
+    continue_on_error: true
+    target:
+      entity_id: calendar.geburtstage
+    data:
+      start_date_time: '{{ (now() - timedelta(days=7)).strftime(''%Y-%m-%d 00:00:00'') }}'
+      duration:
+        days: 120
+    response_variable: vorhanden
+  - variables:
+      terminliste: |-
+        {% set ev = vorhanden['calendar.geburtstage'].events
+           if vorhanden is defined and 'calendar.geburtstage' in vorhanden else [] %}
+        {%- for e in ev[:80] %}
+        - {{ e.start[:10] }}{{ ' ' ~ e.start[11:16] if 'T' in e.start else ' ganztägig' }}: {{ e.summary }}
+        {%- else %}
+        (keine)
+        {%- endfor %}
   - action: ai_task.generate_data
     continue_on_error: true
     data:
       task_name: Telegram-Nachricht einordnen
       entity_id: '{{ ai_entity }}'
-      instructions: 'Heute ist {{ heute }}.
-
-        Entscheide, ob die folgende Nachricht einen neuen Termin in den Kalender eintragen möchte.
-
-        Wenn ja: ist_termin = true, dazu ein kurzer, sinnvoller Titel, das Datum im Format JJJJ-MM-TT,
-
-        die Uhrzeit im Format HH:MM (leer lassen bei ganztägigen Terminen wie Geburtstagen oder Urlaub)
-
-        und die Dauer in Minuten, falls genannt (sonst 60).
-
+      instructions: |-
+        Heute ist {{ heute }}.
+        Entscheide, was die folgende Nachricht mit dem Familienkalender machen möchte, und setze "aktion":
+        - "neu": einen neuen Termin eintragen. Dann titel (kurz, sinnvoll), datum (JJJJ-MM-TT),
+          uhrzeit (HH:MM, leer bei ganztägigen Terminen wie Geburtstagen oder Urlaub) und dauer_minuten (falls genannt, sonst 60).
+        - "aendern": einen vorhandenen Termin verschieben oder umbenennen. Dann alt_titel und alt_datum
+          GENAU wie in der Liste unten, und nur die neuen Angaben in titel/datum/uhrzeit/dauer_minuten
+          (was gleich bleibt, leer lassen).
+        - "loeschen": einen vorhandenen Termin absagen/löschen. Dann alt_titel und alt_datum genau wie in der Liste.
+        - "keine": alles andere (Fragen, Licht, Einkaufsliste, Sonstiges).
         Relative Angaben wie "morgen", "übermorgen" oder "nächsten Dienstag" rechnest du in ein Datum um.
+        Enthält die Nachricht zusätzlich andere Wünsche (z. B. Einkaufsliste), schreibe diese in das Feld rest.
 
-        Wenn nein (Frage, Licht, Einkaufsliste, Sonstiges): ist_termin = false.
+        Vorhandene Termine (Datum Uhrzeit: Titel):
+        {{ terminliste }}
 
-        Enthält die Nachricht neben dem Termin noch andere Wünsche (z. B. Einkaufsliste),
-
-        schreibe diese in das Feld rest.
-
-        Nachricht: {{ text }}'
+        Nachricht: {{ text }}
       structure:
-        ist_termin:
-          description: true, wenn ein Termin eingetragen werden soll
+        aktion:
+          description: 'neu, aendern, loeschen oder keine'
           required: true
           selector:
-            boolean: null
+            text: null
+        alt_titel:
+          description: Bei aendern/loeschen der Titel des vorhandenen Termins, genau wie in der Liste
+          selector:
+            text: null
+        alt_datum:
+          description: Bei aendern/loeschen das Datum des vorhandenen Termins (JJJJ-MM-TT)
+          selector:
+            text: null
         titel:
-          description: Kurzer Titel des Termins
+          description: Titel des (neuen) Termins
           selector:
             text: null
         datum:
-          description: Datum im Format JJJJ-MM-TT
+          description: (Neues) Datum im Format JJJJ-MM-TT
           selector:
             text: null
         uhrzeit:
-          description: Beginn im Format HH:MM, leer bei ganztägigen Terminen
+          description: (Neuer) Beginn im Format HH:MM, leer bei ganztägigen Terminen
           selector:
             text: null
         dauer_minuten:
@@ -76,24 +109,27 @@ automation:
           selector:
             text: null
         rest:
-          description: Alles aus der Nachricht, was KEIN Termin ist (z. B. Einkaufsliste, Licht, Fragen), als eigene
-            kurze Aufforderung. Leer, wenn es nichts weiter gibt.
+          description: Alles aus der Nachricht, was NICHTS mit dem Kalender zu tun hat (z. B. Einkaufsliste, Licht,
+            Fragen), als eigene kurze Aufforderung. Leer, wenn es nichts weiter gibt.
           selector:
             text: null
     response_variable: erkannt
   - variables:
-      termin: "{{ erkannt is defined and erkannt.data is defined and erkannt.data is mapping\n   and (erkannt.data.ist_termin\
-        \ | default(false)) in [true, 'true', 'True']\n   and (erkannt.data.datum | default('') | string) is match('^\\\
-        d{4}-\\d{2}-\\d{2}$') }}"
+      d: '{{ erkannt.data if erkannt is defined and erkannt.data is defined and erkannt.data is mapping else {} }}'
+      aktion: >-
+        {% set a = (d.aktion | default('keine', true) | string | lower | trim) -%}
+        {%- if a == 'neu' and (d.datum | default('') | string) is match('^\d{4}-\d{2}-\d{2}$') %}neu
+        {%- elif a in ['aendern', 'ändern', 'loeschen', 'löschen'] and (d.alt_datum | default('') | string) is match('^\d{4}-\d{2}-\d{2}$') %}{{ a | replace('ä','ae') | replace('ö','oe') }}
+        {%- else %}keine{% endif %}
   - choose:
-    - conditions: '{{ termin }}'
+    - conditions: '{{ aktion == ''neu'' }}'
       sequence:
       - variables:
-          titel: '{{ erkannt.data.titel | default(''Termin'', true) }}'
-          datum: '{{ erkannt.data.datum }}'
-          uhr: '{{ erkannt.data.uhrzeit | default('''', true) | string | trim }}'
+          titel: '{{ d.titel | default(''Termin'', true) }}'
+          datum: '{{ d.datum }}'
+          uhr: '{{ d.uhrzeit | default('''', true) | string | trim }}'
           mit_uhrzeit: '{{ uhr is match(''^\d{1,2}:\d{2}'') }}'
-          minuten: '{{ erkannt.data.dauer_minuten | default(60, true) | int(60) }}'
+          minuten: '{{ d.dauer_minuten | default(60, true) | int(60) }}'
           datum_de: '{{ strptime(datum, ''%Y-%m-%d'').strftime(''%d.%m.%Y'') }}'
       - if: '{{ mit_uhrzeit }}'
         then:
@@ -105,13 +141,14 @@ automation:
           data:
             summary: '{{ titel }}'
             start_date_time: '{{ beginn }}'
-            end_date_time: '{{ (strptime(beginn, ''%Y-%m-%d %H:%M:%S'') + timedelta(minutes=minuten)).strftime(''%Y-%m-%d
-              %H:%M:%S'') }}'
+            end_date_time: >-
+              {{ (strptime(beginn, '%Y-%m-%d %H:%M:%S') + timedelta(minutes=minuten)).strftime('%Y-%m-%d %H:%M:%S') }}
         - action: telegram_bot.send_message
           data:
             chat_id: '{{ chat }}'
-            message: '{% set t %}📅 Eingetragen: {{ titel }} am {{ datum_de }} um {{ beginn[11:16] }} Uhr{% endset
-              %}{{ t | replace(''&'',''&amp;'') | replace(''<'',''&lt;'') | replace(''>'',''&gt;'') }}'
+            message: >-
+              {% set t %}📅 Eingetragen: {{ titel }} am {{ datum_de }} um {{ beginn[11:16] }} Uhr{% endset %}{{ t
+              | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}
             parse_mode: html
         else:
         - action: calendar.create_event
@@ -124,33 +161,50 @@ automation:
         - action: telegram_bot.send_message
           data:
             chat_id: '{{ chat }}'
-            message: '{% set t %}📅 Eingetragen: {{ titel }} am {{ datum_de }} (ganztägig){% endset %}{{ t | replace(''&'',''&amp;'')
-              | replace(''<'',''&lt;'') | replace(''>'',''&gt;'') }}'
+            message: >-
+              {% set t %}📅 Eingetragen: {{ titel }} am {{ datum_de }} (ganztägig){% endset %}{{ t
+              | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}
             parse_mode: html
-      - if: '{{ (erkannt.data.rest | default('''', true) | string | trim) | length > 2 }}'
+    # Ändern / Löschen: Zusatzprogramm bearbeitet die Kalenderdatei (vorher Sicherheitskopie
+    # nach /media/kalender_sicherung), danach wird der Kalender neu geladen.
+    - conditions: '{{ aktion in [''aendern'', ''loeschen''] }}'
+      sequence:
+      - action: shell_command.kalender_bearbeiten
+        continue_on_error: true
+        data:
+          auftrag: >-
+            {{ {'aktion': aktion, 'alt_titel': d.alt_titel | default('', true), 'alt_datum': d.alt_datum,
+                'titel': d.titel | default('', true), 'datum': d.datum | default('', true),
+                'uhrzeit': d.uhrzeit | default('', true), 'dauer_minuten': d.dauer_minuten | default('', true)}
+               | to_json | base64_encode }}
+        response_variable: ergebnis
+      - variables:
+          meldung: >-
+            {{ (ergebnis.stdout | default('', true) | trim) if ergebnis is defined and ergebnis is mapping else '' }}
+      - if: '{{ meldung[:1] in [''✏'', ''🗑''] }}'
         then:
-        - action: conversation.process
-          data:
-            text: '{{ erkannt.data.rest }}'
-            language: de
-            agent_id: '{{ agent }}'
-          response_variable: antwort_rest
-        - action: telegram_bot.send_message
-          data:
-            chat_id: '{{ chat }}'
-            message: "{% set t %}{{ antwort_rest.response.speech.plain.speech\n   if antwort_rest.response is defined\
-              \ and antwort_rest.response.speech.plain is defined\n   else 'Erledigt.' }}{% endset %}{{ t | replace('&','&amp;')\
-              \ | replace('<','&lt;') | replace('>','&gt;') }}"
-            parse_mode: html
+        - action: homeassistant.reload_config_entry
+          continue_on_error: true
+          target:
+            entity_id: '{{ kalender }}'
+        - delay: 3
+        - event: kalender_geaendert
+      - action: telegram_bot.send_message
+        data:
+          chat_id: '{{ chat }}'
+          message: >-
+            {% set t %}{{ meldung or '⚠️ Der Termin konnte nicht bearbeitet werden (Zusatzprogramm hat nicht geantwortet).' }}{% endset %}{{ t
+            | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}
+          parse_mode: html
     default:
     - if: '{{ erkannt is not defined or erkannt.data is not defined }}'
       then:
       - action: telegram_bot.send_message
         data:
           chat_id: '{{ chat }}'
-          message: '{% set t %}⚠️ Terminerkennung nicht verfügbar ({{ ai_entity or ''keine KI-Aufgabe gefunden''
-            }}) – die Nachricht geht direkt an Claude.{% endset %}{{ t | replace(''&'',''&amp;'') | replace(''<'',''&lt;'')
-            | replace(''>'',''&gt;'') }}'
+          message: >-
+            {% set t %}⚠️ Terminerkennung nicht verfügbar ({{ ai_entity or 'keine KI-Aufgabe gefunden' }}) – die
+            Nachricht geht direkt an Claude.{% endset %}{{ t | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}
           parse_mode: html
     - action: conversation.process
       data:
@@ -161,9 +215,27 @@ automation:
     - action: telegram_bot.send_message
       data:
         chat_id: '{{ chat }}'
-        message: "{% set t %}{{ antwort.response.speech.plain.speech\n   if antwort.response is defined and antwort.response.speech.plain\
-          \ is defined\n   else 'Erledigt.' }}{% endset %}{{ t | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;')\
-          \ }}"
+        message: >-
+          {% set t %}{{ antwort.response.speech.plain.speech
+             if antwort.response is defined and antwort.response.speech.plain is defined
+             else 'Erledigt.' }}{% endset %}{{ t | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}
+        parse_mode: html
+  # Weitere Wünsche aus derselben Nachricht (z. B. "... und Milch auf die Liste")
+  - if: '{{ aktion != ''keine'' and (d.rest | default('''', true) | string | trim) | length > 2 }}'
+    then:
+    - action: conversation.process
+      data:
+        text: '{{ d.rest }}'
+        language: de
+        agent_id: '{{ agent }}'
+      response_variable: antwort_rest
+    - action: telegram_bot.send_message
+      data:
+        chat_id: '{{ chat }}'
+        message: >-
+          {% set t %}{{ antwort_rest.response.speech.plain.speech
+             if antwort_rest.response is defined and antwort_rest.response.speech.plain is defined
+             else 'Erledigt.' }}{% endset %}{{ t | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}
         parse_mode: html
 - id: telegram_einkaufsliste
   alias: 'Telegram: Einkaufsliste schicken'

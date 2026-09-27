@@ -52,7 +52,12 @@ Erledigt:
 - Kalender: Ferienwohnung = Holidu + Portal (export-ical-ferienwohnung.php, gleicher Anreisetag), Rest = Stellplätze
 - Design umschaltbar Hell/Dunkel/Automatisch, Nachtmodus Monitor (Test: ab 21:15, später 22:30), Tastatur-Varianten A/B/C
 
+Telegram-Bot kann Termine jetzt auch **ändern und löschen** (claude_tools/kalender.py,
+bearbeitet die Kalenderdatei direkt; vor jeder Änderung Sicherheitskopie nach
+/media/kalender_sicherung, die letzten 50 bleiben). Serientermine werden nicht angefasst.
+
 Offen / morgen prüfen:
+- [ ] Termin ändern/löschen per Telegram in den ersten Tagen beobachten
 - [ ] Nachtmodus: geht der Monitor morgens um 6:30 wieder an, weckt Antippen? Danach Startzeit auf 22:30 zurück
 - [ ] Design-Entscheidung (Hell/Dunkel/Automatisch), Tastatur-Variante wählen
 - [ ] Music-Assistant-Gruppe „Ganzes Haus“ + Knopf „Favoriten überall“; Name der Favoriten-Playlist prüfen

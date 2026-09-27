@@ -24,6 +24,9 @@ template:
         event_type: call_service
         event_data:
           domain: calendar
+      # ... und wenn der Telegram-Bot einen Termin geändert oder gelöscht hat
+      - trigger: event
+        event_type: kalender_geaendert
     actions:
       - delay: 2
       - action: calendar.get_events
