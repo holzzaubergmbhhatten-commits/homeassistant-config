@@ -1,0 +1,37 @@
+# Nachtmodus des Touchmonitors (Kiosk-App REST-API):
+# Tagsüber bleibt der Bildschirm an. Nachts geht er nach 1 Minute ohne Berührung aus,
+# ein Antippen weckt ihn wieder. Klingelt es, geht er sofort an (siehe klingel.yaml).
+# Zeiten: Nacht von 22:30 bis 6:30.
+rest_command:
+  kiosk_display_on:
+    url: "http://localhost:8080/display_on"
+    method: POST
+    content_type: "application/json"
+    payload: '{"timeout": {{ timeout | default(0) | int }}}'
+
+template:
+  - binary_sensor:
+      - name: Monitor Nachtmodus
+        unique_id: monitor_nachtmodus
+        icon: mdi:weather-night
+        state: >-
+          {% set t = now().strftime('%H:%M') %}
+          {{ t >= '22:30' or t < '06:30' }}
+
+automation:
+  - id: monitor_nachtmodus
+    alias: "Monitor: nachts nach 1 Minute ausschalten, tagsüber an"
+    mode: restart
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: time
+        at: "22:30:00"
+      - trigger: time
+        at: "06:30:00"
+    actions:
+      - delay: 5
+      - action: rest_command.kiosk_display_on
+        continue_on_error: true
+        data:
+          timeout: "{{ 60 if is_state('binary_sensor.monitor_nachtmodus', 'on') else 0 }}"
