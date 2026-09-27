@@ -1,0 +1,75 @@
+# Sprachsteuerung: Termine per Sprache in den lokalen Kalender "Termine" eintragen.
+# Voraussetzung: Integration "Lokaler Kalender" mit Namen "Termine" (calendar.termine).
+# Das Skript muss unter Einstellungen → Sprachassistenten → Entitäten freigeben für Assist freigegeben sein.
+
+script:
+  termin_eintragen:
+    alias: Termin eintragen
+    description: Trägt einen neuen Termin in den Familienkalender "Termine" ein. Nutze dieses Skript immer,
+      wenn jemand einen Termin, eine Verabredung, einen Geburtstag oder eine Erinnerung für ein bestimmtes
+      Datum anlegen möchte. Relative Angaben wie "morgen" oder "nächsten Dienstag" rechnest du vorher
+      in ein konkretes Datum um.
+    icon: mdi:calendar-plus
+    mode: parallel
+    fields:
+      titel:
+        name: Titel
+        description: Kurzer Titel, z. B. "Zahnarzt Mucki" oder "Geburtstag Oma".
+        required: true
+        selector:
+          text: {}
+      datum:
+        name: Datum
+        description: Datum im Format JJJJ-MM-TT.
+        required: true
+        selector:
+          date: {}
+      uhrzeit:
+        name: Uhrzeit
+        description: Beginn im Format HH:MM (24 Stunden). Weglassen bei ganztägigen Terminen wie Geburtstagen
+          oder Urlaub.
+        selector:
+          time: {}
+      dauer_minuten:
+        name: Dauer in Minuten
+        description: Dauer in Minuten. Weglassen, wenn nicht genannt (dann 60).
+        selector:
+          number:
+            min: 5
+            max: 1440
+            unit_of_measurement: min
+      beschreibung:
+        name: Notiz
+        description: Optionale Zusatzinfos zum Termin.
+        selector:
+          text:
+            multiline: true
+    sequence:
+    - variables:
+        notiz: '{{ beschreibung | default('''', true) }}'
+    - if:
+      - condition: template
+        value_template: '{{ uhrzeit is defined and uhrzeit not in [none, ''''] }}'
+      then:
+      - variables:
+          beginn: '{{ datum ~ '' '' ~ uhrzeit[:5] ~ '':00'' }}'
+          minuten: '{{ (dauer_minuten | default(60, true)) | int }}'
+      - action: calendar.create_event
+        target:
+          entity_id: calendar.termine
+        data:
+          summary: '{{ titel }}'
+          description: '{{ notiz }}'
+          start_date_time: '{{ beginn }}'
+          end_date_time: '{{ (strptime(beginn, ''%Y-%m-%d %H:%M:%S'') + timedelta(minutes=minuten)).strftime(''%Y-%m-%d
+            %H:%M:%S'') }}'
+      else:
+      - action: calendar.create_event
+        target:
+          entity_id: calendar.termine
+        data:
+          summary: '{{ titel }}'
+          description: '{{ notiz }}'
+          start_date: '{{ datum }}'
+          end_date: '{{ (strptime(datum ~ '''', ''%Y-%m-%d'') + timedelta(days=1)).strftime(''%Y-%m-%d'')
+            }}'

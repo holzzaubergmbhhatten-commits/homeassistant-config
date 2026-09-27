@@ -1,0 +1,83 @@
+# Apple-Stil: Farben und Formen wie in der Home-App von iOS.
+Apple:
+  # SF-Schrift auf Apple-Geräten, sonst die nächstbeste Systemschrift
+  primary-font-family: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", Roboto, "Helvetica Neue", sans-serif'
+  paper-font-common-base_-_font-family: 'var(--primary-font-family)'
+  ha-font-family-body: 'var(--primary-font-family)'
+  ha-font-family-heading: 'var(--primary-font-family)'
+
+  # Karten: stark abgerundet, ohne Rahmen, weicher Schatten
+  ha-card-border-radius: 22px
+  ha-card-border-width: 0px
+  ha-tile-border-radius: 22px
+  ha-badge-border-radius: 18px
+  ha-dialog-border-radius: 28px
+  mdc-shape-medium: 22px
+  mdc-shape-small: 14px
+  ha-section-title-font-size: 22px
+
+  # Zustandsfarben wie iOS
+  state-light-active-color: '#FFD60A'
+  state-switch-active-color: '#30D158'
+  state-script-active-color: '#0A84FF'
+  state-icon-active-color: '#FFD60A'
+
+  # Milchglas-Effekt – wirkt nur, wenn card-mod (HACS) installiert ist
+  card-mod-theme: Apple
+  card-mod-card: |
+    ha-card {
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+    }
+
+  modes:
+    light:
+      primary-color: '#007AFF'
+      accent-color: '#007AFF'
+      primary-background-color: '#F2F2F7'
+      secondary-background-color: '#FFFFFF'
+      lovelace-background: 'linear-gradient(160deg, #E9EEF6 0%, #F2F2F7 45%, #F7EFE6 100%) fixed'
+      card-background-color: '#FFFFFF'
+      ha-card-background: 'rgba(255, 255, 255, 0.72)'
+      ha-card-box-shadow: '0 4px 24px rgba(0, 0, 0, 0.06)'
+      primary-text-color: '#1C1C1E'
+      secondary-text-color: '#8E8E93'
+      disabled-text-color: '#C7C7CC'
+      divider-color: 'rgba(60, 60, 67, 0.12)'
+      app-header-background-color: 'rgba(242, 242, 247, 0.8)'
+      app-header-text-color: '#1C1C1E'
+      sidebar-background-color: '#F2F2F7'
+      sidebar-selected-icon-color: '#007AFF'
+      sidebar-selected-text-color: '#007AFF'
+      switch-checked-color: '#34C759'
+      switch-checked-button-color: '#FFFFFF'
+      switch-checked-track-color: '#34C759'
+      success-color: '#34C759'
+      warning-color: '#FF9500'
+      error-color: '#FF3B30'
+      state-light-active-color: '#FFCC00'
+      state-switch-active-color: '#34C759'
+    dark:
+      primary-color: '#0A84FF'
+      accent-color: '#0A84FF'
+      primary-background-color: '#000000'
+      secondary-background-color: '#1C1C1E'
+      lovelace-background: 'radial-gradient(ellipse at 20% 0%, #1E2A3A 0%, #0B0B0F 55%, #000000 100%) fixed'
+      card-background-color: '#1C1C1E'
+      ha-card-background: 'rgba(44, 44, 46, 0.62)'
+      ha-card-box-shadow: '0 8px 32px rgba(0, 0, 0, 0.35)'
+      primary-text-color: '#FFFFFF'
+      secondary-text-color: '#98989F'
+      disabled-text-color: '#48484A'
+      divider-color: 'rgba(84, 84, 88, 0.45)'
+      app-header-background-color: 'rgba(0, 0, 0, 0.7)'
+      app-header-text-color: '#FFFFFF'
+      sidebar-background-color: '#0B0B0F'
+      sidebar-selected-icon-color: '#0A84FF'
+      sidebar-selected-text-color: '#0A84FF'
+      switch-checked-color: '#30D158'
+      switch-checked-button-color: '#FFFFFF'
+      switch-checked-track-color: '#30D158'
+      success-color: '#30D158'
+      warning-color: '#FF9F0A'
+      error-color: '#FF453A'

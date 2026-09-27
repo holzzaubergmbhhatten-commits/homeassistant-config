@@ -1,0 +1,12 @@
+# Nur die von Claude gepflegten Dateien liegen im Repository.
+# Alles andere in /config (Datenbank, .storage, secrets.yaml, UI-Automationen,
+# Backups ...) bleibt lokal und wird vom Git-pull-Add-on nie angefasst.
+/*
+!/.gitignore
+!/README.md
+!/SPRACHE.md
+!/PROJEKT.md
+!/configuration.yaml
+!/packages/
+!/themes/
+!/dashboards/

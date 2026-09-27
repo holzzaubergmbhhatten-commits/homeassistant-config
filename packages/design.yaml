@@ -1,0 +1,22 @@
+# Apple-Design als Standard für alle Geräte (auch den Touchmonitor).
+automation:
+  - id: apple_theme_beim_start
+    alias: "Design: Apple-Theme beim Start setzen"
+    triggers:
+      - trigger: homeassistant
+        event: start
+    actions:
+      - action: frontend.set_theme
+        data:
+          name: Apple
+      - action: frontend.set_theme
+        data:
+          name: Apple
+          mode: dark
+
+template:
+  - sensor:
+      - name: Lichter an
+        unique_id: lichter_an_anzahl
+        icon: mdi:lightbulb-group
+        state: "{{ states.light | selectattr('state', 'eq', 'on') | list | count }}"
