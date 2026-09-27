@@ -136,6 +136,18 @@ views:
 
         {% set tage = [''Mo'',''Di'',''Mi'',''Do'',''Fr'',''Sa'',''So''] %}
 
+        {# Buchungen, die zeitgleich im Holidu-Kalender stehen, gehören zur Ferienwohnung #}
+
+        {% set ns_fw = namespace(z=[]) %}
+
+        {% set ns_name = namespace(d={}) %}
+
+        {% for e in b if e.kalender == ''calendar.privat_mit_buchung'' %}{% set ns_name.d = dict(ns_name.d, **{(e.start |
+        string)[:10] ~ ''|'' ~ (e.ende | string)[:10]: e.titel}) %}{% endfor %}
+
+        {% for e in b if e.kalender == ''calendar.holidu'' %}{% set ns_fw.z = ns_fw.z + [(e.start | string)[:10] ~ ''|'' ~
+        (e.ende | string)[:10]] %}{% endfor %}
+
         {% for bereich, symbol, kal in [(''Ferienwohnung'', ''mdi:home-heart'', ''calendar.holidu''), (''Stellplätze'', ''mdi:rv-truck'',
         ''calendar.privat_mit_buchung'')] %}
 
@@ -143,7 +155,8 @@ views:
 
         {%- for e in b %}
 
-        {%- if e.kalender == kal %}
+        {%- if e.kalender == kal and not (kal == ''calendar.privat_mit_buchung'' and ((e.start | string)[:10] ~ ''|'' ~ (e.ende
+        | string)[:10]) in ns_fw.z) %}
 
         {%- set sd = as_datetime(e.start).date() %}
 
@@ -163,8 +176,8 @@ views:
 
         {%- set ed = as_datetime(e.ende).date() %}
 
-        - <font color="#FF453A">●</font> **Belegt** bis {{ tage[ed.weekday()] }} {{ ed.strftime(''%d.%m.'') }} · {{ e.titel
-        }}
+        - <font color="#FF453A">●</font> **Belegt** bis {{ tage[ed.weekday()] }} {{ ed.strftime(''%d.%m.'') }} · {{ ns_name.d.get((e.start
+        | string)[:10] ~ ''|'' ~ (e.ende | string)[:10], e.titel) if e.kalender == ''calendar.holidu'' else e.titel }}
 
         {%- endfor %}
 
@@ -181,7 +194,8 @@ views:
         {%- set ed = as_datetime(e.ende).date() %}
 
         - {{ ''Nächste Anreise'' if loop.first else ''Danach'' }}: {{ tage[sd.weekday()] }} {{ sd.strftime(''%d.%m.'') }}
-        – {{ tage[ed.weekday()] }} {{ ed.strftime(''%d.%m.'') }} · {{ e.titel }}
+        – {{ tage[ed.weekday()] }} {{ ed.strftime(''%d.%m.'') }} · {{ ns_name.d.get((e.start | string)[:10] ~ ''|'' ~ (e.ende
+        | string)[:10], e.titel) if e.kalender == ''calendar.holidu'' else e.titel }}
 
         {%- endfor %}
 
