@@ -16,19 +16,19 @@ script:
         description: Kurzer Titel, z. B. "Zahnarzt Mucki" oder "Geburtstag Oma".
         required: true
         selector:
-          text: {}
+          text:
       datum:
         name: Datum
         description: Datum im Format JJJJ-MM-TT.
         required: true
         selector:
-          date: {}
+          date:
       uhrzeit:
         name: Uhrzeit
         description: Beginn im Format HH:MM (24 Stunden). Weglassen bei ganztägigen Terminen wie Geburtstagen
           oder Urlaub.
         selector:
-          time: {}
+          time:
       dauer_minuten:
         name: Dauer in Minuten
         description: Dauer in Minuten. Weglassen, wenn nicht genannt (dann 60).

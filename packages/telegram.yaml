@@ -41,31 +41,39 @@ automation:
             und die Dauer in Minuten, falls genannt (sonst 60).
             Relative Angaben wie "morgen", "übermorgen" oder "nächsten Dienstag" rechnest du in ein Datum um.
             Wenn nein (Frage, Licht, Einkaufsliste, Sonstiges): ist_termin = false.
+            Enthält die Nachricht neben dem Termin noch andere Wünsche (z. B. Einkaufsliste),
+            schreibe diese in das Feld rest.
             Nachricht: {{ text }}
           structure:
             ist_termin:
               description: true, wenn ein Termin eingetragen werden soll
               required: true
               selector:
-                boolean: {}
+                boolean:
             titel:
               description: Kurzer Titel des Termins
               selector:
-                text: {}
+                text:
             datum:
               description: Datum im Format JJJJ-MM-TT
               selector:
-                text: {}
+                text:
             uhrzeit:
               description: Beginn im Format HH:MM, leer bei ganztägigen Terminen
               selector:
-                text: {}
+                text:
             dauer_minuten:
               description: Dauer in Minuten
               selector:
                 number:
                   min: 5
                   max: 1440
+            rest:
+              description: >-
+                Alles aus der Nachricht, was KEIN Termin ist (z. B. Einkaufsliste, Licht, Fragen),
+                als eigene kurze Aufforderung. Leer, wenn es nichts weiter gibt.
+              selector:
+                text:
         response_variable: erkannt
 
       - variables:
@@ -115,8 +123,29 @@ automation:
                     data:
                       chat_id: "{{ chat }}"
                       message: "📅 Eingetragen: {{ titel }} am {{ datum_de }} (ganztägig)"
+              - if: "{{ (erkannt.data.rest | default('', true) | string | trim) | length > 2 }}"
+                then:
+                  - action: conversation.process
+                    data:
+                      text: "{{ erkannt.data.rest }}"
+                      language: de
+                      agent_id: "{{ agent }}"
+                    response_variable: antwort_rest
+                  - action: telegram_bot.send_message
+                    data:
+                      chat_id: "{{ chat }}"
+                      message: >-
+                        {{ antwort_rest.response.speech.plain.speech
+                           if antwort_rest.response is defined and antwort_rest.response.speech.plain is defined
+                           else 'Erledigt.' }}
         # Alles andere an Claude
         default:
+          - if: "{{ erkannt is not defined or erkannt.data is not defined }}"
+            then:
+              - action: telegram_bot.send_message
+                data:
+                  chat_id: "{{ chat }}"
+                  message: "⚠️ Terminerkennung nicht verfügbar ({{ ai_entity or 'keine KI-Aufgabe gefunden' }}) – die Nachricht geht direkt an Claude."
           - action: conversation.process
             data:
               text: "{{ text }}"

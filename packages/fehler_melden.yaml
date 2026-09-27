@@ -1,0 +1,25 @@
+# Fehlermeldungen rund um Telegram, Claude, Kalender und Skripte an den
+# Telegram-Bot schicken (an die erste freigegebene Chat-ID).
+# So lassen sich Probleme ohne Laptop erkennen. Höchstens eine Meldung pro Minute.
+automation:
+  - id: fehler_an_telegram
+    alias: "Fehler an Telegram melden"
+    mode: single
+    max_exceeded: silent
+    triggers:
+      - trigger: event
+        event_type: system_log_event
+        event_data:
+          level: ERROR
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ trigger.event.data.name is search('ai_task|anthropic|script|automation|calendar|telegram|template|rest_command', ignorecase=True) }}
+    actions:
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          message: >-
+            ⚠️ Fehler in Home Assistant ({{ trigger.event.data.name }}):
+            {{ (trigger.event.data.message | join(' '))[:700] }}
+      - delay: "00:01:00"
