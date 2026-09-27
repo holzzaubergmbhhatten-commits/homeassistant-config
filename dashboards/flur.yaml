@@ -288,6 +288,16 @@ views:
         columns: 6
         rows: 2
     - type: button
+      name: Kameras
+      icon: mdi:cctv
+      show_state: false
+      tap_action:
+        action: navigate
+        navigation_path: /flur-display/kameras
+      grid_options:
+        columns: 6
+        rows: 2
+    - type: button
       name: Amazon
       icon: mdi:cart
       show_state: false
@@ -1261,6 +1271,96 @@ views:
         action: toggle
       grid_options:
         columns: 6
+- title: Kameras
+  path: kameras
+  icon: mdi:cctv
+  type: sections
+  max_columns: 2
+  badges:
+  - type: entity
+    entity: weather.touchmonitor_home
+    name: Start
+    icon: mdi:home
+    show_name: true
+    show_state: false
+    show_icon: true
+    color: blue
+    tap_action:
+      action: navigate
+      navigation_path: /flur-display/start
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Hoftor-Klingel
+      heading_style: title
+      icon: mdi:doorbell-video
+    - type: conditional
+      conditions:
+      - condition: state
+        entity: camera.hoftor_klingel_live_ansicht
+        state_not: unavailable
+      card:
+        type: picture-entity
+        entity: camera.hoftor_klingel_live_ansicht
+        camera_view: auto
+        show_name: false
+        show_state: false
+        tap_action:
+          action: more-info
+      grid_options:
+        columns: full
+    - type: conditional
+      conditions:
+      - condition: state
+        entity: camera.hoftor_klingel_live_view
+        state_not: unavailable
+      card:
+        type: picture-entity
+        entity: camera.hoftor_klingel_live_view
+        camera_view: auto
+        show_name: false
+        show_state: false
+        tap_action:
+          action: more-info
+      grid_options:
+        columns: full
+    - type: conditional
+      conditions:
+      - condition: state
+        entity: camera.hoftor_klingel_live
+        state_not: unavailable
+      card:
+        type: picture-entity
+        entity: camera.hoftor_klingel_live
+        camera_view: auto
+        show_name: false
+        show_state: false
+        tap_action:
+          action: more-info
+      grid_options:
+        columns: full
+    - type: button
+      name: Hoftor öffnen
+      icon: mdi:gate-open
+      show_state: false
+      tap_action:
+        action: toggle
+        confirmation:
+          text: Hoftor wirklich öffnen/schließen?
+      entity: switch.shelly1g4_a085e3bd629c
+      grid_options:
+        columns: full
+        rows: 2
+  - type: grid
+    cards:
+    - type: heading
+      heading: Tapo-Kameras
+      heading_style: title
+      icon: mdi:cctv
+    - type: markdown
+      text_only: true
+      content: Die Tapo-Kameras erscheinen hier, sobald sie in Home Assistant eingebunden sind.
 - type: sections
   max_columns: 4
   title: Grundriss
@@ -1299,3 +1399,85 @@ views:
     tap_action:
       action: navigate
       navigation_path: /flur-display/start
+- title: Es klingelt
+  path: klingel
+  icon: mdi:doorbell-video
+  type: sections
+  max_columns: 2
+  subview: true
+  back_path: /flur-display/start
+  sections:
+  - type: grid
+    column_span: 2
+    cards:
+    - type: heading
+      heading: Es klingelt am Hoftor
+      heading_style: title
+      icon: mdi:bell-ring
+    - type: conditional
+      conditions:
+      - condition: state
+        entity: camera.hoftor_klingel_live_ansicht
+        state_not: unavailable
+      card:
+        type: picture-entity
+        entity: camera.hoftor_klingel_live_ansicht
+        camera_view: live
+        show_name: false
+        show_state: false
+        tap_action:
+          action: more-info
+      grid_options:
+        columns: full
+    - type: conditional
+      conditions:
+      - condition: state
+        entity: camera.hoftor_klingel_live_view
+        state_not: unavailable
+      card:
+        type: picture-entity
+        entity: camera.hoftor_klingel_live_view
+        camera_view: live
+        show_name: false
+        show_state: false
+        tap_action:
+          action: more-info
+      grid_options:
+        columns: full
+    - type: conditional
+      conditions:
+      - condition: state
+        entity: camera.hoftor_klingel_live
+        state_not: unavailable
+      card:
+        type: picture-entity
+        entity: camera.hoftor_klingel_live
+        camera_view: live
+        show_name: false
+        show_state: false
+        tap_action:
+          action: more-info
+      grid_options:
+        columns: full
+    - type: button
+      name: Hoftor öffnen
+      icon: mdi:gate-open
+      show_state: false
+      tap_action:
+        action: toggle
+        confirmation:
+          text: Hoftor wirklich öffnen/schließen?
+      entity: switch.shelly1g4_a085e3bd629c
+      grid_options:
+        columns: 6
+        rows: 2
+    - type: button
+      name: Zurück
+      icon: mdi:home
+      show_state: false
+      tap_action:
+        action: navigate
+        navigation_path: /flur-display/start
+      grid_options:
+        columns: 6
+        rows: 2

@@ -1,0 +1,49 @@
+# Ring-Klingel am Hoftor:
+# Klingelt es, zeigt der Touchmonitor sofort das Kamerabild mit Knopf "Hoftor öffnen"
+# und nach 3 Minuten wieder das Dashboard. Zusätzlich Telegram-Nachricht mit Foto.
+# Die Klingel-Entität wird am Namen erkannt (event.hoftor_klingel_ding / _klingeln),
+# die Kamera ebenso (camera.hoftor_klingel_live_…).
+automation:
+  - id: ring_klingel_hoftor
+    alias: "Klingel: Hoftor – Kamera auf dem Monitor zeigen"
+    mode: restart
+    triggers:
+      - trigger: event
+        event_type: state_changed
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ trigger.event.data.entity_id is match('event\.hoftor_klingel_(ding|klingeln|klingel)$')
+             and trigger.event.data.old_state is not none
+             and trigger.event.data.new_state is not none
+             and trigger.event.data.old_state.state not in ['unavailable', 'unknown']
+             and trigger.event.data.new_state.state not in ['unavailable', 'unknown'] }}
+    actions:
+      - variables:
+          kamera: >-
+            {{ states.camera | map(attribute='entity_id')
+               | select('search', 'hoftor_klingel') | first | default('', true) }}
+      - action: rest_command.kiosk_url_oeffnen
+        continue_on_error: true
+        data:
+          url: http://localhost:8123/flur-display/klingel
+      - if: "{{ kamera != '' }}"
+        then:
+          - action: camera.snapshot
+            continue_on_error: true
+            target:
+              entity_id: "{{ kamera }}"
+            data:
+              filename: /media/klingel.jpg
+          - action: telegram_bot.send_photo
+            continue_on_error: true
+            data:
+              file: /media/klingel.jpg
+              caption: "🔔 Es klingelt am Hoftor ({{ now().strftime('%H:%M') }} Uhr)"
+        else:
+          - action: telegram_bot.send_message
+            continue_on_error: true
+            data:
+              message: "🔔 Es klingelt am Hoftor ({{ now().strftime('%H:%M') }} Uhr)"
+      - delay: "00:03:00"
+      - action: rest_command.kiosk_dashboard
