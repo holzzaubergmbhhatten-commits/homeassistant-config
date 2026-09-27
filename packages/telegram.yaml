@@ -11,6 +11,10 @@ automation:
   triggers:
   - trigger: event
     event_type: telegram_text
+  conditions:
+  - condition: template
+    value_template: '{{ not (trigger.event.data.text | default('''') | string) is match(''^\s*/?(liste|einkaufsliste|einkauf)\s*\??\s*$'',
+      ignorecase=True) }}'
   actions:
   - variables:
       text: '{{ trigger.event.data.text }}'
@@ -67,7 +71,7 @@ automation:
         dauer_minuten:
           description: Dauer in Minuten
           selector:
-            text:
+            text: null
         rest:
           description: Alles aus der Nachricht, was KEIN Termin ist (z. B. Einkaufsliste, Licht, Fragen), als eigene
             kurze Aufforderung. Leer, wenn es nichts weiter gibt.
@@ -158,3 +162,32 @@ automation:
           \ is defined\n   else 'Erledigt.' }}{% endset %}{{ t | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;')\
           \ }}"
         parse_mode: html
+- id: telegram_einkaufsliste
+  alias: 'Telegram: Einkaufsliste schicken'
+  description: Auf "Liste" oder "Einkaufsliste" antwortet der Bot mit allen offenen Einträgen.
+  mode: queued
+  triggers:
+  - trigger: event
+    event_type: telegram_text
+  conditions:
+  - condition: template
+    value_template: '{{ (trigger.event.data.text | default('''') | string) is match(''^\s*/?(liste|einkaufsliste|einkauf)\s*\??\s*$'',
+      ignorecase=True) }}'
+  actions:
+  - action: todo.get_items
+    target:
+      entity_id: todo.einkaufsliste
+    data:
+      status: needs_action
+    response_variable: liste
+  - action: telegram_bot.send_message
+    data:
+      chat_id: '{{ trigger.event.data.chat_id }}'
+      parse_mode: html
+      message: '{% set items = liste[''todo.einkaufsliste''][''items''] %}{% set t %}🛒 Einkaufsliste{% if items
+        | count == 0 %}: alles erledigt ✅{% else %} ({{ items | count }}):
+
+        {% for i in items %}• {{ i.summary }}
+
+        {% endfor %}{% endif %}{% endset %}{{ t | replace(''&'',''&amp;'') | replace(''<'',''&lt;'') | replace(''>'',''&gt;'')
+        }}'
