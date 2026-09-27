@@ -282,6 +282,16 @@ views:
         columns: 6
         rows: 2
     - type: button
+      name: Musik
+      icon: mdi:music
+      show_state: false
+      tap_action:
+        action: navigate
+        navigation_path: /flur-display/musik
+      grid_options:
+        columns: 6
+        rows: 2
+    - type: button
       name: Kalender
       icon: mdi:calendar-month
       show_state: false
@@ -1285,6 +1295,191 @@ views:
         action: toggle
       grid_options:
         columns: 6
+- title: Musik
+  path: musik
+  icon: mdi:music
+  type: sections
+  max_columns: 3
+  badges:
+  - type: entity
+    entity: weather.touchmonitor_home
+    name: Start
+    icon: mdi:home
+    show_name: true
+    show_state: false
+    show_icon: true
+    color: blue
+    tap_action:
+      action: navigate
+      navigation_path: /flur-display/start
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Musik
+      heading_style: title
+      icon: mdi:music
+    - type: button
+      name: Musik aussuchen (Apple Music)
+      icon: mdi:apple
+      show_state: false
+      tap_action:
+        action: navigate
+        navigation_path: /app/d5369777_music_assistant
+      grid_options:
+        columns: full
+        rows: 2
+    - type: button
+      name: Überall aus
+      icon: mdi:stop-circle-outline
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: media_player.media_pause
+        target:
+          entity_id:
+          - media_player.kuche_kuche
+          - media_player.muckis_zimmer_muckis_zimmer
+          - media_player.badezimmer_badezimmer
+          - media_player.badezimmer_2_badezimmer_2
+          - media_player.schlafzimmer_schlafzimmer
+          - media_player.schlafzimmer_schlafzimmer_homepod
+          - media_player.terrasse_terrasse
+          - media_player.terrasse_2_terrasse_2
+        confirmation:
+          text: Musik in allen Räumen anhalten?
+      grid_options:
+        columns: full
+        rows: 1
+    - type: heading
+      heading: Sonos-Favoriten
+      heading_style: subtitle
+    - type: button
+      name: Party Musik · Terrasse
+      icon: mdi:playlist-music
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.terrasse_terrasse
+        data:
+          source: Party Musik
+      grid_options:
+        columns: 6
+        rows: 1
+    - type: button
+      name: Party Musik · Bad
+      icon: mdi:playlist-music
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.badezimmer_badezimmer
+        data:
+          source: Party Musik
+      grid_options:
+        columns: 6
+        rows: 1
+    - type: button
+      name: Mama Laudaaa · Schlafzimmer
+      icon: mdi:playlist-music
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.schlafzimmer_schlafzimmer
+        data:
+          source: Mama Laudaaa
+      grid_options:
+        columns: 6
+        rows: 1
+    - type: button
+      name: Mama Laudaaa · Bad
+      icon: mdi:playlist-music
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: media_player.select_source
+        target:
+          entity_id: media_player.badezimmer_badezimmer
+        data:
+          source: Mama Laudaaa
+      grid_options:
+        columns: 6
+        rows: 1
+  - type: grid
+    cards:
+    - type: heading
+      heading: Küche
+      heading_style: title
+      icon: mdi:stove
+    - type: media-control
+      entity: media_player.kuche_kuche
+      name: Küche · HomePod
+      grid_options:
+        columns: full
+  - type: grid
+    cards:
+    - type: heading
+      heading: Muckis Zimmer
+      heading_style: title
+      icon: mdi:teddy-bear
+    - type: media-control
+      entity: media_player.muckis_zimmer_muckis_zimmer
+      name: Muckis Zimmer · HomePod
+      grid_options:
+        columns: full
+  - type: grid
+    cards:
+    - type: heading
+      heading: Badezimmer
+      heading_style: title
+      icon: mdi:shower
+    - type: media-control
+      entity: media_player.badezimmer_badezimmer
+      name: Badezimmer · Sonos
+      grid_options:
+        columns: full
+    - type: media-control
+      entity: media_player.badezimmer_2_badezimmer_2
+      name: Badezimmer · HomePod
+      grid_options:
+        columns: full
+  - type: grid
+    cards:
+    - type: heading
+      heading: Schlafzimmer
+      heading_style: title
+      icon: mdi:bed
+    - type: media-control
+      entity: media_player.schlafzimmer_schlafzimmer
+      name: Schlafzimmer · Sonos
+      grid_options:
+        columns: full
+    - type: media-control
+      entity: media_player.schlafzimmer_schlafzimmer_homepod
+      name: Schlafzimmer · HomePod
+      grid_options:
+        columns: full
+  - type: grid
+    cards:
+    - type: heading
+      heading: Terrasse
+      heading_style: title
+      icon: mdi:table-chair
+    - type: media-control
+      entity: media_player.terrasse_terrasse
+      name: Terrasse · Sonos
+      grid_options:
+        columns: full
+    - type: media-control
+      entity: media_player.terrasse_2_terrasse_2
+      name: Terrasse · HomePod
+      grid_options:
+        columns: full
 - title: Kameras
   path: kameras
   icon: mdi:cctv
