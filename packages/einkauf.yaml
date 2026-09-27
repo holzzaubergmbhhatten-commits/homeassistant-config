@@ -22,16 +22,16 @@ automation:
       - condition: template
         value_template: >-
           {{ (trigger.event.data.chat_id | string)
-             not in (states('input_text.telegram_empfaenger') | string).split(',') }}
+             not in (states('input_text.telegram_empfaenger') | string).split(';') }}
     actions:
       - action: input_text.set_value
         target:
           entity_id: input_text.telegram_empfaenger
         data:
           value: >-
-            {{ ((states('input_text.telegram_empfaenger') | string).split(',')
+            {{ ((states('input_text.telegram_empfaenger') | string).split(';')
                 | reject('in', ['', 'unknown', 'unavailable']) | list
-                + [trigger.event.data.chat_id | string]) | join(',') }}
+                + [trigger.event.data.chat_id | string]) | join(';') }}
 
   - id: einkaufsliste_an_telegram
     alias: "Einkaufsliste: Änderungen per Telegram schicken"
@@ -58,7 +58,7 @@ automation:
           items: "{{ liste['todo.einkaufsliste']['items'] }}"
       - repeat:
           for_each: >-
-            {{ (states('input_text.telegram_empfaenger') | string).split(',')
+            {{ (states('input_text.telegram_empfaenger') | string).split(';')
                | reject('in', ['', 'unknown', 'unavailable']) | list }}
           sequence:
             - action: telegram_bot.send_message
