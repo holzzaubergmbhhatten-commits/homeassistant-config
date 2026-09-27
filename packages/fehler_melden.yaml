@@ -23,3 +23,30 @@ automation:
             ⚠️ Fehler in Home Assistant ({{ trigger.event.data.name }}):
             {{ (trigger.event.data.message | join(' '))[:700] }}
       - delay: "00:01:00"
+
+  # Schreibt jemand Unbekanntes dem Bot (z. B. ein neues Familienmitglied),
+  # bekommt der Besitzer die Chat-ID geschickt, um sie freizugeben.
+  - id: telegram_unbekannter_chat
+    alias: "Telegram: unbekannte Chat-ID melden"
+    mode: single
+    max_exceeded: silent
+    triggers:
+      - trigger: event
+        event_type: system_log_event
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ 'telegram' in (trigger.event.data.name | lower)
+             and (trigger.event.data.message | join(' ')) is search('unauthorized|not in allowed|nicht erlaubt', ignorecase=True) }}
+    actions:
+      - variables:
+          text: "{{ trigger.event.data.message | join(' ') }}"
+          ids: "{{ text | regex_findall('-?\\d{6,}') | unique | list }}"
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          message: >-
+            👋 Jemand Unbekanntes hat dem Bot geschrieben.
+            Chat-ID: {{ ids | join(', ') if ids else '(nicht erkannt)' }}
+            Zum Freigeben in Home Assistant: Telegram bot → „Zulässige Chat-ID hinzufügen“.
+      - delay: "00:01:00"
