@@ -1484,7 +1484,7 @@ views:
   path: kameras
   icon: mdi:cctv
   type: sections
-  max_columns: 2
+  max_columns: 1
   badges:
   - type: entity
     entity: weather.touchmonitor_home
@@ -1499,78 +1499,74 @@ views:
       navigation_path: /flur-display/start
   sections:
   - type: grid
+    column_span: 1
     cards:
     - type: heading
-      heading: Hoftor-Klingel
+      heading: Kameras
       heading_style: title
-      icon: mdi:doorbell-video
+      icon: mdi:cctv
     - type: picture-entity
       entity: camera.hoftor_klingel_live_ansicht
+      name: Hoftor · Klingel
       camera_view: auto
-      show_name: false
+      show_name: true
       show_state: false
       tap_action:
         action: more-info
       grid_options:
-        columns: full
+        columns: 6
+    - type: picture-entity
+      entity: camera.draussen_hot_tor_kamera
+      name: Hof-Tor
+      camera_view: auto
+      show_name: true
+      show_state: false
+      tap_action:
+        action: more-info
+      grid_options:
+        columns: 6
+    - type: picture-entity
+      entity: camera.draussen_giebel_vorne
+      name: Giebel vorne
+      camera_view: auto
+      show_name: true
+      show_state: false
+      tap_action:
+        action: more-info
+      grid_options:
+        columns: 6
+    - type: picture-entity
+      entity: camera.draussen_giebel_hinten
+      name: Giebel hinten
+      camera_view: auto
+      show_name: true
+      show_state: false
+      tap_action:
+        action: more-info
+      grid_options:
+        columns: 6
+    - type: picture-entity
+      entity: camera.draussen_hof_hinten
+      name: Hof hinten
+      camera_view: auto
+      show_name: true
+      show_state: false
+      tap_action:
+        action: more-info
+      grid_options:
+        columns: 6
     - type: button
       name: Hoftor öffnen
       icon: mdi:gate-open
       show_state: false
+      entity: switch.shelly1g4_a085e3bd629c
       tap_action:
         action: toggle
         confirmation:
           text: Hoftor wirklich öffnen/schließen?
-      entity: switch.shelly1g4_a085e3bd629c
       grid_options:
-        columns: full
+        columns: 6
         rows: 2
-  - type: grid
-    cards:
-    - type: heading
-      heading: Tapo-Kameras
-      heading_style: title
-      icon: mdi:cctv
-    - type: picture-entity
-      entity: camera.draussen_hot_tor_kamera
-      name: Hof-Tor
-      camera_view: live
-      show_name: true
-      show_state: false
-      tap_action:
-        action: more-info
-      grid_options:
-        columns: full
-    - type: picture-entity
-      entity: camera.draussen_giebel_vorne
-      name: Giebel vorne
-      camera_view: live
-      show_name: true
-      show_state: false
-      tap_action:
-        action: more-info
-      grid_options:
-        columns: full
-    - type: picture-entity
-      entity: camera.draussen_giebel_hinten
-      name: Giebel hinten
-      camera_view: live
-      show_name: true
-      show_state: false
-      tap_action:
-        action: more-info
-      grid_options:
-        columns: full
-    - type: picture-entity
-      entity: camera.draussen_hof_hinten
-      name: Hof hinten
-      camera_view: live
-      show_name: true
-      show_state: false
-      tap_action:
-        action: more-info
-      grid_options:
-        columns: full
 - type: sections
   max_columns: 4
   title: Grundriss
@@ -1613,12 +1609,11 @@ views:
   path: klingel
   icon: mdi:doorbell-video
   type: sections
-  max_columns: 2
+  max_columns: 1
   subview: true
   back_path: /flur-display/start
   sections:
   - type: grid
-    column_span: 2
     cards:
     - type: heading
       heading: Es klingelt am Hoftor
@@ -1626,32 +1621,33 @@ views:
       icon: mdi:bell-ring
     - type: picture-entity
       entity: camera.hoftor_klingel_live_ansicht
+      name: Klingel
       camera_view: auto
-      show_name: false
-      show_state: false
-      tap_action:
-        action: more-info
-      grid_options:
-        columns: full
-    - type: picture-entity
-      entity: camera.draussen_hot_tor_kamera
-      name: Hof-Tor (Tapo, live)
-      camera_view: live
       show_name: true
       show_state: false
       tap_action:
         action: more-info
       grid_options:
-        columns: full
+        columns: 6
+    - type: picture-entity
+      entity: camera.draussen_hot_tor_kamera
+      name: Hof-Tor
+      camera_view: auto
+      show_name: true
+      show_state: false
+      tap_action:
+        action: more-info
+      grid_options:
+        columns: 6
     - type: button
       name: Hoftor öffnen
       icon: mdi:gate-open
       show_state: false
+      entity: switch.shelly1g4_a085e3bd629c
       tap_action:
         action: toggle
         confirmation:
           text: Hoftor wirklich öffnen/schließen?
-      entity: switch.shelly1g4_a085e3bd629c
       grid_options:
         columns: 6
         rows: 2
