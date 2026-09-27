@@ -2,7 +2,7 @@
 # - Der lokale Kalender "Geburtstage" heißt in der Oberfläche jetzt "Termine"
 #   (Familientermine, Geburtstage, alles zusammen; die Entität bleibt calendar.geburtstage).
 # - Leichte Vorschau für die Startseite: Familientermine der nächsten 3 Wochen und
-#   Buchungen (Holidu + Direktbuchungen) der nächsten 4 Monate.
+#   Buchungen der nächsten 4 Monate: Holidu = Ferienwohnung, eigene Homepage = Stellplätze.
 homeassistant:
   customize:
     calendar.geburtstage:
@@ -58,3 +58,20 @@ template:
               {% endfor %}
             {% endfor %}
             {{ (ns.l | sort(attribute='start'))[:25] }}
+
+automation:
+  - id: buchungen_aktualisieren
+    alias: "Kalender: Buchungen alle 15 Minuten neu laden"
+    description: >-
+      Holt Holidu (Ferienwohnung) und die eigene Homepage (Stellplätze) häufiger ab,
+      damit neue Buchungen schnell auf dem Monitor erscheinen.
+    triggers:
+      - trigger: time_pattern
+        minutes: "/15"
+    actions:
+      - action: homeassistant.update_entity
+        continue_on_error: true
+        target:
+          entity_id:
+            - calendar.holidu
+            - calendar.privat_mit_buchung

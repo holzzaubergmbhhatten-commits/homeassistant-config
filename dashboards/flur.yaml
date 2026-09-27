@@ -136,19 +136,14 @@ views:
 
         {% set tage = [''Mo'',''Di'',''Mi'',''Do'',''Fr'',''Sa'',''So''] %}
 
-        {% set quelle = {''calendar.holidu'': ''Holidu'', ''calendar.privat_mit_buchung'': ''Direkt''} %}
-
-        {% set stellplatz = ''stellplatz|wohnmobil|camper|camping|womo'' %}
-
-        {% for bereich, symbol in [(''Ferienwohnung'', ''mdi:home-heart''), (''Stellplätze'', ''mdi:rv-truck'')] %}
+        {% for bereich, symbol, kal in [(''Ferienwohnung'', ''mdi:home-heart'', ''calendar.holidu''), (''Stellplätze'', ''mdi:rv-truck'',
+        ''calendar.privat_mit_buchung'')] %}
 
         {%- set ns = namespace(aktuell=[], naechste=[]) %}
 
         {%- for e in b %}
 
-        {%- set ist_sp = e.titel is search(stellplatz, ignorecase=True) %}
-
-        {%- if (bereich == ''Stellplätze'') == ist_sp %}
+        {%- if e.kalender == kal %}
 
         {%- set sd = as_datetime(e.start).date() %}
 
@@ -169,7 +164,7 @@ views:
         {%- set ed = as_datetime(e.ende).date() %}
 
         - <font color="#FF453A">●</font> **Belegt** bis {{ tage[ed.weekday()] }} {{ ed.strftime(''%d.%m.'') }} · {{ e.titel
-        }} ({{ quelle.get(e.kalender, '''') }})
+        }}
 
         {%- endfor %}
 
@@ -186,7 +181,7 @@ views:
         {%- set ed = as_datetime(e.ende).date() %}
 
         - {{ ''Nächste Anreise'' if loop.first else ''Danach'' }}: {{ tage[sd.weekday()] }} {{ sd.strftime(''%d.%m.'') }}
-        – {{ tage[ed.weekday()] }} {{ ed.strftime(''%d.%m.'') }} · {{ e.titel }} ({{ quelle.get(e.kalender, '''') }})
+        – {{ tage[ed.weekday()] }} {{ ed.strftime(''%d.%m.'') }} · {{ e.titel }}
 
         {%- endfor %}
 
