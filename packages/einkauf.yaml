@@ -1,0 +1,73 @@
+# Einkaufsliste aufs Handy:
+# Ändert sich die Liste (Monitor, Telegram, Sprache), bekommen alle, die dem Bot schon
+# einmal geschrieben haben, nach 30 Sekunden die aktuelle Liste per Telegram.
+# Die Empfänger merkt sich Home Assistant selbst (keine Chat-IDs im Repository).
+input_text:
+  telegram_empfaenger:
+    name: Telegram-Empfänger Einkaufsliste
+    icon: mdi:account-multiple
+    max: 255
+
+automation:
+  - id: telegram_empfaenger_merken
+    alias: "Telegram: Absender als Empfänger merken"
+    mode: queued
+    triggers:
+      - trigger: event
+        event_type: telegram_text
+      - trigger: event
+        event_type: telegram_command
+    # Hinweis: Listen direkt aus states() bauen – Variablen würden "1,2" als Zahlen deuten
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ (trigger.event.data.chat_id | string)
+             not in (states('input_text.telegram_empfaenger') | string).split(',') }}
+    actions:
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.telegram_empfaenger
+        data:
+          value: >-
+            {{ ((states('input_text.telegram_empfaenger') | string).split(',')
+                | reject('in', ['', 'unknown', 'unavailable']) | list
+                + [trigger.event.data.chat_id | string]) | join(',') }}
+
+  - id: einkaufsliste_an_telegram
+    alias: "Einkaufsliste: Änderungen per Telegram schicken"
+    mode: restart
+    triggers:
+      - trigger: state
+        entity_id: todo.einkaufsliste
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ trigger.from_state is not none and trigger.to_state is not none
+             and trigger.from_state.state not in ['unknown', 'unavailable']
+             and trigger.to_state.state not in ['unknown', 'unavailable'] }}
+    actions:
+      # Mehrere Änderungen kurz hintereinander zusammenfassen
+      - delay: "00:00:30"
+      - action: todo.get_items
+        target:
+          entity_id: todo.einkaufsliste
+        data:
+          status: needs_action
+        response_variable: liste
+      - variables:
+          items: "{{ liste['todo.einkaufsliste']['items'] }}"
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(',')
+               | reject('in', ['', 'unknown', 'unavailable']) | list }}
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                chat_id: "{{ repeat.item | int }}"
+                parse_mode: html
+                message: >-
+                  {% set namen = items | map(attribute='summary') | list %}
+                  {% set t = '🛒 Einkaufsliste: alles erledigt ✅' if namen | count == 0
+                     else '🛒 Einkaufsliste (' ~ (namen | count) ~ '):\n• ' ~ (namen | join('\n• ')) %}
+                  {{ t | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}
