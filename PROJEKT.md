@@ -9,7 +9,8 @@ zum Antippen einzelner Räume.
 
 ## Hardware
 - Monitor: iiyama ProLite T2755MSC-B1 (27", Full-HD, kapazitiver Touch, HDMI + USB)
-- Rechner: kleiner Firmen-PC mit **Home Assistant OS** (installiert, läuft).
+- Rechner: kleiner Firmen-PC mit **Home Assistant OS**, Adresse `http://192.168.0.191:8123`
+  (Backup vom Laptop am 27.09.2026 wiederhergestellt). Netzwerk: TP-Link Omada.
   Vorher Testphase auf Windows-Laptop mit Docker.
 
 ## Entscheidungen
@@ -36,13 +37,17 @@ einfach so. Möglichkeiten für Punkt 7:
 3. Mini-PC mit Proxmox: HA als VM + kleines Linux mit Kiosk-Browser.
 
 ## Offene Punkte
-1. [ ] Backup auf dem Mini-PC fertig wiederherstellen
+0. [ ] Git-pull einrichten (README Schritt 2–3), danach Kiosk-Dashboard auf `flur-display` umstellen
+- [ ] Feste IP 192.168.0.191 im Omada Controller reservieren
+- [ ] Alten Home Assistant im Docker auf dem Laptop stoppen
+- [ ] 3 Updates (Core 2026.9.4, OS 18.3, Shelly) einspielen
+1. [x] Backup auf dem Mini-PC wiederhergestellt
 2. [ ] Restliche Shelly-Geräte (Garagenlicht, Wegbeleuchtung)
 3. [ ] Matter-Lampen auf dem Mini-PC koppeln
 4. [ ] HACS + card-mod neu einrichten (prüfen, ob aus Backup schon da)
 5. [ ] Geburtstage in den Kalender
 6. [ ] Grundriss: genaue, editierbare Grafik
-7. [ ] Touchmonitor an Mini-PC + Kiosk (siehe oben)
+7. [x] Touchmonitor am Mini-PC, App „HAOS Kiosk Display“ zeigt `flur-monitor` (27.09.2026)
 8. [ ] Bildschirmtastatur prüfen
 9. [ ] Nachtabschaltung des Displays (Uhrzeit / Sprachbefehl)
 10. [ ] Wisch-Navigation zwischen Dashboard-Seiten (HACS: „Swipe Navigation“)
