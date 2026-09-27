@@ -1336,9 +1336,16 @@ views:
       heading: Tapo-Kameras
       heading_style: title
       icon: mdi:cctv
-    - type: markdown
-      text_only: true
-      content: Die Tapo-Kameras erscheinen hier, sobald sie in Home Assistant eingebunden sind.
+    - type: picture-entity
+      entity: camera.192_168_0_110
+      name: Giebel vorne
+      camera_view: auto
+      show_name: true
+      show_state: false
+      tap_action:
+        action: more-info
+      grid_options:
+        columns: full
 - type: sections
   max_columns: 4
   title: Grundriss
