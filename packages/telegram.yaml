@@ -1,7 +1,7 @@
-# Privater Telegram-Bot: Nachrichten gehen an Claude (Sprachassistent von Home Assistant),
-# die Antwort kommt als Telegram-Nachricht zurück.
-# Beispiele: "Freitag 14 Uhr Zahnarzt Mucki", "Setz Milch auf die Einkaufsliste",
-# "Was steht nächste Woche an?"
+# Privater Telegram-Bot "Zuhause".
+# 1. Claude prüft, ob die Nachricht ein Termin ist → Termin wird direkt in den
+#    Familienkalender (calendar.geburtstage) eingetragen und bestätigt.
+# 2. Alles andere (Licht, Einkaufsliste, Fragen) geht an den Claude-Gesprächsagenten.
 # Nur Chat-IDs, die in der Integration "Telegram bot" erlaubt sind, lösen das aus.
 automation:
   - id: telegram_an_claude
@@ -12,20 +12,121 @@ automation:
       - trigger: event
         event_type: telegram_text
     actions:
-      - action: conversation.process
-        data:
+      - variables:
           text: "{{ trigger.event.data.text }}"
-          language: de
-          # Nimmt automatisch den Claude-Gesprächsagenten, sonst den eingebauten Assistenten
-          agent_id: >-
+          chat: "{{ trigger.event.data.chat_id }}"
+          kalender: calendar.geburtstage
+          heute: >-
+            {{ ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'][now().weekday()] }},
+            {{ now().strftime('%Y-%m-%d, %H:%M') }} Uhr
+          ai_entity: >-
+            {{ states.ai_task | map(attribute='entity_id')
+               | select('search', 'claude|anthropic') | first | default('', true) }}
+          agent: >-
             {{ states.conversation | map(attribute='entity_id')
                | select('search', 'claude|anthropic') | first
                | default('conversation.home_assistant', true) }}
-        response_variable: antwort
-      - action: telegram_bot.send_message
+
+      # Schritt 1: Ist das ein Termin?
+      - action: ai_task.generate_data
+        continue_on_error: true
         data:
-          chat_id: "{{ trigger.event.data.chat_id }}"
-          message: >-
-            {{ antwort.response.speech.plain.speech
-               if antwort.response is defined and antwort.response.speech.plain is defined
-               else 'Erledigt.' }}
+          task_name: Telegram-Nachricht einordnen
+          entity_id: "{{ ai_entity }}"
+          instructions: |-
+            Heute ist {{ heute }}.
+            Entscheide, ob die folgende Nachricht einen neuen Termin in den Kalender eintragen möchte.
+            Wenn ja: ist_termin = true, dazu ein kurzer, sinnvoller Titel, das Datum im Format JJJJ-MM-TT,
+            die Uhrzeit im Format HH:MM (leer lassen bei ganztägigen Terminen wie Geburtstagen oder Urlaub)
+            und die Dauer in Minuten, falls genannt (sonst 60).
+            Relative Angaben wie "morgen", "übermorgen" oder "nächsten Dienstag" rechnest du in ein Datum um.
+            Wenn nein (Frage, Licht, Einkaufsliste, Sonstiges): ist_termin = false.
+            Nachricht: {{ text }}
+          structure:
+            ist_termin:
+              description: true, wenn ein Termin eingetragen werden soll
+              required: true
+              selector:
+                boolean: {}
+            titel:
+              description: Kurzer Titel des Termins
+              selector:
+                text: {}
+            datum:
+              description: Datum im Format JJJJ-MM-TT
+              selector:
+                text: {}
+            uhrzeit:
+              description: Beginn im Format HH:MM, leer bei ganztägigen Terminen
+              selector:
+                text: {}
+            dauer_minuten:
+              description: Dauer in Minuten
+              selector:
+                number:
+                  min: 5
+                  max: 1440
+        response_variable: erkannt
+
+      - variables:
+          termin: >-
+            {{ erkannt is defined and erkannt.data is defined and erkannt.data is mapping
+               and (erkannt.data.ist_termin | default(false)) in [true, 'true', 'True']
+               and (erkannt.data.datum | default('') | string) is match('^\d{4}-\d{2}-\d{2}$') }}
+
+      - choose:
+          # Termin direkt eintragen
+          - conditions: "{{ termin }}"
+            sequence:
+              - variables:
+                  titel: "{{ erkannt.data.titel | default('Termin', true) }}"
+                  datum: "{{ erkannt.data.datum }}"
+                  uhr: "{{ erkannt.data.uhrzeit | default('', true) | string | trim }}"
+                  mit_uhrzeit: "{{ uhr is match('^\\d{1,2}:\\d{2}') }}"
+                  minuten: "{{ erkannt.data.dauer_minuten | default(60, true) | int(60) }}"
+                  datum_de: "{{ strptime(datum, '%Y-%m-%d').strftime('%d.%m.%Y') }}"
+              - if: "{{ mit_uhrzeit }}"
+                then:
+                  - variables:
+                      beginn: >-
+                        {{ datum }} {{ '%02d' | format(uhr.split(':')[0] | int) }}:{{ uhr.split(':')[1][:2] }}:00
+                  - action: calendar.create_event
+                    target:
+                      entity_id: "{{ kalender }}"
+                    data:
+                      summary: "{{ titel }}"
+                      start_date_time: "{{ beginn }}"
+                      end_date_time: >-
+                        {{ (strptime(beginn, '%Y-%m-%d %H:%M:%S') + timedelta(minutes=minuten)).strftime('%Y-%m-%d %H:%M:%S') }}
+                  - action: telegram_bot.send_message
+                    data:
+                      chat_id: "{{ chat }}"
+                      message: "📅 Eingetragen: {{ titel }} am {{ datum_de }} um {{ beginn[11:16] }} Uhr"
+                else:
+                  - action: calendar.create_event
+                    target:
+                      entity_id: "{{ kalender }}"
+                    data:
+                      summary: "{{ titel }}"
+                      start_date: "{{ datum }}"
+                      end_date: >-
+                        {{ (strptime(datum, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d') }}
+                  - action: telegram_bot.send_message
+                    data:
+                      chat_id: "{{ chat }}"
+                      message: "📅 Eingetragen: {{ titel }} am {{ datum_de }} (ganztägig)"
+        # Alles andere an Claude
+        default:
+          - action: conversation.process
+            data:
+              text: "{{ text }}"
+              language: de
+              agent_id: "{{ agent }}"
+            response_variable: antwort
+          - action: telegram_bot.send_message
+            data:
+              chat_id: "{{ chat }}"
+              message: >-
+                {{ antwort.response.speech.plain.speech
+                   if antwort.response is defined and antwort.response.speech.plain is defined
+                   else 'Erledigt.' }}
