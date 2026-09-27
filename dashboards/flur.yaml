@@ -1672,90 +1672,74 @@ views:
 - title: Kameras
   path: kameras
   icon: mdi:cctv
-  type: sections
-  max_columns: 1
-  badges:
-  - type: entity
-    entity: weather.touchmonitor_home
-    name: Start
-    icon: mdi:home
-    show_name: true
-    show_state: false
-    show_icon: true
-    color: blue
-    tap_action:
-      action: navigate
-      navigation_path: /flur-display/start
-  sections:
-  - type: grid
-    column_span: 1
+  type: panel
+  cards:
+  - type: vertical-stack
     cards:
-    - type: heading
-      heading: Kameras
-      heading_style: title
-      icon: mdi:cctv
-    - type: picture-entity
-      entity: camera.hoftor_klingel_live_ansicht
-      name: Hoftor · Klingel
-      camera_view: auto
-      show_name: true
-      show_state: false
-      tap_action:
-        action: more-info
-      grid_options:
-        columns: 6
-    - type: picture-entity
-      entity: camera.draussen_hot_tor_kamera
-      name: Hof-Tor
-      camera_view: auto
-      show_name: true
-      show_state: false
-      tap_action:
-        action: more-info
-      grid_options:
-        columns: 6
-    - type: picture-entity
-      entity: camera.draussen_giebel_vorne
-      name: Giebel vorne
-      camera_view: auto
-      show_name: true
-      show_state: false
-      tap_action:
-        action: more-info
-      grid_options:
-        columns: 6
-    - type: picture-entity
-      entity: camera.draussen_giebel_hinten
-      name: Giebel hinten
-      camera_view: auto
-      show_name: true
-      show_state: false
-      tap_action:
-        action: more-info
-      grid_options:
-        columns: 6
-    - type: picture-entity
-      entity: camera.draussen_hof_hinten
-      name: Hof hinten
-      camera_view: auto
-      show_name: true
-      show_state: false
-      tap_action:
-        action: more-info
-      grid_options:
-        columns: 6
-    - type: button
-      name: Hoftor öffnen
-      icon: mdi:gate-open
-      show_state: false
-      entity: switch.shelly1g4_a085e3bd629c
-      tap_action:
-        action: toggle
-        confirmation:
-          text: Hoftor wirklich öffnen/schließen?
-      grid_options:
-        columns: 6
-        rows: 2
+    - type: grid
+      columns: 3
+      square: false
+      cards:
+      - type: picture-entity
+        entity: camera.hoftor_klingel_live_ansicht
+        name: Hoftor · Klingel
+        camera_view: auto
+        show_name: true
+        show_state: false
+        tap_action:
+          action: more-info
+      - type: picture-entity
+        entity: camera.draussen_hot_tor_kamera
+        name: Hof-Tor
+        camera_view: auto
+        show_name: true
+        show_state: false
+        tap_action:
+          action: more-info
+      - type: picture-entity
+        entity: camera.draussen_giebel_vorne
+        name: Giebel vorne
+        camera_view: auto
+        show_name: true
+        show_state: false
+        tap_action:
+          action: more-info
+      - type: picture-entity
+        entity: camera.draussen_giebel_hinten
+        name: Giebel hinten
+        camera_view: auto
+        show_name: true
+        show_state: false
+        tap_action:
+          action: more-info
+      - type: picture-entity
+        entity: camera.draussen_hof_hinten
+        name: Hof hinten
+        camera_view: auto
+        show_name: true
+        show_state: false
+        tap_action:
+          action: more-info
+      - type: vertical-stack
+        cards:
+        - type: button
+          name: Hoftor öffnen
+          icon: mdi:gate-open
+          show_state: false
+          tap_action:
+            action: toggle
+            confirmation:
+              text: Hoftor wirklich öffnen/schließen?
+          icon_height: 48px
+          entity: switch.shelly1g4_a085e3bd629c
+        - type: button
+          name: Start
+          icon: mdi:home
+          show_state: false
+          tap_action:
+            action: navigate
+            navigation_path: /flur-display/start
+          icon_height: 48px
 - type: sections
   max_columns: 4
   title: Grundriss
