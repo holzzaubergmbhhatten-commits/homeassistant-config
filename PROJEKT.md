@@ -37,7 +37,10 @@ einfach so. Möglichkeiten für Punkt 7:
 3. Mini-PC mit Proxmox: HA als VM + kleines Linux mit Kiosk-Browser.
 
 ## Offene Punkte
-0. [ ] Git-pull einrichten (README Schritt 2–3), danach Kiosk-Dashboard auf `flur-display` umstellen
+0. [x] Git-pull läuft (Repository öffentlich, ohne Token)
+- [ ] Kiosk-Dashboard auf `flur-display/start`, Theme Apple, Sidebar None umstellen
+- [x] Telegram-Bot (Polling) eingerichtet, Chat freigegeben, Test ok
+- [ ] Anthropic-Integration (Claude) + Freigaben für Assist
 - [ ] Feste IP 192.168.0.191 im Omada Controller reservieren
 - [ ] Alten Home Assistant im Docker auf dem Laptop stoppen
 - [ ] 3 Updates (Core 2026.9.4, OS 18.3, Shelly) einspielen
