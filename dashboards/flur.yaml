@@ -2231,44 +2231,14 @@ views:
       tap_action:
         action: navigate
         navigation_path: /flur-display/kameras
-- type: sections
-  max_columns: 4
-  title: Grundriss
-  path: gerate
-  sections:
-  - type: grid
-    cards:
-    - type: picture-elements
-      elements:
-      - type: icon
-        style:
-          left: 17%
-          top: 46%
-        icon: mdi:abjad-arabic
-        entity: light.schlafen_nachttisch_marco
-      image:
-        media_content_id: /local/grundriss.jpg
-        media_content_type: ''
-        metadata:
-          navigateIds:
-          - {}
-          - media_content_type: ''
-            media_content_id: __MANUAL_ENTRY__
-      grid_options:
-        rows: auto
+- title: Grundriss
+  path: grundriss
   icon: mdi:floor-plan
-  badges:
-  - type: entity
-    entity: weather.touchmonitor_home
-    name: Start
-    icon: mdi:home
-    show_name: true
-    show_state: false
-    show_icon: true
-    color: blue
-    tap_action:
-      action: navigate
-      navigation_path: /flur-display/start
+  type: panel
+  cards:
+  - type: iframe
+    url: /local/grundriss.html?v=1
+    aspect_ratio: 53.3%
 - title: Es klingelt
   path: klingel
   icon: mdi:doorbell-video

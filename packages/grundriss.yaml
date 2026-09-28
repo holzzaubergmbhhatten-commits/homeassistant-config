@@ -1,0 +1,26 @@
+# Grundriss-Seite (www/grundriss.html, im Dashboard als Vollbild eingebettet).
+# Die Anordnung (Räume, Wände, Lampen, Symbole) wird auf der Seite selbst bearbeitet
+# und hierüber in /config/www/grundriss_daten.json gespeichert.
+shell_command:
+  grundriss_schreiben: python3 /config/claude_tools/grundriss_speichern.py {{ b64 }}
+
+script:
+  grundriss_speichern:
+    alias: Grundriss speichern
+    mode: queued
+    fields:
+      daten:
+        description: Anordnung als JSON-Text
+    sequence:
+      - action: shell_command.grundriss_schreiben
+        data:
+          # schon hier kodieren – sonst würde Home Assistant den JSON-Text in ein Objekt umwandeln
+          b64: "{{ (daten if daten is string else (daten | to_json)) | base64_encode }}"
+        response_variable: ergebnis
+      - if: "{{ not (ergebnis.stdout | default('') | trim).startswith('ok') }}"
+        then:
+          - action: persistent_notification.create
+            data:
+              notification_id: grundriss
+              title: Grundriss speichern
+              message: "{{ ergebnis.stdout | default('keine Antwort') }}"

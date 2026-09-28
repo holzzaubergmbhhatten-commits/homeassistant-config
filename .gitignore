@@ -12,3 +12,7 @@
 !/dashboards/
 !/claude_tools/
 __pycache__/
+# Grundriss-Seite (Anordnung grundriss_daten.json bleibt lokal)
+!/www/
+/www/*
+!/www/grundriss.html

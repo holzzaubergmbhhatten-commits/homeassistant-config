@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grundriss</title>
+<!--
+  Grundriss für den Touchmonitor (wird im Dashboard als Vollbild-iframe gezeigt).
+  - Liest Lampen, Räume und Zustände direkt aus der Home-Assistant-Oberfläche (window.parent … hass).
+  - Anordnung (Räume, Wände, Lampen-Positionen, Symbole) liegt in /local/grundriss_daten.json
+    und wird über script.grundriss_speichern gespeichert (packages/grundriss.yaml).
+-->
+<style>
+  :root {
+    --bg: #F2F2F7; --raum: #FFFFFF; --raum-an: #FFF7D6; --linie: #D1D1D6; --text: #1C1C1E;
+    --grau: #8E8E93; --aus: #E5E5EA; --an: #FFCC00; --akzent: #007AFF; --rot: #FF3B30;
+    --panel: rgba(255,255,255,0.97);
+  }
+  :root.dunkel {
+    --bg: #1C1C1E; --raum: #2C2C2E; --raum-an: #3D3522; --linie: #48484A; --text: #F2F2F7;
+    --grau: #98989D; --aus: #3A3A3C; --an: #FFD60A; --akzent: #0A84FF; --rot: #FF453A;
+    --panel: rgba(44,44,46,0.97);
+  }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
+    font-family: -apple-system, "SF Pro Text", Roboto, "Helvetica Neue", system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  #plan { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+  .leiste { position: absolute; top: 14px; left: 16px; right: 16px; display: flex; align-items: center; gap: 10px;
+    pointer-events: none; }
+  .leiste > * { pointer-events: auto; }
+  .titel { font-size: 26px; font-weight: 700; letter-spacing: -0.3px; }
+  .info { color: var(--grau); font-size: 16px; margin-left: 4px; }
+  .luecke { flex: 1; }
+  button { font: inherit; font-size: 16px; font-weight: 600; border: 0; border-radius: 12px; padding: 10px 16px;
+    background: var(--raum); color: var(--akzent); display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+  button.voll { background: var(--akzent); color: #fff; }
+  button.rot { color: var(--rot); }
+  button svg { width: 20px; height: 20px; fill: currentColor; }
+  .panel { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(720px, calc(100% - 32px));
+    background: var(--panel); border-radius: 18px; padding: 16px 18px; box-shadow: 0 8px 30px rgba(0,0,0,0.18); display: none; }
+  .panel.offen { display: block; }
+  .panel h3 { margin: 0 0 10px; font-size: 17px; }
+  .panel input { font: inherit; font-size: 18px; width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 10px;
+    border: 1px solid var(--linie); background: var(--bg); color: var(--text); margin-bottom: 12px; }
+  .symbole { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .symbole button { flex-direction: column; font-size: 12px; font-weight: 500; color: var(--text); padding: 8px 10px; min-width: 74px; }
+  .symbole button svg { width: 28px; height: 28px; }
+  .symbole button.gewaehlt { background: var(--akzent); color: #fff; }
+  .zeile { display: flex; gap: 10px; flex-wrap: wrap; }
+  .hinweis { color: var(--grau); font-size: 14px; margin-top: 8px; }
+  .meldung { position: absolute; left: 50%; top: 70px; transform: translateX(-50%); background: var(--text); color: var(--bg);
+    padding: 10px 18px; border-radius: 12px; font-size: 16px; display: none; }
+  /* SVG */
+  .raum rect.flaeche { fill: var(--raum); stroke: var(--linie); stroke-width: 0.12; }
+  .raum.an rect.flaeche { fill: var(--raum-an); }
+  .raum text { fill: var(--grau); font-size: 0.75px; font-weight: 700; letter-spacing: 0.02px; }
+  .raum.gewaehlt rect.flaeche { stroke: var(--akzent); stroke-width: 0.2; }
+  .wand { fill: transparent; }
+  .bearbeiten .wand { fill: var(--akzent); fill-opacity: 0.0; }
+  .bearbeiten .wand:hover, .bearbeiten .wand.aktiv { fill-opacity: 0.35; }
+  .griff { fill: var(--akzent); }
+  .lampe circle { fill: var(--aus); }
+  .lampe.an circle { fill: var(--an); filter: drop-shadow(0 0 0.35px rgba(255,204,0,0.9)); }
+  .lampe path { fill: var(--grau); }
+  .lampe.an path { fill: #3A2E00; }
+  .lampe text { fill: var(--text); font-size: 0.5px; font-weight: 600; text-anchor: middle; }
+  .lampe.aus-geschaltet text { fill: var(--grau); }
+  .lampe.versteckt { opacity: 0.35; }
+  .lampe.gewaehlt circle { stroke: var(--akzent); stroke-width: 0.15; }
+  .lampe.nicht-da circle { fill: none; stroke: var(--rot); stroke-dasharray: 0.2 0.15; stroke-width: 0.08; }
+</style>
+</head>
+<body>
+<svg id="plan" xmlns="http://www.w3.org/2000/svg"></svg>
+<div class="leiste">
+  <span class="titel">Grundriss</span><span class="info" id="info"></span>
+  <span class="luecke"></span>
+  <span id="knoepfe-ansicht">
+    <button id="alle-aus"></button>
+    <button id="bearbeiten"></button>
+  </span>
+  <span id="knoepfe-bearbeiten" style="display:none">
+    <button id="raum-neu"></button>
+    <button id="foto"></button>
+    <button id="abbrechen" class="rot"></button>
+    <button id="speichern" class="voll"></button>
+  </span>
+</div>
+<div class="panel" id="panel"></div>
+<div class="meldung" id="meldung"></div>
+<script>
+const ICON = {
+  decke: "M8,9H11V4H13V9H16L20,17H4L8,9M14,18A2,2 0 0,1 12,20A2,2 0 0,1 10,18H14Z",
+  mehrfach: "M10 11H13V6H15V11H18L22 19H6L10 11M16 20C16 21.11 15.11 22 14 22S12 21.11 12 20H16M8.21 10.11L8.76 9H11V2H9V7H6L2 15H5.76L8.21 10.11Z",
+  steh: "M15,2L17,9H7L9,2M11,10H13V20H16V22H8V20H11V10Z",
+  tisch: "M10.85,2L9.18,4.5L10.32,5.25L7.14,10C7.1,10 7.05,10 7,10A2,2 0 0,0 5,12C5,12.94 5.66,13.75 6.58,13.95L10.62,20H7V22H17V20H13L8.53,13.28C8.83,12.92 9,12.47 9,12C9,11.7 8.93,11.4 8.8,11.13L12,6.37C11.78,8.05 12.75,9.89 14.45,11L18.89,4.37C17.2,3.24 15.12,3.04 13.65,3.87L10.85,2M18.33,7L16.67,9.5C17.35,9.95 18.29,9.77 18.75,9.08C19.21,8.39 19,7.46 18.33,7Z",
+  lampe: "M8,2H16L20,14H4L8,2M11,15H13V20H18V22H6V20H11V15Z",
+  birne: "M12,2A7,7 0 0,0 5,9C5,11.38 6.19,13.47 8,14.74V17A1,1 0 0,0 9,18H15A1,1 0 0,0 16,17V14.74C17.81,13.47 19,11.38 19,9A7,7 0 0,0 12,2M9,21A1,1 0 0,0 10,22H14A1,1 0 0,0 15,21V20H9V21Z",
+  led: "M2.95 3L2 6.91L19.34 11.25L20.29 7.34L2.95 3M6.09 6.89L4.16 6.41L4.64 4.46L6.57 4.94L6.09 6.89M9.94 7.86L8 7.38L8.5 5.42L10.42 5.91L9.94 7.86M13.8 8.82L11.87 8.34L12.35 6.39L14.27 6.87L13.8 8.82M17.65 9.79L15.72 9.31L16.2 7.35L18.13 7.84L17.65 9.79M4.66 12.75L3.71 16.66L21.05 21L22 17.1L4.66 12.75M7.8 16.65L5.88 16.16L6.35 14.21L8.28 14.69L7.8 16.65M11.65 17.61L9.73 17.13L10.2 15.18L12.13 15.66L11.65 17.61M15.5 18.58L13.58 18.09L14.06 16.14L16 16.62L15.5 18.58M19.36 19.54L17.43 19.06L17.91 17.11L19.84 17.59L19.36 19.54M6.25 12.11L11 10.2L17.75 11.89L13 13.8L6.25 12.11Z",
+  wand: "M13 19V16H11V19H13M19.09 16.5L20.5 15.09L18.73 13.32L17.32 14.73L19.09 16.5M4.91 16.5L6.68 14.73L5.27 13.32L3.5 15.09L4.91 16.5M20 12C20 9.14 18.5 6.5 16 5.07S10.5 3.64 8 5.07 4 9.14 4 12H20Z",
+  spot: "M9,16.5L9.91,15.59L15.13,20.8L14.21,21.71L9,16.5M15.5,10L16.41,9.09L21.63,14.3L20.71,15.21L15.5,10M6.72,2.72L10.15,6.15L6.15,10.15L2.72,6.72C1.94,5.94 1.94,4.67 2.72,3.89L3.89,2.72C4.67,1.94 5.94,1.94 6.72,2.72M14.57,7.5L15.28,8.21L8.21,15.28L7.5,14.57L6.64,11.07L11.07,6.64L14.57,7.5Z",
+  aussen: "M16 5L15 2H13L12 5L6 8H8L8.6 11H4V7H2V17H4V13H9L10 18L12 20L13 22H15L16 20L18 18L20 8H22M16.16 17H11.84L10 8H18Z",
+  kette: "M22.56 11.39C22.36 10.59 21.82 9.85 21.05 9.44L20.63 7.74C21.11 7.58 21.57 7.41 22 7.23V5C20 6.07 16.53 7.03 12 7.03S4 6.07 2 5V7.23C2.43 7.41 2.89 7.58 3.37 7.74L2.95 9.44C2.18 9.85 1.64 10.59 1.44 11.39C.905 13.57 .385 17.31 2.92 17.93C4 18.2 6 17.89 7.27 12.82C7.46 12 7.33 11.12 6.84 10.39L7.26 8.67C8.14 8.81 9.05 8.9 10 8.96V10.74C9.35 11.33 9 12.17 9 13C9 15.24 9.39 19 12 19C13.12 19 15 18.22 15 13C15 12.17 14.65 11.33 14 10.74V8.96C14.95 8.9 15.86 8.81 16.74 8.67L17.16 10.39C16.67 11.12 16.54 12 16.73 12.82C18 17.89 20 18.2 21.08 17.93C23.61 17.31 23.09 13.57 22.56 11.39M5.81 12.47C5.81 12.47 4.74 16.84 3.28 16.5C1.82 16.12 2.9 11.75 2.9 11.75S3.26 10.29 4.71 10.65 5.81 12.47 5.81 12.47M12 17.5C10.5 17.5 10.5 13 10.5 13S10.5 11.5 12 11.5 13.5 13 13.5 13 13.5 17.5 12 17.5M20.72 16.5C19.27 16.84 18.19 12.47 18.19 12.47S17.83 11 19.29 10.65 21.1 11.75 21.1 11.75 22.18 16.12 20.72 16.5Z",
+  stift: "M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z",
+  haken: "M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z",
+  x: "M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z",
+  plus: "M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z",
+  muell: "M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z",
+  alleaus: "M20.84 22.73L18.09 20C18.06 20 18.03 20 18 20H16.83C16.94 19.68 17 19.34 17 19V18.89L14.75 16.64C14.57 16.86 14.31 17 14 17H10C9.45 17 9 16.55 9 16V14C7.4 12.8 6.74 10.84 7.12 9L5.5 7.4C5.18 8.23 5 9.11 5 10C5 11.83 5.72 13.58 7 14.88V17H5C4.45 17 4 16.55 4 16V14.45C2.86 13.79 2.12 12.62 2 11.31C1.85 9.27 3.25 7.5 5.2 7.09L1.11 3L2.39 1.73L22.11 21.46L20.84 22.73M15 6C13.22 4.67 10.86 4.72 9.13 5.93L16.08 12.88C17.63 10.67 17.17 7.63 15 6M19.79 16.59C19.91 16.42 20 16.22 20 16V14.45C21.91 13.34 22.57 10.9 21.46 9C20.8 7.85 19.63 7.11 18.32 7C18.77 7.94 19 8.96 19 10C19 11.57 18.47 13.09 17.5 14.31L19.79 16.59M10 19C10 19.55 10.45 20 11 20H13C13.55 20 14 19.55 14 19V18H10V19M7 18H5V19C5 19.55 5.45 20 6 20H7.17C7.06 19.68 7 19.34 7 19V18Z",
+};
+const SYMBOLE = [
+  ["decke", "Decke"], ["mehrfach", "Mehrfach"], ["steh", "Stehlampe"], ["tisch", "Tischlampe"], ["lampe", "Lampe"],
+  ["wand", "Wand"], ["spot", "Spot"], ["led", "LED-Streifen"], ["birne", "Birne"], ["aussen", "Außen"], ["kette", "Lichterkette"],
+];
+const DATEN_URL = "/local/grundriss_daten.json";
+const FOTO_URL = "/local/grundriss.jpg";
+const RASTER = 0.5;          // Wände rasten auf halbe Einheiten ein
+const LAMPE_R = 0.75;        // Radius der Lampen-Kreise (Einheiten)
+const NS = "http://www.w3.org/2000/svg";
+
+const svg = document.getElementById("plan");
+let daten = null;            // {raeume:[...], lampen:[...], foto:{...}}
+let gesichert = null;        // Kopie beim Start des Bearbeitens
+let bearbeiten = false;
+let auswahl = null;          // {art:"raum"|"lampe", id}
+let fotoAn = false;
+let ansichtsBox = null;      // beim Bearbeiten fest, damit nichts springt
+let zug = null;              // laufendes Ziehen
+
+// ---------- Home Assistant ----------
+function hass() {
+  try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; }
+}
+function lichter(h) {
+  return Object.keys(h.states).filter(id => id.startsWith("light.") &&
+    !(h.entities && h.entities[id] && (h.entities[id].hidden || h.entities[id].entity_category)));
+}
+function bereichVon(h, id) {
+  const e = h.entities && h.entities[id];
+  if (!e) return null;
+  if (e.area_id) return e.area_id;
+  const d = e.device_id && h.devices && h.devices[e.device_id];
+  return d ? d.area_id : null;
+}
+function bereichName(h, area) {
+  return (area && h.areas && h.areas[area] && h.areas[area].name) || "Ohne Raum";
+}
+function istAn(h, id) { return h.states[id] && h.states[id].state === "on"; }
+
+// ---------- Hilfen ----------
+const rund = v => Math.round(v / RASTER) * RASTER;
+const neueId = () => "r" + Math.random().toString(36).slice(2, 8);
+function el(tag, attrs, eltern) {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (eltern) eltern.appendChild(n);
+  return n;
+}
+function icon(name) { return `<svg viewBox="0 0 24 24"><path d="${ICON[name]}"/></svg>`; }
+function symbolRaten(name) {
+  const n = (name || "").toLowerCase();
+  if (/steh/.test(n)) return "steh";
+  if (/tisch|nacht|schreib/.test(n)) return "tisch";
+  if (/led|streifen|strip/.test(n)) return "led";
+  if (/spot/.test(n)) return "spot";
+  if (/wand/.test(n)) return "wand";
+  if (/kette/.test(n)) return "kette";
+  if (/au(ß|ss)en|weg|garten|hof|terrasse|eingang|garage/.test(n)) return "aussen";
+  return "decke";
+}
+function meldung(text) {
+  const m = document.getElementById("meldung");
+  m.textContent = text; m.style.display = "block";
+  clearTimeout(meldung.t); meldung.t = setTimeout(() => m.style.display = "none", 2500);
+}
+function raumAn(x, y) {
+  // oberster (zuletzt gezeichneter) Raum an dieser Stelle
+  for (let i = daten.raeume.length - 1; i >= 0; i--) {
+    const r = daten.raeume[i];
+    if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return r;
+  }
+  return null;
+}
+function lampenName(h, l) {
+  if (l.name) return l.name;
+  const s = h.states[l.entity];
+  let n = (s && s.attributes.friendly_name) || l.entity;
+  const r = raumAn(l.x, l.y);
+  if (r && n.toLowerCase().startsWith(r.name.toLowerCase() + " ")) n = n.slice(r.name.length + 1);
+  return n;
+}
+
+// ---------- Anfangs-Grundriss aus den Home-Assistant-Räumen ----------
+function startGrundriss(h) {
+  const gruppen = {};
+  for (const id of lichter(h)) { const k = bereichVon(h, id) || "_ohne"; if (!gruppen[k]) gruppen[k] = []; gruppen[k].push(id); }
+  const ids = Object.keys(gruppen).sort((a, b) => bereichName(h, a === "_ohne" ? null : a)
+    .localeCompare(bereichName(h, b === "_ohne" ? null : b), "de"));
+  const d = { version: 1, raeume: [], lampen: [] };
+  let x = 0, y = 0, zeilenH = 0;
+  const BREITE = 48;
+  for (const a of ids) {
+    const n = gruppen[a].length, spalten = Math.min(3, n), zeilen = Math.ceil(n / 3);
+    const w = Math.max(8, spalten * 3.3 + 0.6), hh = Math.max(6, zeilen * 3 + 2.4);
+    if (x + w > BREITE) { x = 0; y += zeilenH; zeilenH = 0; }
+    const raum = { id: neueId(), name: bereichName(h, a === "_ohne" ? null : a), bereich: a === "_ohne" ? null : a, x, y, w, h: hh };
+    d.raeume.push(raum);
+    gruppen[a].forEach((id, i) => d.lampen.push({
+      entity: id, x: x + 1.9 + (i % 3) * 3.3, y: y + 3.2 + Math.floor(i / 3) * 3,
+      icon: symbolRaten((h.states[id].attributes.friendly_name || "") + " " + id),
+    }));
+    x += w; zeilenH = Math.max(zeilenH, hh);
+  }
+  return d;
+}
+// neue Lampen (seit dem letzten Speichern hinzugekommen) in ihren Raum setzen
+function neueLampenErgaenzen(h) {
+  const bekannt = new Set(daten.lampen.map(l => l.entity));
+  for (const id of lichter(h)) {
+    if (bekannt.has(id)) continue;
+    const a = bereichVon(h, id);
+    let r = daten.raeume.find(r => r.bereich && r.bereich === a) ||
+            daten.raeume.find(r => r.name === bereichName(h, a));
+    if (!r) {
+      const box = inhaltsBox();
+      r = { id: neueId(), name: bereichName(h, a), bereich: a, x: box.x, y: box.y + box.h + 1, w: 8, h: 6 };
+      daten.raeume.push(r);
+    }
+    const drin = daten.lampen.filter(l => l.x >= r.x && l.x <= r.x + r.w && l.y >= r.y && l.y <= r.y + r.h).length;
+    daten.lampen.push({ entity: id, x: Math.min(r.x + r.w - 1, r.x + 1.9 + (drin % 3) * 3.3),
+      y: Math.min(r.y + r.h - 1, r.y + 3.2 + Math.floor(drin / 3) * 3),
+      icon: symbolRaten((h.states[id].attributes.friendly_name || "") + " " + id) });
+  }
+}
+
+// ---------- Zeichnen ----------
+function inhaltsBox() {
+  let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+  for (const r of daten.raeume) { x1 = Math.min(x1, r.x); y1 = Math.min(y1, r.y); x2 = Math.max(x2, r.x + r.w); y2 = Math.max(y2, r.y + r.h); }
+  for (const l of daten.lampen) { x1 = Math.min(x1, l.x - 1); y1 = Math.min(y1, l.y - 1); x2 = Math.max(x2, l.x + 1); y2 = Math.max(y2, l.y + 1.6); }
+  if (!isFinite(x1)) return { x: 0, y: 0, w: 40, h: 24 };
+  return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+}
+function berechneAnsicht() {
+  const b = inhaltsBox();
+  const rand = bearbeiten ? 4 : 1;
+  // oben Platz für die Knopfleiste lassen
+  return { x: b.x - rand, y: b.y - rand - 3, w: b.w + 2 * rand, h: b.h + 2 * rand + 3 };
+}
+function zeichnen() {
+  const h = hass();
+  if (!h || !daten) return;
+  document.documentElement.classList.toggle("dunkel", !!(h.themes && h.themes.darkMode));
+  const v = ansichtsBox || berechneAnsicht();
+  svg.setAttribute("viewBox", `${v.x} ${v.y} ${v.w} ${v.h}`);
+  svg.classList.toggle("bearbeiten", bearbeiten);
+  svg.innerHTML = "";
+
+  if (bearbeiten && fotoAn && daten.foto) {
+    el("image", { href: FOTO_URL, x: daten.foto.x, y: daten.foto.y, width: daten.foto.w, opacity: 0.35,
+      preserveAspectRatio: "xMinYMin meet" }, svg);
+  }
+  const anRaeume = new Set();
+  for (const l of daten.lampen) if (!l.versteckt && istAn(h, l.entity)) { const r = raumAn(l.x, l.y); if (r) anRaeume.add(r.id); }
+
+  for (const r of daten.raeume) {
+    const g = el("g", { class: "raum" + (anRaeume.has(r.id) ? " an" : "") +
+      (auswahl && auswahl.art === "raum" && auswahl.id === r.id ? " gewaehlt" : ""), "data-raum": r.id }, svg);
+    el("rect", { class: "flaeche", x: r.x, y: r.y, width: r.w, height: r.h, rx: 0.35 }, g);
+    const t = el("text", { x: r.x + 0.55, y: r.y + 1.2 }, g);
+    t.textContent = r.name;
+    if (bearbeiten) {
+      const d = 0.45; // Anfasser-Breite der Wände
+      el("rect", { class: "wand", "data-wand": "o", x: r.x, y: r.y - d / 2, width: r.w, height: d }, g);
+      el("rect", { class: "wand", "data-wand": "u", x: r.x, y: r.y + r.h - d / 2, width: r.w, height: d }, g);
+      el("rect", { class: "wand", "data-wand": "l", x: r.x - d / 2, y: r.y, width: d, height: r.h }, g);
+      el("rect", { class: "wand", "data-wand": "r", x: r.x + r.w - d / 2, y: r.y, width: d, height: r.h }, g);
+    }
+  }
+  let an = 0;
+  daten.lampen.forEach((l, i) => {
+    if (l.versteckt && !bearbeiten) return;
+    const vorhanden = !!h.states[l.entity];
+    const ein = vorhanden && istAn(h, l.entity);
+    if (ein && !l.versteckt) an++;
+    const g = el("g", { class: "lampe" + (ein ? " an" : " aus-geschaltet") + (l.versteckt ? " versteckt" : "") +
+      (vorhanden ? "" : " nicht-da") + (auswahl && auswahl.art === "lampe" && auswahl.id === i ? " gewaehlt" : ""),
+      "data-lampe": i, transform: `translate(${l.x} ${l.y})` }, svg);
+    el("circle", { r: LAMPE_R }, g);
+    el("path", { d: ICON[l.icon] || ICON.decke, transform: "translate(-0.5 -0.5) scale(0.0417)" }, g);
+    const t = el("text", { y: LAMPE_R + 0.7 }, g);
+    const name = lampenName(h, l);
+    t.textContent = name.length > 16 ? name.slice(0, 15) + "…" : name;
+  });
+  document.getElementById("info").textContent = bearbeiten
+    ? "Bearbeiten: Wände ziehen, Räume verschieben, Lampen hinziehen, antippen für Namen und Symbol"
+    : (an === 0 ? "Alle Lichter aus" : an === 1 ? "1 Licht an" : an + " Lichter an");
+}
+
+// ---------- Bedienung ----------
+function weltPunkt(ev) {
+  const p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY;
+  return p.matrixTransform(svg.getScreenCTM().inverse());
+}
+svg.addEventListener("pointerdown", ev => {
+  const h = hass(); if (!h) return;
+  const lampeEl = ev.target.closest("[data-lampe]");
+  const wandEl = ev.target.closest("[data-wand]");
+  const raumEl = ev.target.closest("[data-raum]");
+  const p = weltPunkt(ev);
+  if (!bearbeiten) {
+    if (lampeEl) {
+      const l = daten.lampen[+lampeEl.dataset.lampe];
+      if (h.states[l.entity]) h.callService("light", "toggle", { entity_id: l.entity });
+    }
+    return;
+  }
+  svg.setPointerCapture(ev.pointerId);
+  if (lampeEl) {
+    const i = +lampeEl.dataset.lampe, l = daten.lampen[i];
+    zug = { art: "lampe", i, dx: p.x - l.x, dy: p.y - l.y, bewegt: false, start: p };
+  } else if (wandEl && raumEl) {
+    const r = daten.raeume.find(r => r.id === raumEl.dataset.raum);
+    const seite = wandEl.dataset.wand, gegen = { o: "u", u: "o", l: "r", r: "l" }[seite];
+    const kante = (q, s) => s === "o" ? q.y : s === "u" ? q.y + q.h : s === "l" ? q.x : q.x + q.w;
+    const ueberlappt = q => (seite === "o" || seite === "u")
+      ? q.x < r.x + r.w && q.x + q.w > r.x : q.y < r.y + r.h && q.y + q.h > r.y;
+    // Räume, die an derselben Wand anliegen, bewegen sich mit (gemeinsame Wand)
+    const nachbarn = daten.raeume.filter(q => q !== r && ueberlappt(q) && Math.abs(kante(q, gegen) - kante(r, seite)) < 0.01)
+      .map(q => ({ q, seite: gegen }));
+    zug = { art: "wand", teile: [{ q: r, seite }, ...nachbarn], bewegt: false, start: p };
+    wandEl.classList.add("aktiv");
+  } else if (raumEl) {
+    const r = daten.raeume.find(r => r.id === raumEl.dataset.raum);
+    // Lampen im Raum wandern mit
+    const mit = daten.lampen.filter(l => raumAn(l.x, l.y) === r).map(l => ({ l, x: l.x, y: l.y }));
+    zug = { art: "raum", r, ox: r.x, oy: r.y, mit, bewegt: false, start: p };
+  } else {
+    zug = null; auswahl = null; panelZeigen(); zeichnen();
+  }
+});
+svg.addEventListener("pointermove", ev => {
+  if (!zug) return;
+  const p = weltPunkt(ev);
+  if (!zug.bewegt && Math.hypot(p.x - zug.start.x, p.y - zug.start.y) < 0.3) return;
+  zug.bewegt = true;
+  if (zug.art === "lampe") {
+    const l = daten.lampen[zug.i];
+    l.x = Math.round((p.x - zug.dx) * 4) / 4; l.y = Math.round((p.y - zug.dy) * 4) / 4;
+  } else if (zug.art === "raum") {
+    const dx = rund(p.x - zug.start.x), dy = rund(p.y - zug.start.y);
+    zug.r.x = zug.ox + dx; zug.r.y = zug.oy + dy;
+    for (const m of zug.mit) { m.l.x = m.x + dx; m.l.y = m.y + dy; }
+  } else if (zug.art === "wand") {
+    const MIN = 2;
+    for (const { q: r, seite } of zug.teile) {
+      if (seite === "o") { const unten = r.y + r.h; r.y = Math.min(rund(p.y), unten - MIN); r.h = unten - r.y; }
+      if (seite === "u") { r.h = Math.max(MIN, rund(p.y) - r.y); }
+      if (seite === "l") { const rechts = r.x + r.w; r.x = Math.min(rund(p.x), rechts - MIN); r.w = rechts - r.x; }
+      if (seite === "r") { r.w = Math.max(MIN, rund(p.x) - r.x); }
+    }
+  }
+  zeichnen();
+});
+svg.addEventListener("pointerup", () => {
+  if (!zug) return;
+  if (!zug.bewegt) {
+    if (zug.art === "lampe") auswahl = { art: "lampe", id: zug.i };
+    else if (zug.r) auswahl = { art: "raum", id: zug.r.id };
+    else if (zug.teile) auswahl = { art: "raum", id: zug.teile[0].q.id };
+    panelZeigen();
+  }
+  zug = null; zeichnen();
+});
+
+// ---------- Einstellungsfeld unten ----------
+function panelZeigen() {
+  const p = document.getElementById("panel");
+  if (!bearbeiten || !auswahl) { p.classList.remove("offen"); p.innerHTML = ""; return; }
+  const h = hass();
+  if (auswahl.art === "raum") {
+    const r = daten.raeume.find(r => r.id === auswahl.id);
+    if (!r) { auswahl = null; return panelZeigen(); }
+    p.innerHTML = `<h3>Raum</h3><input id="p-name" value="">
+      <div class="zeile"><button id="p-loeschen" class="rot">${icon("muell")} Raum löschen</button>
+      <button id="p-fertig" class="voll">${icon("haken")} Fertig</button></div>
+      <div class="hinweis">Wände: die Kanten des Raums ziehen · Raum verschieben: in die Mitte fassen und ziehen</div>`;
+    const inp = p.querySelector("#p-name"); inp.value = r.name;
+    inp.oninput = () => { r.name = inp.value; zeichnen(); };
+    p.querySelector("#p-loeschen").onclick = () => {
+      daten.raeume = daten.raeume.filter(x => x !== r); auswahl = null; panelZeigen(); zeichnen();
+    };
+  } else {
+    const l = daten.lampen[auswahl.id];
+    const original = (h.states[l.entity] && h.states[l.entity].attributes.friendly_name) || l.entity;
+    p.innerHTML = `<h3>Lampe · <span style="font-weight:400;color:var(--grau)">${original.replace(/</g, "&lt;")}</span></h3>
+      <input id="p-name" placeholder="Anzeigename (leer = automatisch)">
+      <div class="symbole">${SYMBOLE.map(([k, t]) =>
+        `<button data-symbol="${k}" class="${l.icon === k ? "gewaehlt" : ""}">${icon(k)}${t}</button>`).join("")}</div>
+      <div class="zeile"><button id="p-test">${icon("birne")} Ein/Aus testen</button>
+      <button id="p-versteckt" class="rot">${l.versteckt ? "Wieder anzeigen" : "Ausblenden"}</button>
+      <button id="p-fertig" class="voll">${icon("haken")} Fertig</button></div>`;
+    const inp = p.querySelector("#p-name"); inp.value = l.name || "";
+    inp.oninput = () => { l.name = inp.value.trim() || undefined; zeichnen(); };
+    p.querySelectorAll("[data-symbol]").forEach(b => b.onclick = () => { l.icon = b.dataset.symbol; panelZeigen(); zeichnen(); });
+    p.querySelector("#p-test").onclick = () => h.callService("light", "toggle", { entity_id: l.entity });
+    p.querySelector("#p-versteckt").onclick = () => { l.versteckt = !l.versteckt || undefined; panelZeigen(); zeichnen(); };
+  }
+  p.querySelector("#p-fertig").onclick = () => { auswahl = null; panelZeigen(); zeichnen(); };
+  p.classList.add("offen");
+}
+
+// ---------- Knöpfe ----------
+function knoepfe() {
+  document.getElementById("knoepfe-ansicht").style.display = bearbeiten ? "none" : "";
+  document.getElementById("knoepfe-bearbeiten").style.display = bearbeiten ? "" : "none";
+  document.getElementById("foto").innerHTML = `${icon("stift")} Foto-Vorlage ${fotoAn ? "aus" : "an"}`;
+}
+document.getElementById("alle-aus").innerHTML = `${icon("alleaus")} Alle aus`;
+document.getElementById("bearbeiten").innerHTML = `${icon("stift")} Bearbeiten`;
+document.getElementById("raum-neu").innerHTML = `${icon("plus")} Raum`;
+document.getElementById("abbrechen").innerHTML = `${icon("x")} Abbrechen`;
+document.getElementById("speichern").innerHTML = `${icon("haken")} Speichern`;
+
+document.getElementById("alle-aus").onclick = () => {
+  const h = hass(); if (!h) return;
+  const an = daten.lampen.filter(l => !l.versteckt && istAn(h, l.entity)).map(l => l.entity);
+  if (an.length) h.callService("light", "turn_off", { entity_id: an });
+};
+document.getElementById("bearbeiten").onclick = () => {
+  gesichert = JSON.stringify(daten); bearbeiten = true; ansichtsBox = berechneAnsicht(); knoepfe(); zeichnen();
+};
+document.getElementById("raum-neu").onclick = () => {
+  const v = ansichtsBox;
+  const r = { id: neueId(), name: "Neuer Raum", bereich: null, x: rund(v.x + v.w / 2 - 4), y: rund(v.y + v.h / 2 - 3), w: 8, h: 6 };
+  daten.raeume.push(r); auswahl = { art: "raum", id: r.id }; panelZeigen(); zeichnen();
+};
+document.getElementById("foto").onclick = () => {
+  fotoAn = !fotoAn;
+  if (fotoAn && !daten.foto) { const b = inhaltsBox(); daten.foto = { x: b.x, y: b.y, w: b.w }; }
+  knoepfe(); zeichnen();
+};
+document.getElementById("abbrechen").onclick = () => {
+  daten = JSON.parse(gesichert); verlassen();
+};
+document.getElementById("speichern").onclick = async () => {
+  const h = hass(); if (!h) return;
+  try {
+    await h.callService("script", "grundriss_speichern", { daten: JSON.stringify(daten) });
+    meldung("Gespeichert ✓");
+    verlassen();
+  } catch (e) {
+    meldung("Speichern fehlgeschlagen: " + (e && e.message || e));
+  }
+};
+function verlassen() {
+  bearbeiten = false; auswahl = null; ansichtsBox = null; fotoAn = false; panelZeigen(); knoepfe(); zeichnen();
+}
+
+// ---------- Start ----------
+async function laden() {
+  const h = hass();
+  if (!h) { setTimeout(laden, 500); return; }
+  try {
+    const r = await fetch(DATEN_URL + "?t=" + Date.now(), { cache: "no-store" });
+    if (r.ok) daten = await r.json();
+  } catch (e) { /* noch nichts gespeichert */ }
+  if (!daten || !Array.isArray(daten.raeume) || !Array.isArray(daten.lampen)) daten = startGrundriss(h);
+  neueLampenErgaenzen(h);
+  knoepfe(); zeichnen();
+  // Zustände regelmäßig nachziehen (nur neu zeichnen, wenn sich ein Licht geändert hat)
+  let letzter = "";
+  setInterval(() => {
+    const hh = hass(); if (!hh || zug) return;
+    const jetzt = lichter(hh).map(id => id + hh.states[id].state).join() + (hh.themes && hh.themes.darkMode);
+    if (jetzt !== letzter) { letzter = jetzt; zeichnen(); }
+  }, 700);
+}
+window.addEventListener("resize", () => zeichnen());
+laden();
+</script>
+</body>
+</html>
