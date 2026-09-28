@@ -43,7 +43,9 @@ automation:
         continue_on_error: true
         response_variable: bericht
       - variables:
-          text: "{{ bericht.stdout if bericht is defined and bericht is mapping else 'kein Ergebnis' }}"
+          text: >-
+            {{ bericht.stdout if bericht is defined and bericht is mapping else 'kein Ergebnis' }}
+            | Stellplätze: {{ state_attr('sensor.termine_vorschau', 'stellplatz_status') or '?' }}
       - action: persistent_notification.create
         data:
           title: Kamera-Selbsttest

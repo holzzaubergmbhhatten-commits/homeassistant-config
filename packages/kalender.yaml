@@ -13,6 +13,13 @@ homeassistant:
       friendly_name: Ferienwohnung (Portal)
       icon: mdi:home-heart
 
+# Stellplatz-Belegung aus der eigenen Verwaltung (urlaub-wie-zuhause.eu, JSON statt iCal)
+rest_command:
+  stellplaetze_abrufen:
+    url: "https://urlaub-wie-zuhause.eu/admin-api.php?action=list_public"
+    method: GET
+    timeout: 20
+
 template:
   - triggers:
       - trigger: homeassistant
@@ -47,6 +54,9 @@ template:
           duration:
             days: 120
         response_variable: buchungen
+      - action: rest_command.stellplaetze_abrufen
+        continue_on_error: true
+        response_variable: stellplatz_antwort
     sensor:
       - name: Termine Vorschau
         unique_id: termine_vorschau
@@ -66,7 +76,42 @@ template:
                 {% set ns.l = ns.l + [{'start': e.start, 'ende': e.end, 'titel': e.summary, 'kalender': kalender}] %}
               {% endfor %}
             {% endfor %}
-            {{ (ns.l | sort(attribute='start'))[:25] }}
+            {#- Stellplätze aus der Verwaltung: Feldnamen tolerant lesen, Datum auch als TT.MM.JJJJ #}
+            {%- set c = stellplatz_antwort.get('content') if stellplatz_antwort is defined and stellplatz_antwort is mapping else none %}
+            {%- set ks = namespace(l=c) %}
+            {%- if c is mapping %}
+              {%- set ks.l = c.values() | list %}
+              {%- for k in ['bookings', 'buchungen', 'data', 'items', 'belegung'] %}{% if c.get(k) is iterable and c.get(k) is not string %}{% set ks.l = c.get(k) %}{% endif %}{% endfor %}
+            {%- endif %}
+            {%- for e in (ks.l if ks.l is iterable and ks.l is not string else []) if e is mapping %}
+              {%- set f = namespace(a='', z='', platz='', titel='') %}
+              {%- for k in ['start', 'from', 'arrival', 'anreise', 'checkin', 'check_in', 'date_from', 'von', 'startDate', 'start_date'] %}{% if not f.a and e.get(k) %}{% set f.a = (e.get(k) | string)[:10] %}{% endif %}{% endfor %}
+              {%- for k in ['end', 'to', 'departure', 'abreise', 'checkout', 'check_out', 'date_to', 'bis', 'endDate', 'end_date'] %}{% if not f.z and e.get(k) %}{% set f.z = (e.get(k) | string)[:10] %}{% endif %}{% endfor %}
+              {%- for k in ['spot', 'platz', 'stellplatz', 'pitch', 'place', 'unit'] %}{% if not f.platz and e.get(k) %}{% set f.platz = e.get(k) | string %}{% endif %}{% endfor %}
+              {%- for k in ['name', 'guest', 'gast', 'title', 'label'] %}{% if not f.titel and e.get(k) %}{% set f.titel = e.get(k) | string %}{% endif %}{% endfor %}
+              {%- if f.a is match('^\d{2}\.\d{2}\.\d{4}$') %}{% set f.a = f.a[6:10] ~ '-' ~ f.a[3:5] ~ '-' ~ f.a[0:2] %}{% endif %}
+              {%- if f.z is match('^\d{2}\.\d{2}\.\d{4}$') %}{% set f.z = f.z[6:10] ~ '-' ~ f.z[3:5] ~ '-' ~ f.z[0:2] %}{% endif %}
+              {%- if f.a is match('^\d{4}-\d{2}-\d{2}$') %}
+                {%- set ns.l = ns.l + [{'start': f.a, 'ende': f.z if f.z is match('^\d{4}-\d{2}-\d{2}$') else f.a,
+                    'kalender': 'stellplatz.verwaltung',
+                    'titel': (f.titel or 'Belegt') ~ ((' · Platz ' ~ f.platz) if f.platz else '')}] %}
+              {%- endif %}
+            {%- endfor %}
+            {{ (ns.l | sort(attribute='start'))[:30] }}
+          # Für die Fehlersuche: erreichbar? wie viele Einträge? welche Feldnamen?
+          stellplatz_status: >-
+            {%- set c = stellplatz_antwort.get('content') if stellplatz_antwort is defined and stellplatz_antwort is mapping else none %}
+            {%- set ks = namespace(l=c) %}
+            {%- if c is mapping %}
+              {%- set ks.l = c.values() | list %}
+              {%- for k in ['bookings', 'buchungen', 'data', 'items', 'belegung'] %}{% if c.get(k) is iterable and c.get(k) is not string %}{% set ks.l = c.get(k) %}{% endif %}{% endfor %}
+            {%- endif %}
+            {%- if c is none %}nicht erreichbar
+            {%- elif ks.l is iterable and ks.l is not string %}ok · {{ ks.l | count }} Einträge
+              {%- set erstes = ks.l | first if ks.l | count > 0 else none %}
+              {%- if erstes is mapping %} · Felder: {{ erstes.keys() | list | join(', ') }}{% endif %}
+            {%- else %}unbekannt · {{ (c | string)[:120] }}
+            {%- endif %}
 
 automation:
   - id: buchungen_aktualisieren

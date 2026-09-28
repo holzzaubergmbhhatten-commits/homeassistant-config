@@ -132,7 +132,8 @@ views:
         {% set tage = ['Mo','Di','Mi','Do','Fr','Sa','So'] %}
         {% set fw_kal = ['calendar.holidu', 'calendar.privat_mit_buchung'] %}
         {% set ns = namespace(fw=[], fw_keys=[], sp=[], hat_sp=false) %}
-        {% set ns.hat_sp = states.calendar | selectattr('entity_id', 'search', 'stellpl') | list | count > 0 %}
+        {% set ns.hat_sp = states.calendar | selectattr('entity_id', 'search', 'stellpl') | list | count > 0
+           or (state_attr('sensor.termine_vorschau', 'stellplatz_status') or '') is match('ok') %}
         {# Anreisetage bei Holidu = Ferienwohnung (Abreisetag zählen Holidu und Portal unterschiedlich) #}
         {% set ns_h = namespace(keys=[]) %}
         {% for e in b if e.kalender == 'calendar.holidu' %}{% set ns_h.keys = ns_h.keys + [(e.start | string)[:10]] %}{% endfor %}
@@ -157,7 +158,7 @@ views:
         {%- endfor %}
         <ha-icon icon="{{ symbol }}"></ha-icon> **{{ bereich }}**
         {%- if bereich == 'Stellplätze' and not ns.hat_sp %}
-        - <font color="#8E8E93">Stellplatz-Kalender noch nicht verbunden</font>
+        - <font color="#8E8E93">Stellplatz-Daten nicht erreichbar ({{ state_attr('sensor.termine_vorschau', 'stellplatz_status') or '?' }})</font>
         {%- else %}
         {%- for e in ns2.aktuell %}
         {%- set ed = as_datetime(e.ende).date() %}
