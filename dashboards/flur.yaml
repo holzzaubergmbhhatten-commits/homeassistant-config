@@ -122,6 +122,29 @@ views:
         {%- endif %}
 
         '
+    - type: heading
+      heading: Aufgaben
+      heading_style: title
+      icon: mdi:checkbox-marked-circle-outline
+      tap_action:
+        action: navigate
+        navigation_path: /flur-display/aufgaben
+      badges:
+      - type: entity
+        entity: todo.aufgaben
+        show_state: true
+        show_icon: false
+        color: green
+        tap_action:
+          action: navigate
+          navigation_path: /flur-display/aufgaben
+    - type: todo-list
+      entity: todo.aufgaben
+      hide_completed: true
+      hide_create: true
+      display_order: none
+      grid_options:
+        columns: full
   - type: grid
     cards:
     - type: heading
@@ -253,6 +276,16 @@ views:
       tap_action:
         action: navigate
         navigation_path: /flur-display/einkauf
+      grid_options:
+        columns: 6
+        rows: 2
+    - type: button
+      name: Aufgaben
+      icon: mdi:checkbox-marked-circle-outline
+      show_state: false
+      tap_action:
+        action: navigate
+        navigation_path: /flur-display/aufgaben
       grid_options:
         columns: 6
         rows: 2
@@ -481,6 +514,136 @@ views:
           item: Klopapier
       grid_options:
         columns: 4
+        rows: 2
+- title: Aufgaben
+  path: aufgaben
+  icon: mdi:checkbox-marked-circle-outline
+  type: sections
+  max_columns: 2
+  badges:
+  - type: entity
+    entity: weather.touchmonitor_home
+    name: Start
+    icon: mdi:home
+    show_name: true
+    show_state: false
+    show_icon: true
+    color: blue
+    tap_action:
+      action: navigate
+      navigation_path: /flur-display/start
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Aufgaben
+      heading_style: title
+      icon: mdi:checkbox-marked-circle-outline
+      badges:
+      - type: entity
+        entity: todo.aufgaben
+        show_state: true
+        show_icon: false
+        color: green
+    - type: markdown
+      text_only: true
+      content: Kreis antippen = erledigt. Erledigtes steht unten unter **Erledigt** – nochmal antippen, und die Aufgabe ist wieder offen.
+    - type: todo-list
+      entity: todo.aufgaben
+      hide_create: false
+      hide_completed: false
+      display_order: none
+      grid_options:
+        columns: full
+  - type: grid
+    cards:
+    - type: heading
+      heading: Schnell hinzufügen
+      heading_style: title
+      icon: mdi:plus-circle-outline
+    - type: button
+      name: Müll rausbringen
+      icon: mdi:trash-can-outline
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: todo.add_item
+        target:
+          entity_id: todo.aufgaben
+        data:
+          item: Müll rausbringen
+      grid_options:
+        columns: 6
+        rows: 2
+    - type: button
+      name: Rasen mähen
+      icon: mdi:mower
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: todo.add_item
+        target:
+          entity_id: todo.aufgaben
+        data:
+          item: Rasen mähen
+      grid_options:
+        columns: 6
+        rows: 2
+    - type: button
+      name: Ferienwohnung putzen
+      icon: mdi:broom
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: todo.add_item
+        target:
+          entity_id: todo.aufgaben
+        data:
+          item: Ferienwohnung putzen
+      grid_options:
+        columns: 6
+        rows: 2
+    - type: button
+      name: Wäsche waschen
+      icon: mdi:washing-machine
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: todo.add_item
+        target:
+          entity_id: todo.aufgaben
+        data:
+          item: Wäsche waschen
+      grid_options:
+        columns: 6
+        rows: 2
+    - type: button
+      name: Spülmaschine ausräumen
+      icon: mdi:dishwasher
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: todo.add_item
+        target:
+          entity_id: todo.aufgaben
+        data:
+          item: Spülmaschine ausräumen
+      grid_options:
+        columns: 6
+        rows: 2
+    - type: button
+      name: Pflanzen gießen
+      icon: mdi:watering-can-outline
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: todo.add_item
+        target:
+          entity_id: todo.aufgaben
+        data:
+          item: Pflanzen gießen
+      grid_options:
+        columns: 6
         rows: 2
 - title: Kalender & Buchungen
   path: kalender-buchungen

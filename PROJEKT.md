@@ -56,7 +56,11 @@ Telegram-Bot kann Termine jetzt auch **ändern und löschen** (claude_tools/kale
 bearbeitet die Kalenderdatei direkt; vor jeder Änderung Sicherheitskopie nach
 /media/kalender_sicherung, die letzten 50 bleiben). Serientermine werden nicht angefasst.
 
+Aufgaben: Liste todo.aufgaben (Lokale To-do-Liste „Aufgaben“, einmalig in der Oberfläche
+angelegt), auf der Startseite + eigene Seite „Aufgaben“ mit Schnell-Knöpfen; Telegram: „Aufgaben“.
+
 Offen / morgen prüfen:
+- [ ] Liste „Aufgaben“ in HA anlegen (Lokale To-do-Liste) – macht Marco
 - [ ] Termin ändern/löschen per Telegram in den ersten Tagen beobachten
 - [ ] Nachtmodus: geht der Monitor morgens um 6:30 wieder an, weckt Antippen? Danach Startzeit auf 22:30 zurück
 - [ ] Design-Entscheidung (Hell/Dunkel/Automatisch), Tastatur-Variante wählen

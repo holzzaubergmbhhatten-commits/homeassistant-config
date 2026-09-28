@@ -18,7 +18,7 @@ automation:
   - condition: template
     value_template: >-
       {{ not (trigger.event.data.text | default('') | string)
-         is match('^\s*/?(liste|einkaufsliste|einkauf)\s*\??\s*$', ignorecase=True) }}
+         is match('^\s*/?(liste|einkaufsliste|einkauf|aufgaben|todo)\s*\??\s*$', ignorecase=True) }}
   - condition: template
     value_template: >-
       {{ not (trigger.event.data.text | default('') | string)
@@ -70,7 +70,7 @@ automation:
           GENAU wie in der Liste unten, und nur die neuen Angaben in titel/datum/uhrzeit/dauer_minuten
           (was gleich bleibt, leer lassen).
         - "loeschen": einen vorhandenen Termin absagen/löschen. Dann alt_titel und alt_datum genau wie in der Liste.
-        - "keine": alles andere (Fragen, Licht, Einkaufsliste, Sonstiges).
+        - "keine": alles andere (Fragen, Licht, Einkaufsliste, Aufgaben/To-dos ohne festen Termin, Sonstiges).
         Relative Angaben wie "morgen", "übermorgen" oder "nächsten Dienstag" rechnest du in ein Datum um.
         Enthält die Nachricht zusätzlich andere Wünsche (z. B. Einkaufsliste), schreibe diese in das Feld rest.
 
@@ -266,6 +266,35 @@ automation:
 
         {% endfor %}{% endif %}{% endset %}{{ t | replace(''&'',''&amp;'') | replace(''<'',''&lt;'') | replace(''>'',''&gt;'')
         }}'
+- id: telegram_aufgaben
+  alias: 'Telegram: Aufgaben schicken'
+  description: Auf "Aufgaben" antwortet der Bot mit allen offenen Aufgaben.
+  mode: queued
+  triggers:
+  - trigger: event
+    event_type: telegram_text
+  conditions:
+  - condition: template
+    value_template: >-
+      {{ (trigger.event.data.text | default('') | string)
+         is match('^\s*/?(aufgaben|todo)\s*\??\s*$', ignorecase=True) }}
+  actions:
+  - action: todo.get_items
+    continue_on_error: true
+    target:
+      entity_id: todo.aufgaben
+    data:
+      status: needs_action
+    response_variable: liste
+  - action: telegram_bot.send_message
+    data:
+      chat_id: '{{ trigger.event.data.chat_id }}'
+      parse_mode: html
+      message: |-
+        {% if liste is not defined or 'todo.aufgaben' not in liste %}⚠️ Die Liste „Aufgaben“ gibt es noch nicht.
+        {%- else %}{% set items = liste['todo.aufgaben']['items'] %}{% set t %}✅ Aufgaben
+        {%- if items | count == 0 %}: alles erledigt 🎉{% else %} ({{ items | count }}):{% for i in items %}
+        • {{ i.summary }}{% endfor %}{% endif %}{% endset %}{{ t | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}{% endif %}
 - id: telegram_monitor_zurueck
   alias: 'Telegram: Monitor zurück zum Dashboard'
   description: Auf "Monitor", "Start" oder "Zurück" springt der Touchmonitor sofort zum Dashboard.
