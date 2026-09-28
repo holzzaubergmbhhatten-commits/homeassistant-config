@@ -55,7 +55,7 @@ views:
     - type: markdown
       grid_options:
         columns: full
-      content: |
+      content: |-
         {% set t = state_attr('sensor.termine_vorschau', 'familie') or [] %}
         {% set heute = now().date() %}
         {% set tage = ['Mo','Di','Mi','Do','Fr','Sa','So'] %}
@@ -67,23 +67,22 @@ views:
         {%- set ed = as_datetime(e.ende).date() %}
         {%- if sd <= d and (ed > d or sd == d) %}{% set ns2.l = ns2.l + [e] %}{% endif %}
         {%- endfor %}
-        {%- if ns2.l %}
-        <font color="{{ farbe }}"><b>{{ name }}</b></font> <font color="#8E8E93">{{ tage[d.weekday()] }} {{ d.strftime('%d.%m.') }}</font>
-        {%- for e in ns2.l %}<br><font color="{{ farbe }}">●</font> <b>{{ e.titel }}</b>{{ ' <font color="#8E8E93">' ~ as_datetime(e.start).strftime('%H:%M') ~ ' Uhr</font>' if 'T' in (e.start | string) else '' }}{% endfor %}
+        ### <font color="{{ farbe }}">{{ name }}</font> <font color="#8E8E93">{{ tage[d.weekday()] }} {{ d.strftime('%d.%m.') }}</font>
+        {% if ns2.l %}
+        {%- for e in ns2.l %}{{ '<br>' if not loop.first }}<font color="{{ farbe }}">●</font> <b>{{ e.titel }}</b>{{ ' · ' ~ as_datetime(e.start).strftime('%H:%M') ~ ' Uhr' if 'T' in (e.start | string) else '' }}{% endfor %}
         {%- else %}
-        <font color="#8E8E93">{{ name }} · {{ tage[d.weekday()] }} {{ d.strftime('%d.%m.') }} · nichts geplant</font>
+        <font color="#8E8E93">Nichts geplant</font>
         {%- endif %}
 
         {% endfor %}
         {%- set ns = namespace(spaeter=[]) %}
         {%- for e in t %}{% if as_datetime(e.start).date() > heute + timedelta(days=2) %}{% set ns.spaeter = ns.spaeter + [e] %}{% endif %}{% endfor %}
         {%- if ns.spaeter %}
-        <font color="#8E8E93"><b>Demnächst</b></font>
-        {%- for e in ns.spaeter[:6] %}
-        {%- set sd = as_datetime(e.start) %}<br><font color="#8E8E93">●</font> <b>{{ e.titel }}</b> <font color="#8E8E93">{{ tage[sd.weekday()] }} {{ sd.strftime('%d.%m.') }}{{ ' · ' ~ sd.strftime('%H:%M') ~ ' Uhr' if 'T' in (e.start | string) else '' }}</font>
+        ### Demnächst
+        {% for e in ns.spaeter[:6] %}
+        {%- set sd = as_datetime(e.start) %}{{ '<br>' if not loop.first }}<font color="#8E8E93">●</font> <b>{{ e.titel }}</b> · {{ tage[sd.weekday()] }} {{ sd.strftime('%d.%m.') }}{{ ' · ' ~ sd.strftime('%H:%M') ~ ' Uhr' if 'T' in (e.start | string) else '' }}
         {%- endfor %}
         {%- endif %}
-      text_only: true
   - type: grid
     cards:
     - type: heading
