@@ -62,8 +62,8 @@ automation:
             data:
               app: a889bffc_go2rtc
 
-  # Selbsttest nach dem Start: Bericht (ohne Passwörter) per Telegram an den ersten Empfänger
-  # und als Benachrichtigung in Home Assistant
+  # Selbsttest nach dem Start: nur bei Problemen Bericht (ohne Passwörter) per Telegram an den
+  # ersten Empfänger und als Benachrichtigung in Home Assistant
   - id: kamera_selbsttest
     alias: "Kameras: Selbsttest melden"
     mode: single
@@ -79,6 +79,10 @@ automation:
           text: >-
             {{ bericht.stdout if bericht is defined and bericht is mapping else 'kein Ergebnis' }}
             | Stellplätze: {{ state_attr('sensor.termine_vorschau', 'stellplatz_status') or '?' }}
+      # Nur melden, wenn etwas nicht stimmt
+      - condition: template
+        value_template: >-
+          {{ text is search('FEHLER|\\(0 Bytes\\)|nicht erreichbar|fehlt|kaputt|KEINE|kein Ergebnis|Stellplätze: (nicht|unbekannt)') }}
       - action: persistent_notification.create
         data:
           title: Kamera-Selbsttest
