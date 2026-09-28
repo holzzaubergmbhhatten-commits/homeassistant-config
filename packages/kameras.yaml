@@ -6,6 +6,7 @@
 # bleiben lokal, nicht im Repository).
 shell_command:
   go2rtc_einrichten: python3 /config/claude_tools/go2rtc_einrichten.py
+  kamera_check: python3 /config/claude_tools/kamera_check.py
 
 automation:
   - id: go2rtc_kameras_einrichten
@@ -27,3 +28,35 @@ automation:
             continue_on_error: true
             data:
               app: a889bffc_go2rtc
+
+  # Selbsttest nach dem Start: Bericht (ohne Passwörter) per Telegram an den ersten Empfänger
+  # und als Benachrichtigung in Home Assistant
+  - id: kamera_selbsttest
+    alias: "Kameras: Selbsttest melden"
+    mode: single
+    triggers:
+      - trigger: homeassistant
+        event: start
+    actions:
+      - delay: 90
+      - action: shell_command.kamera_check
+        continue_on_error: true
+        response_variable: bericht
+      - variables:
+          text: "{{ bericht.stdout if bericht is defined and bericht is mapping else 'kein Ergebnis' }}"
+      - action: persistent_notification.create
+        data:
+          title: Kamera-Selbsttest
+          message: "{{ text }}"
+      - variables:
+          empfaenger: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
+      - if: "{{ empfaenger | length > 3 }}"
+        then:
+          - action: telegram_bot.send_message
+            continue_on_error: true
+            data:
+              chat_id: "{{ empfaenger }}"
+              parse_mode: html
+              message: >-
+                {% set t %}🔧 Kamera-Selbsttest (bitte an Claude weitergeben):
+                {{ text }}{% endset %}{{ t | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}
