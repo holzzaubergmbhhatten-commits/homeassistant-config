@@ -9,6 +9,9 @@ input_text:
   telegram_vorherige:
     name: Telegram vorherige Nachricht
     max: 255
+  telegram_letzte_antwort:
+    name: Telegram letzte Antwort
+    max: 255
 
 shell_command:
   kalender_bearbeiten: python3 /config/claude_tools/kalender.py {{ auftrag }}
@@ -49,6 +52,11 @@ automation:
         {% set v = states('input_text.telegram_vorherige') %}
         {% set frisch = states.input_text.telegram_vorherige is not none and
            (now() - states.input_text.telegram_vorherige.last_changed).total_seconds() < 900 %}
+        {{ v.split('~', 1)[1] if frisch and v.startswith(chat ~ '~') else '' }}
+      letzte_antwort: >-
+        {% set v = states('input_text.telegram_letzte_antwort') %}
+        {% set frisch = states.input_text.telegram_letzte_antwort is not none and
+           (now() - states.input_text.telegram_letzte_antwort.last_changed).total_seconds() < 900 %}
         {{ v.split('~', 1)[1] if frisch and v.startswith(chat ~ '~') else '' }}
   - action: input_text.set_value
     continue_on_error: true
@@ -109,14 +117,23 @@ automation:
           (was gleich bleibt, leer lassen).
         - "loeschen": einen vorhandenen Termin absagen/löschen. Dann alt_titel und alt_datum genau wie in der Liste.
         - "aufgabe": etwas soll auf die Aufgabenliste (To-do ohne feste Uhrzeit, z. B. "Aufgabe: Garage aufräumen",
-          "wir müssen noch den Rasen mähen", "erinnere uns an Müll rausbringen"). Die Aufgaben kurz und klar
-          in "eintraege" schreiben, mehrere mit ; getrennt.
+          "wir müssen noch den Rasen mähen", "erinnere uns an Müll rausbringen").
+          WICHTIG: Eine Nachricht ist in der Regel GENAU EINE Aufgabe, auch wenn sie mehrere Schritte beschreibt.
+          Fasse sie zu einem kurzen, klaren Titel zusammen (höchstens ca. 60 Zeichen, z. B. "FANi-App: PIN abwarten,
+          abheften, anmelden") und schreibe die Einzelheiten in "beschreibung". Mehrere Aufgaben (mit ; getrennt)
+          nur, wenn ausdrücklich mehrere verschiedene To-dos aufgezählt werden ("Müll raus, Fenster putzen").
+          Ist eine konkrete Frist genannt ("bis Freitag"), setze "faellig" (JJJJ-MM-TT), sonst leer lassen.
+          Korrekturen: Sagt die Nachricht, dass die letzte Eintragung falsch war (z. B. "das war als eine Aufgabe
+          gedacht", "die anderen entfernen", "nicht so, sondern …"), dann schreibe die falsch angelegten Aufgaben
+          GENAU wie in der Liste der offenen Aufgaben in "entfernen" (mit ; getrennt) und die richtige Aufgabe in
+          "eintraege". Soll nur etwas von der Aufgabenliste gelöscht werden, bleibt "eintraege" leer.
         - "aufgabe_erledigt": eine oder mehrere offene Aufgaben sind erledigt/abhaken. In "eintraege" die Namen
           GENAU so wie in der Liste der offenen Aufgaben unten, mehrere mit ; getrennt.
         - "einkauf": etwas soll auf die Einkaufsliste (Lebensmittel, Drogerie, "wir brauchen Milch").
           Die Artikel in "eintraege", mehrere mit ; getrennt.
         - "keine": alles andere (Fragen, Licht, Musik, Sonstiges).
-        Im Zweifel zwischen Termin und Aufgabe: mit Datum UND Uhrzeit = Termin, sonst Aufgabe.
+        Frage nie nach, wenn du die Absicht aus Nachricht, vorheriger Nachricht und letzter Antwort erkennen kannst –
+        handle einfach. Im Zweifel zwischen Termin und Aufgabe: mit Datum UND Uhrzeit = Termin, sonst Aufgabe.
         Relative Angaben wie "morgen", "übermorgen" oder "nächsten Dienstag" rechnest du in ein Datum um.
         Enthält die Nachricht zusätzlich andere Wünsche (z. B. Einkaufsliste), schreibe diese in das Feld rest.
 
@@ -128,6 +145,9 @@ automation:
         {% if vorher %}Vorherige Nachricht aus diesem Chat (nur als Zusammenhang, z. B. wenn jetzt
         "als Aufgabe eintragen" oder "ja" kommt – dann gilt der Inhalt der vorherigen Nachricht): {{ vorher }}
         {% endif %}
+        {%- if letzte_antwort %}
+        Letzte Antwort des Bots in diesem Chat: {{ letzte_antwort }}
+        {% endif %}
         Nachricht: {{ text }}
       structure:
         aktion:
@@ -137,6 +157,18 @@ automation:
             text: null
         eintraege:
           description: Bei aufgabe/aufgabe_erledigt/einkauf die Einträge, mehrere mit ; getrennt
+          selector:
+            text: null
+        entfernen:
+          description: Bei aufgabe (Korrektur/Löschen) die zu entfernenden offenen Aufgaben, genau wie in der Liste, mit ; getrennt
+          selector:
+            text: null
+        beschreibung:
+          description: Bei aufgabe die Einzelheiten zur Aufgabe (optional)
+          selector:
+            text: null
+        faellig:
+          description: Bei aufgabe die Frist im Format JJJJ-MM-TT, nur wenn konkret genannt
           selector:
             text: null
         alt_titel:
@@ -175,7 +207,8 @@ automation:
         {% set a = (d.aktion | default('keine', true) | string | lower | trim) -%}
         {%- if a == 'neu' and (d.datum | default('') | string) is match('^\d{4}-\d{2}-\d{2}$') %}neu
         {%- elif a in ['aendern', 'ändern', 'loeschen', 'löschen'] and (d.alt_datum | default('') | string) is match('^\d{4}-\d{2}-\d{2}$') %}{{ a | replace('ä','ae') | replace('ö','oe') }}
-        {%- elif a in ['aufgabe', 'aufgabe_erledigt', 'einkauf'] and (d.eintraege | default('', true) | string | trim) != '' %}{{ a }}
+        {%- elif a in ['aufgabe', 'aufgabe_erledigt', 'einkauf'] and ((d.eintraege | default('', true) | string | trim) != ''
+            or (a == 'aufgabe' and (d.entfernen | default('', true) | string | trim) != '')) %}{{ a }}
         {%- else %}keine{% endif %}
   - choose:
     - conditions: '{{ aktion == ''neu'' }}'
@@ -258,7 +291,14 @@ automation:
       - variables:
           liste: "{{ 'todo.einkaufsliste' if aktion == 'einkauf' else aufgaben_entity }}"
           eintraege: >-
-            {{ (d.eintraege | string).split(';') | map('trim') | reject('eq', '') | list }}
+            {{ (d.eintraege | default('', true) | string).split(';') | map('trim') | reject('eq', '') | list }}
+          entfernen: >-
+            {{ (d.entfernen | default('', true) | string).split(';') | map('trim') | reject('eq', '') | list
+               if aktion == 'aufgabe' else [] }}
+          beschreibung: "{{ d.beschreibung | default('', true) | string | trim }}"
+          faellig: >-
+            {{ d.faellig | default('', true) | string | trim
+               if (d.faellig | default('', true) | string) is match('^\d{4}-\d{2}-\d{2}$') else '' }}
       - if: "{{ liste == '' }}"
         then:
         - action: telegram_bot.send_message
@@ -269,6 +309,14 @@ automation:
               ⚠️ Es gibt noch keine Liste „Aufgaben“. Bitte in Home Assistant unter Einstellungen →
               Geräte &amp; Dienste → „Lokale To-do-Liste“ mit dem Namen Aufgaben anlegen.
         - stop: Keine Aufgabenliste
+      - if: "{{ entfernen | count > 0 }}"
+        then:
+        - action: todo.remove_item
+          continue_on_error: true
+          target:
+            entity_id: '{{ liste }}'
+          data:
+            item: '{{ entfernen }}'
       - repeat:
           for_each: '{{ eintraege }}'
           sequence:
@@ -286,16 +334,30 @@ automation:
               continue_on_error: true
               target:
                 entity_id: '{{ liste }}'
-              data:
-                item: '{{ repeat.item }}'
+              data: >-
+                {% set x = {'item': repeat.item} %}
+                {% if aktion == 'aufgabe' and eintraege | count == 1 and beschreibung %}{% set x = dict(x, description=beschreibung) %}{% endif %}
+                {% if aktion == 'aufgabe' and eintraege | count == 1 and faellig %}{% set x = dict(x, due_date=faellig) %}{% endif %}
+                {{ x }}
+      - variables:
+          antwort_text: >-
+            {%- if entfernen %}🗑️ Entfernt: {{ entfernen | join(', ') }}{{ '\n' if eintraege else '' }}{% endif %}
+            {%- if eintraege %}{{ {'aufgabe': '✅ Neue Aufgabe', 'aufgabe_erledigt': '☑️ Erledigt',
+               'einkauf': '🛒 Auf die Einkaufsliste'}[aktion] }}: {{ eintraege | join(', ') }}{% endif %}
+            {%- if eintraege and beschreibung and aktion == 'aufgabe' %}{{ '\n' }}📝 {{ beschreibung }}{% endif %}
+            {%- if eintraege and faellig and aktion == 'aufgabe' %}{{ '\n' }}📅 fällig {{ strptime(faellig, '%Y-%m-%d').strftime('%d.%m.%Y') }}{% endif %}
+      - action: input_text.set_value
+        continue_on_error: true
+        target:
+          entity_id: input_text.telegram_letzte_antwort
+        data:
+          value: "{{ (chat ~ '~' ~ antwort_text | replace('\n', ' '))[:250] }}"
       - action: telegram_bot.send_message
         data:
           chat_id: '{{ chat }}'
           parse_mode: html
           message: >-
-            {% set t %}{{ {'aufgabe': '✅ Neue Aufgabe', 'aufgabe_erledigt': '☑️ Erledigt',
-            'einkauf': '🛒 Auf die Einkaufsliste'}[aktion] }}: {{ eintraege | join(', ') }}{% endset %}{{ t
-            | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}
+            {{ antwort_text | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}
     default:
     - if: '{{ erkannt is not defined or erkannt.data is not defined }}'
       then:
