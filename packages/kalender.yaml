@@ -94,10 +94,11 @@ template:
               {%- if f.a is match('^\d{4}-\d{2}-\d{2}$') %}
                 {%- set ns.l = ns.l + [{'start': f.a, 'ende': f.z if f.z is match('^\d{4}-\d{2}-\d{2}$') else f.a,
                     'kalender': 'stellplatz.verwaltung',
-                    'titel': (f.titel or 'Belegt') ~ ((' · Platz ' ~ f.platz) if f.platz else '')}] %}
+                    'titel': (f.titel or 'Belegt') ~ ((' · Platz ' ~ f.platz) if f.platz else '')
+                      ~ ((' · ' ~ e.get('anzahl_plaetze') ~ (' Platz' if (e.get('anzahl_plaetze') | string) == '1' else ' Plätze')) if e.get('anzahl_plaetze') else '')}] %}
               {%- endif %}
             {%- endfor %}
-            {{ (ns.l | sort(attribute='start'))[:30] }}
+            {{ (ns.l | selectattr('ende', '>=', now().strftime('%Y-%m-%d')) | sort(attribute='start') | list)[:40] }}
           # Für die Fehlersuche: erreichbar? wie viele Einträge? welche Feldnamen?
           stellplatz_status: >-
             {%- set c = stellplatz_antwort.get('content') if stellplatz_antwort is defined and stellplatz_antwort is mapping else none %}
@@ -109,7 +110,7 @@ template:
             {%- if c is none %}nicht erreichbar
             {%- elif ks.l is iterable and ks.l is not string %}ok · {{ ks.l | count }} Einträge
               {%- set erstes = ks.l | first if ks.l | count > 0 else none %}
-              {%- if erstes is mapping %} · Felder: {{ erstes.keys() | list | join(', ') }}{% endif %}
+              {%- if erstes is mapping %} · Felder: {{ erstes.keys() | list | join(', ') }} · Beispiel: {{ erstes.get('start') }} – {{ erstes.get('end') }}{% endif %}
             {%- else %}unbekannt · {{ (c | string)[:120] }}
             {%- endif %}
 

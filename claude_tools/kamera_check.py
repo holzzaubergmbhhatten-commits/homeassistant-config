@@ -2,6 +2,7 @@
 """Kurzer Selbsttest der Live-Kameras (go2rtc). Gibt einen Bericht ohne Passwörter aus."""
 import json
 import os
+import re
 import urllib.request
 
 API = "http://127.0.0.1:1984"
@@ -43,5 +44,26 @@ for name in [n for n in streams if not n.endswith("_hd")][:1]:
             zeilen.append(f"{name} {art}: OK ({len(daten)} Bytes)")
         except Exception as e:  # noqa: BLE001
             zeilen.append(f"{name} {art}: FEHLER {e}")
+
+def ohne_passwort(text):
+    return re.sub(r"//[^/@\s]+@", "//***@", text)
+
+
+# Welche Quellen hat go2rtc für die erste Kamera, und was steht im go2rtc-Protokoll?
+for name in [n for n in streams if not n.endswith("_hd")][:1]:
+    try:
+        with urllib.request.urlopen(f"{API}/api/streams?src={name}", timeout=5) as r:
+            info = json.load(r)
+        quellen = [p.get("url") or p.get("format_name") or str(p)[:60] for p in info.get("producers") or []]
+        zeilen.append("Quellen: " + ohne_passwort(" | ".join(str(q) for q in quellen)))
+    except Exception as e:  # noqa: BLE001
+        zeilen.append(f"Quellen: {e}")
+try:
+    with urllib.request.urlopen(API + "/api/log", timeout=5) as r:
+        log = r.read().decode("utf-8", "replace").splitlines()
+    wichtig = [l for l in log if re.search(r"error|warn|ffmpeg|exec", l, re.I)][-6:]
+    zeilen.append("Log: " + ohne_passwort(" / ".join(l[:160] for l in wichtig) or "keine Fehler"))
+except Exception as e:  # noqa: BLE001
+    zeilen.append(f"Log: {e}")
 
 print("\n".join(zeilen)[:3500])
