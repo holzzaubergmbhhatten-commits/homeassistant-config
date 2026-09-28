@@ -7,7 +7,35 @@ rest_command:
     url: "http://localhost:8080/display_on"
     method: POST
     content_type: "application/json"
-    payload: '{"timeout": {{ timeout | default(0) | int }}}'
+    # Achtung: die Kiosk-App lehnt "timeout": 0 ab (Fehler 400) → für "nie aus" script.monitor_an nehmen
+    payload: >-
+      {% if timeout | default(0) | int > 0 %}{"timeout": {{ timeout | int }}}{% else %}{}{% endif %}
+  kiosk_xset:
+    url: "http://localhost:8080/xset"
+    method: POST
+    content_type: "application/json"
+    payload: '{{ {"args": args} | to_json }}'
+
+script:
+  monitor_an:
+    alias: Monitor einschalten und Abschaltzeit setzen
+    description: timeout 0 = nie ausschalten, sonst Sekunden ohne Berührung bis zum Ausschalten.
+    mode: queued
+    fields:
+      timeout:
+        description: Sekunden bis zum Ausschalten, 0 = nie
+        example: 60
+    sequence:
+      - action: script.monitor_an
+        continue_on_error: true
+        data:
+          timeout: "{{ timeout | default(0) | int }}"
+      - if: "{{ timeout | default(0) | int == 0 }}"
+        then:
+          - action: rest_command.kiosk_xset
+            continue_on_error: true
+            data:
+              args: "s off -dpms"
 
 template:
   - binary_sensor:
@@ -40,7 +68,7 @@ automation:
           {{ trigger.id != 'tagsueber' or is_state('binary_sensor.monitor_nachtmodus', 'off') }}
     actions:
       - delay: 5
-      - action: rest_command.kiosk_display_on
+      - action: script.monitor_an
         continue_on_error: true
         data:
           timeout: "{{ 60 if is_state('binary_sensor.monitor_nachtmodus', 'on') else 0 }}"

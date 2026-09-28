@@ -25,7 +25,7 @@ automation:
             {{ 'camera.draussen_hot_tor_kamera' if states('camera.draussen_hot_tor_kamera') not in ['unknown', 'unavailable']
                else (states.camera | map(attribute='entity_id') | select('search', 'hoftor') | first | default('', true)) }}
       # Bildschirm wecken (nachts bleibt die 1-Minuten-Abschaltung, aber erst nach 3 Minuten)
-      - action: rest_command.kiosk_display_on
+      - action: script.monitor_an
         continue_on_error: true
         data:
           timeout: "{{ 180 if is_state('binary_sensor.monitor_nachtmodus', 'on') else 0 }}"
@@ -53,7 +53,7 @@ automation:
               message: "🔔 Es klingelt am Hoftor ({{ now().strftime('%H:%M') }} Uhr)"
       - delay: "00:03:00"
       - action: rest_command.kiosk_dashboard
-      - action: rest_command.kiosk_display_on
+      - action: script.monitor_an
         continue_on_error: true
         data:
           timeout: "{{ 60 if is_state('binary_sensor.monitor_nachtmodus', 'on') else 0 }}"
