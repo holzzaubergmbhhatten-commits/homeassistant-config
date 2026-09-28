@@ -17,6 +17,7 @@ import json
 import os
 import re
 import secrets
+import sys
 import urllib.parse
 
 ZIEL = "/config/go2rtc.yaml"
@@ -61,10 +62,30 @@ def main():
     if os.path.exists(ZIEL):
         try:
             with open(ZIEL, encoding="utf-8") as f:
-                alt = json.load(f)
+                inhalt = f.read()
+            try:
+                import yaml  # go2rtc schreibt die Datei als YAML, wenn man dort etwas hinzufügt
+                alt = yaml.safe_load(inhalt) or {}
+            except ImportError:
+                alt = json.loads(inhalt)
         except ValueError:
             alt = {}
     passwort = (alt.get("api") or {}).get("password") or secrets.token_urlsafe(12)
+    if len(sys.argv) > 1 and sys.argv[1] == "--passwort":
+        print(passwort)
+        return
+
+    # Ring-Klingel: in der go2rtc-Oberfläche per Ring-Login hinzugefügte Streams behalten und
+    # unter dem festen Namen "hoftor_klingel" (mit MJPEG für den Monitor) bereitstellen
+    for name, quelle in (alt.get("streams") or {}).items():
+        quellen = quelle if isinstance(quelle, list) else [quelle]
+        if any("ring:" in str(q) for q in quellen) and name not in streams:
+            streams[name] = quelle
+    ring = next((str(q) for quelle in streams.values()
+                 for q in (quelle if isinstance(quelle, list) else [quelle])
+                 if str(q).startswith("ring:") and "snapshot" not in str(q)), None)
+    if ring:
+        streams["hoftor_klingel"] = [ring, "ffmpeg:hoftor_klingel#video=mjpeg"]
 
     neu = {
         "api": {"listen": ":1984", "username": "zuhause", "password": passwort},

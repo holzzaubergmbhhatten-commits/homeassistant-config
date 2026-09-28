@@ -33,6 +33,9 @@ automation:
     value_template: >-
       {{ not (trigger.event.data.text | default('') | string)
          is match('^\s*/?(monitor|home|start|zurück|zurueck|dashboard)\s*!?\s*$', ignorecase=True) }}
+  - condition: template
+    value_template: >-
+      {{ not (trigger.event.data.text | default('') | string) is match('^\s*/?go2rtc\s*$', ignorecase=True) }}
   actions:
   - variables:
       text: '{{ trigger.event.data.text }}'

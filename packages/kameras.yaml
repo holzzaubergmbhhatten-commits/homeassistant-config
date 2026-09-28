@@ -6,6 +6,7 @@
 # bleiben lokal, nicht im Repository).
 shell_command:
   go2rtc_einrichten: python3 /config/claude_tools/go2rtc_einrichten.py
+  go2rtc_passwort: python3 /config/claude_tools/go2rtc_einrichten.py --passwort
   kamera_check: python3 /config/claude_tools/kamera_check.py
   kamera_drehen_befehl: python3 /config/claude_tools/kamera_drehen.py {{ kamera }} {{ richtung }}
 
@@ -46,6 +47,9 @@ automation:
         event: start
       - trigger: time
         at: "04:10:00"
+      # neu in der go2rtc-Oberfläche hinzugefügte Ring-Klingel schnell übernehmen
+      - trigger: time_pattern
+        minutes: "/10"
     actions:
       - delay: 20
       - action: shell_command.go2rtc_einrichten
@@ -91,3 +95,24 @@ automation:
               message: >-
                 {% set t %}🔧 Kamera-Selbsttest (bitte an Claude weitergeben):
                 {{ text }}{% endset %}{{ t | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}
+
+  # Telegram "go2rtc" → Zugangsdaten für die go2rtc-Oberfläche (nur für erlaubte Chats des Bots)
+  - id: telegram_go2rtc_passwort
+    alias: "Telegram: go2rtc-Zugang schicken"
+    mode: single
+    triggers:
+      - trigger: event
+        event_type: telegram_text
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ (trigger.event.data.text | default('') | string) is match('^\s*/?go2rtc\s*$', ignorecase=True) }}
+    actions:
+      - action: shell_command.go2rtc_passwort
+        response_variable: pw
+      - action: telegram_bot.send_message
+        data:
+          chat_id: "{{ trigger.event.data.chat_id }}"
+          parse_mode: html
+          message: >-
+            🔑 go2rtc-Oberfläche: Benutzer <code>zuhause</code> · Passwort <code>{{ pw.stdout | trim }}</code>
