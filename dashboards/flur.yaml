@@ -59,7 +59,7 @@ views:
         {% set t = state_attr('sensor.termine_vorschau', 'familie') or [] %}
         {% set heute = now().date() %}
         {% set tage = ['Mo','Di','Mi','Do','Fr','Sa','So'] %}
-        {% for name, versatz, art in [('Heute', 0, 'warning'), ('Morgen', 1, 'info'), ('Übermorgen', 2, 'info')] %}
+        {% for name, versatz, farbe in [('Heute', 0, '#FF3B30'), ('Morgen', 1, '#007AFF'), ('Übermorgen', 2, '#007AFF')] %}
         {%- set d = heute + timedelta(days=versatz) %}
         {%- set ns2 = namespace(l=[]) %}
         {%- for e in t %}
@@ -68,19 +68,19 @@ views:
         {%- if sd <= d and (ed > d or sd == d) %}{% set ns2.l = ns2.l + [e] %}{% endif %}
         {%- endfor %}
         {%- if ns2.l %}
-        <ha-alert alert-type="{{ art }}" title="{{ name }} · {{ tage[d.weekday()] }} {{ d.strftime('%d.%m.') }}">{% for e in ns2.l %}{{ '<br>' if not loop.first }}<b>{{ as_datetime(e.start).strftime('%H:%M') ~ ' Uhr · ' if 'T' in (e.start | string) else '' }}{{ e.titel }}</b>{% endfor %}</ha-alert>
+        <font color="{{ farbe }}"><b>{{ name }}</b></font> <font color="#8E8E93">{{ tage[d.weekday()] }} {{ d.strftime('%d.%m.') }}</font>
+        {%- for e in ns2.l %}<br><font color="{{ farbe }}">●</font> <b>{{ e.titel }}</b>{{ ' <font color="#8E8E93">' ~ as_datetime(e.start).strftime('%H:%M') ~ ' Uhr</font>' if 'T' in (e.start | string) else '' }}{% endfor %}
         {%- else %}
-        <font color="#8E8E93">{{ name }} · {{ tage[d.weekday()] }} {{ d.strftime('%d.%m.') }} – nichts geplant</font>
+        <font color="#8E8E93">{{ name }} · {{ tage[d.weekday()] }} {{ d.strftime('%d.%m.') }} · nichts geplant</font>
         {%- endif %}
-
+        
         {% endfor %}
         {%- set ns = namespace(spaeter=[]) %}
         {%- for e in t %}{% if as_datetime(e.start).date() > heute + timedelta(days=2) %}{% set ns.spaeter = ns.spaeter + [e] %}{% endif %}{% endfor %}
         {%- if ns.spaeter %}
-        **Demnächst**
+        <font color="#8E8E93"><b>Demnächst</b></font>
         {%- for e in ns.spaeter[:6] %}
-        {%- set sd = as_datetime(e.start) %}
-        - **{{ tage[sd.weekday()] }} {{ sd.strftime('%d.%m.') }}**{{ ' · ' ~ sd.strftime('%H:%M') ~ ' Uhr' if 'T' in (e.start | string) else '' }} · {{ e.titel }}
+        {%- set sd = as_datetime(e.start) %}<br><font color="#8E8E93">●</font> <b>{{ e.titel }}</b> <font color="#8E8E93">{{ tage[sd.weekday()] }} {{ sd.strftime('%d.%m.') }}{{ ' · ' ~ sd.strftime('%H:%M') ~ ' Uhr' if 'T' in (e.start | string) else '' }}</font>
         {%- endfor %}
         {%- endif %}
       text_only: true
@@ -109,9 +109,9 @@ views:
       content: |
         {% set n = states('todo.aufgaben') | int(0) %}
         {%- if n > 0 %}
-        <ha-alert alert-type="warning" title="{{ n }} offene Aufgabe{{ 'n' if n != 1 else '' }}">Kreis antippen = erledigt. Neue Aufgaben per Telegram oder auf der Seite „Aufgaben“.</ha-alert>
+        ## <font color="#FF9500">{{ n }}</font> <font color="#8E8E93">offen</font>
         {%- else %}
-        <ha-alert alert-type="success" title="Alle Aufgaben erledigt">Neue Aufgaben per Telegram oder auf der Seite „Aufgaben“.</ha-alert>
+        ## <font color="#34C759"><ha-icon icon="mdi:check-circle"></ha-icon></font> <font color="#8E8E93">Alles erledigt</font>
         {%- endif %}
     - type: todo-list
       entity: todo.aufgaben
