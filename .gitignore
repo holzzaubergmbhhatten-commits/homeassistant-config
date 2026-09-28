@@ -11,3 +11,4 @@
 !/themes/
 !/dashboards/
 !/claude_tools/
+__pycache__/

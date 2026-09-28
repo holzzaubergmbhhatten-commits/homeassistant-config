@@ -37,11 +37,9 @@ views:
     card:
       type: markdown
       text_only: true
-      content: '# Zuhause
-
-        {{ now().strftime(''%H:%M'') }} · {{ [''Montag'',''Dienstag'',''Mittwoch'',''Donnerstag'',''Freitag'',''Samstag'',''Sonntag''][now().weekday()]
-        }}, {{ now().day }}. {{ [''Januar'',''Februar'',''März'',''April'',''Mai'',''Juni'',''Juli'',''August'',''September'',''Oktober'',''November'',''Dezember''][now().month-1]
-        }}'
+      content: |-
+        # Zuhause
+        {{ now().strftime('%H:%M') }} · {{ ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'][now().weekday()] }}, {{ now().day }}. {{ ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'][now().month-1] }}
   sections:
   - type: grid
     cards:
@@ -57,71 +55,37 @@ views:
     - type: markdown
       grid_options:
         columns: full
-      content: '{% set t = state_attr(''sensor.termine_vorschau'', ''familie'') or [] %}
-
+      content: |
+        {% set t = state_attr('sensor.termine_vorschau', 'familie') or [] %}
         {% set heute = now().date() %}
-
-        {% set tage = [''Mo'',''Di'',''Mi'',''Do'',''Fr'',''Sa'',''So''] %}
-
-        {% set ns = namespace(spaeter=[]) %}
-
-        {% for name, versatz in [(''Heute'', 0), (''Morgen'', 1), (''Übermorgen'', 2)] %}
-
+        {% set tage = ['Mo','Di','Mi','Do','Fr','Sa','So'] %}
+        {% for name, versatz, art in [('Heute', 0, 'warning'), ('Morgen', 1, 'info'), ('Übermorgen', 2, 'info')] %}
         {%- set d = heute + timedelta(days=versatz) %}
-
-        **{{ name }}** · {{ tage[d.weekday()] }} {{ d.strftime(''%d.%m.'') }}
-
-        {%- set ns2 = namespace(n=0) %}
-
+        {%- set ns2 = namespace(l=[]) %}
         {%- for e in t %}
-
         {%- set sd = as_datetime(e.start).date() %}
-
         {%- set ed = as_datetime(e.ende).date() %}
-
-        {%- if sd <= d and (ed > d or sd == d) %}
-
-        {%- set ns2.n = ns2.n + 1 %}
-
-        - {{ as_datetime(e.start).strftime(''%H:%M'') ~ '' · '' if ''T'' in (e.start | string) else '''' }}{{ e.titel }}
-
-        {%- endif %}
-
+        {%- if sd <= d and (ed > d or sd == d) %}{% set ns2.l = ns2.l + [e] %}{% endif %}
         {%- endfor %}
-
-        {%- if ns2.n == 0 %}
-
-        - <font color="#8E8E93">nichts geplant</font>
-
+        {%- if ns2.l %}
+        <ha-alert alert-type="{{ art }}" title="{{ name }} · {{ tage[d.weekday()] }} {{ d.strftime('%d.%m.') }}">{% for e in ns2.l %}{{ '<br>' if not loop.first }}<b>{{ as_datetime(e.start).strftime('%H:%M') ~ ' Uhr · ' if 'T' in (e.start | string) else '' }}{{ e.titel }}</b>{% endfor %}</ha-alert>
+        {%- else %}
+        <font color="#8E8E93">{{ name }} · {{ tage[d.weekday()] }} {{ d.strftime('%d.%m.') }} – nichts geplant</font>
         {%- endif %}
-
 
         {% endfor %}
-
-        {%- for e in t %}
-
-        {%- set sd = as_datetime(e.start).date() %}
-
-        {%- if sd > heute + timedelta(days=2) %}{% set ns.spaeter = ns.spaeter + [e] %}{% endif %}
-
-        {%- endfor %}
-
-        {%- if ns.spaeter | count > 0 %}
-
+        {%- set ns = namespace(spaeter=[]) %}
+        {%- for e in t %}{% if as_datetime(e.start).date() > heute + timedelta(days=2) %}{% set ns.spaeter = ns.spaeter + [e] %}{% endif %}{% endfor %}
+        {%- if ns.spaeter %}
         **Demnächst**
-
-        {%- for e in ns.spaeter[:5] %}
-
-        {%- set d = as_datetime(e.start) %}
-
-        - {{ tage[d.weekday()] }} {{ d.strftime(''%d.%m.'') }}{{ '' · '' ~ d.strftime(''%H:%M'') if ''T'' in (e.start | string)
-        else '''' }} · {{ e.titel }}
-
+        {%- for e in ns.spaeter[:6] %}
+        {%- set sd = as_datetime(e.start) %}
+        - **{{ tage[sd.weekday()] }} {{ sd.strftime('%d.%m.') }}**{{ ' · ' ~ sd.strftime('%H:%M') ~ ' Uhr' if 'T' in (e.start | string) else '' }} · {{ e.titel }}
         {%- endfor %}
-
         {%- endif %}
-
-        '
+      text_only: true
+  - type: grid
+    cards:
     - type: heading
       heading: Aufgaben
       heading_style: title
@@ -134,10 +98,21 @@ views:
         entity: todo.aufgaben
         show_state: true
         show_icon: false
-        color: green
+        color: orange
         tap_action:
           action: navigate
           navigation_path: /flur-display/aufgaben
+    - type: markdown
+      text_only: true
+      grid_options:
+        columns: full
+      content: |
+        {% set n = states('todo.aufgaben') | int(0) %}
+        {%- if n > 0 %}
+        <ha-alert alert-type="warning" title="{{ n }} offene Aufgabe{{ 'n' if n != 1 else '' }}">Kreis antippen = erledigt. Neue Aufgaben per Telegram oder auf der Seite „Aufgaben“.</ha-alert>
+        {%- else %}
+        <ha-alert alert-type="success" title="Alle Aufgaben erledigt">Neue Aufgaben per Telegram oder auf der Seite „Aufgaben“.</ha-alert>
+        {%- endif %}
     - type: todo-list
       entity: todo.aufgaben
       hide_completed: true
@@ -145,38 +120,63 @@ views:
       display_order: none
       grid_options:
         columns: full
-  - type: grid
-    cards:
     - type: heading
       heading: Ferienwohnung & Stellplätze
       heading_style: title
     - type: markdown
       grid_options:
         columns: full
-      content: "{% set b = state_attr('sensor.termine_vorschau', 'buchungen') or [] %}\n{% set heute = now().date() %}\n{%\
-        \ set tage = ['Mo','Di','Mi','Do','Fr','Sa','So'] %}\n{% set fw_kal = ['calendar.holidu', 'calendar.privat_mit_buchung']\
-        \ %}\n{% set ns = namespace(fw=[], fw_keys=[], sp=[], hat_sp=false) %}\n{% set ns.hat_sp = states.calendar | selectattr('entity_id',\
-        \ 'search', 'stellpl') | list | count > 0 %}\n{# Anreisetage bei Holidu = Ferienwohnung (Abreisetag zählen Holidu\
-        \ und Portal unterschiedlich) #}\n{% set ns_h = namespace(keys=[]) %}\n{% for e in b if e.kalender == 'calendar.holidu'\
-        \ %}{% set ns_h.keys = ns_h.keys + [(e.start | string)[:10]] %}{% endfor %}\n{# Portal: bei Holidu vorhanden → Ferienwohnung\
-        \ (mit Gästenamen); sonst → Stellplatz,\n   solange es keinen eigenen Stellplatz-Kalender gibt #}\n{% for e in b if\
-        \ e.kalender == 'calendar.privat_mit_buchung' %}\n  {% set key = (e.start | string)[:10] %}\n  {% if key in ns_h.keys\
-        \ or ns.hat_sp %}{% if key not in ns.fw_keys %}{% set ns.fw = ns.fw + [e] %}{% set ns.fw_keys = ns.fw_keys + [key]\
-        \ %}{% endif %}\n  {% else %}{% set ns.sp = ns.sp + [e] %}{% endif %}\n{% endfor %}\n{% for e in b if e.kalender ==\
-        \ 'calendar.holidu' %}\n  {% set key = (e.start | string)[:10] %}\n  {% if key not in ns.fw_keys %}{% set ns.fw =\
-        \ ns.fw + [e] %}{% set ns.fw_keys = ns.fw_keys + [key] %}{% endif %}\n{% endfor %}\n{% for e in b if 'stellpl' in\
-        \ e.kalender %}{% set ns.sp = ns.sp + [e] %}{% endfor %}\n{% for bereich, symbol, liste in [('Ferienwohnung', 'mdi:home-heart',\
-        \ ns.fw | sort(attribute='start')), ('Stellplätze', 'mdi:rv-truck', ns.sp | sort(attribute='start'))] %}\n{%- set\
-        \ ns2 = namespace(aktuell=[], naechste=[]) %}\n{%- for e in liste %}\n{%- set sd = as_datetime(e.start).date() %}\n\
-        {%- set ed = as_datetime(e.ende).date() %}\n{%- if sd <= heute and ed > heute %}{% set ns2.aktuell = ns2.aktuell +\
-        \ [e] %}\n{%- elif sd > heute %}{% set ns2.naechste = ns2.naechste + [e] %}{% endif %}\n{%- endfor %}\n<ha-icon icon=\"\
-        {{ symbol }}\"></ha-icon> **{{ bereich }}**\n{%- if true %}\n{%- for e in ns2.aktuell %}\n{%- set ed = as_datetime(e.ende).date()\
-        \ %}\n- <font color=\"#FF453A\">●</font> **Belegt** bis {{ tage[ed.weekday()] }} {{ ed.strftime('%d.%m.') }} · {{\
-        \ e.titel }}\n{%- endfor %}\n{%- if ns2.aktuell | count == 0 %}\n- <font color=\"#30D158\">●</font> **Heute frei**\n\
-        {%- endif %}\n{%- for e in ns2.naechste[:2] %}\n{%- set sd = as_datetime(e.start).date() %}\n{%- set ed = as_datetime(e.ende).date()\
-        \ %}\n- {{ 'Nächste Anreise' if loop.first else 'Danach' }}: {{ tage[sd.weekday()] }} {{ sd.strftime('%d.%m.') }}\
-        \ – {{ tage[ed.weekday()] }} {{ ed.strftime('%d.%m.') }} · {{ e.titel }}\n{%- endfor %}\n{%- if ns2.naechste | count\
-        \ == 0 %}\n- keine weiteren Buchungen\n{%- endif %}\n{%- endif %}\n\n{% endfor %}"
+      content: |-
+        {% set b = state_attr('sensor.termine_vorschau', 'buchungen') or [] %}
+        {% set heute = now().date() %}
+        {% set tage = ['Mo','Di','Mi','Do','Fr','Sa','So'] %}
+        {% set fw_kal = ['calendar.holidu', 'calendar.privat_mit_buchung'] %}
+        {% set ns = namespace(fw=[], fw_keys=[], sp=[], hat_sp=false) %}
+        {% set ns.hat_sp = states.calendar | selectattr('entity_id', 'search', 'stellpl') | list | count > 0 %}
+        {# Anreisetage bei Holidu = Ferienwohnung (Abreisetag zählen Holidu und Portal unterschiedlich) #}
+        {% set ns_h = namespace(keys=[]) %}
+        {% for e in b if e.kalender == 'calendar.holidu' %}{% set ns_h.keys = ns_h.keys + [(e.start | string)[:10]] %}{% endfor %}
+        {# Portal-Kalender (export-ical-ferienwohnung.php) = nur Ferienwohnung; bei gleicher Anreise wie Holidu gilt der Holidu-Eintrag (mit Gästenamen) #}
+        {% for e in b if e.kalender == 'calendar.privat_mit_buchung' %}
+          {% set key = (e.start | string)[:10] %}
+          {% if key not in ns_h.keys %}{% if key not in ns.fw_keys %}{% set ns.fw = ns.fw + [e] %}{% set ns.fw_keys = ns.fw_keys + [key] %}{% endif %}
+          {% endif %}
+        {% endfor %}
+        {% for e in b if e.kalender == 'calendar.holidu' %}
+          {% set key = (e.start | string)[:10] %}
+          {% if key not in ns.fw_keys %}{% set ns.fw = ns.fw + [e] %}{% set ns.fw_keys = ns.fw_keys + [key] %}{% endif %}
+        {% endfor %}
+        {% for e in b if 'stellpl' in e.kalender %}{% set ns.sp = ns.sp + [e] %}{% endfor %}
+        {% for bereich, symbol, liste in [('Ferienwohnung', 'mdi:home-heart', ns.fw | sort(attribute='start')), ('Stellplätze', 'mdi:rv-truck', ns.sp | sort(attribute='start'))] %}
+        {%- set ns2 = namespace(aktuell=[], naechste=[]) %}
+        {%- for e in liste %}
+        {%- set sd = as_datetime(e.start).date() %}
+        {%- set ed = as_datetime(e.ende).date() %}
+        {%- if sd <= heute and ed > heute %}{% set ns2.aktuell = ns2.aktuell + [e] %}
+        {%- elif sd > heute %}{% set ns2.naechste = ns2.naechste + [e] %}{% endif %}
+        {%- endfor %}
+        <ha-icon icon="{{ symbol }}"></ha-icon> **{{ bereich }}**
+        {%- if bereich == 'Stellplätze' and not ns.hat_sp %}
+        - <font color="#8E8E93">Stellplatz-Kalender noch nicht verbunden</font>
+        {%- else %}
+        {%- for e in ns2.aktuell %}
+        {%- set ed = as_datetime(e.ende).date() %}
+        - <font color="#FF453A">●</font> **Belegt** bis {{ tage[ed.weekday()] }} {{ ed.strftime('%d.%m.') }} · {{ e.titel }}
+        {%- endfor %}
+        {%- if ns2.aktuell | count == 0 %}
+        - <font color="#30D158">●</font> **Heute frei**
+        {%- endif %}
+        {%- for e in ns2.naechste[:2] %}
+        {%- set sd = as_datetime(e.start).date() %}
+        {%- set ed = as_datetime(e.ende).date() %}
+        - {{ 'Nächste Anreise' if loop.first else 'Danach' }}: {{ tage[sd.weekday()] }} {{ sd.strftime('%d.%m.') }} – {{ tage[ed.weekday()] }} {{ ed.strftime('%d.%m.') }} · {{ e.titel }}
+        {%- endfor %}
+        {%- if ns2.naechste | count == 0 %}
+        - keine weiteren Buchungen
+        {%- endif %}
+        {%- endif %}
+
+        {% endfor %}
     - type: button
       name: Stellplätze verwalten
       icon: mdi:rv-truck
@@ -547,7 +547,8 @@ views:
         color: green
     - type: markdown
       text_only: true
-      content: Kreis antippen = erledigt. Erledigtes steht unten unter **Erledigt** – nochmal antippen, und die Aufgabe ist wieder offen.
+      content: Kreis antippen = erledigt. Erledigtes steht unten unter **Erledigt** – nochmal antippen, und die Aufgabe ist
+        wieder offen.
     - type: todo-list
       entity: todo.aufgaben
       hide_create: false
@@ -1792,8 +1793,6 @@ views:
   icon: mdi:cctv
   type: panel
   cards:
-  # Live-Bild über go2rtc (siehe packages/kameras.yaml) – funktioniert nur auf dem Monitor selbst.
-  # Antippen = Großansicht in voller Auflösung.
   - type: vertical-stack
     cards:
     - type: grid

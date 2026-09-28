@@ -50,7 +50,7 @@ automation:
           message: "{{ text }}"
       - variables:
           empfaenger: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
-      - if: "{{ empfaenger | length > 3 }}"
+      - if: "{{ empfaenger | string | length > 3 }}"
         then:
           - action: telegram_bot.send_message
             continue_on_error: true
