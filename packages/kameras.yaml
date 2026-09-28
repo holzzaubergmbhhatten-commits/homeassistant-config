@@ -1,0 +1,29 @@
+# Live-Bilder der Tapo-Kameras auf dem Touchmonitor.
+# Der Browser auf dem Monitor kann kein Live-Video (WebRTC/HLS), aber "MJPEG"
+# (laufende Einzelbilder). Das Zusatzprogramm go2rtc (App a889bffc_go2rtc) wandelt
+# die Kamerastreams dafür um. Seine Kamera-Liste /config/go2rtc.yaml erzeugt
+# claude_tools/go2rtc_einrichten.py aus den Home-Assistant-Kameras (Passwörter
+# bleiben lokal, nicht im Repository).
+shell_command:
+  go2rtc_einrichten: python3 /config/claude_tools/go2rtc_einrichten.py
+
+automation:
+  - id: go2rtc_kameras_einrichten
+    alias: "Kameras: go2rtc-Kameraliste aktuell halten"
+    mode: single
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: time
+        at: "04:10:00"
+    actions:
+      - delay: 20
+      - action: shell_command.go2rtc_einrichten
+        continue_on_error: true
+        response_variable: ergebnis
+      - if: "{{ ergebnis is defined and (ergebnis.stdout | default('') | trim) == 'geändert' }}"
+        then:
+          - action: hassio.app_restart
+            continue_on_error: true
+            data:
+              app: a889bffc_go2rtc

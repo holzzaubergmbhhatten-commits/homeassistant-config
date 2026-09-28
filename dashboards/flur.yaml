@@ -1792,52 +1792,70 @@ views:
   icon: mdi:cctv
   type: panel
   cards:
+  # Live-Bild über go2rtc (siehe packages/kameras.yaml) – funktioniert nur auf dem Monitor selbst.
+  # Antippen = Großansicht in voller Auflösung.
   - type: vertical-stack
     cards:
     - type: grid
       columns: 3
       square: false
       cards:
-      - type: picture-entity
-        entity: camera.hoftor_letzte_aufnahme
-        name: Hoftor · Klingel
-        camera_view: auto
-        show_name: true
-        show_state: false
-        tap_action:
-          action: more-info
-      - type: picture-entity
-        entity: camera.draussen_hot_tor_kamera
-        name: Hof-Tor
-        camera_view: auto
-        show_name: true
-        show_state: false
-        tap_action:
-          action: more-info
-      - type: picture-entity
-        entity: camera.draussen_giebel_vorne
-        name: Giebel vorne
-        camera_view: auto
-        show_name: true
-        show_state: false
-        tap_action:
-          action: more-info
-      - type: picture-entity
-        entity: camera.draussen_giebel_hinten
-        name: Giebel hinten
-        camera_view: auto
-        show_name: true
-        show_state: false
-        tap_action:
-          action: more-info
-      - type: picture-entity
-        entity: camera.draussen_hof_hinten
-        name: Hof hinten
-        camera_view: auto
-        show_name: true
-        show_state: false
-        tap_action:
-          action: more-info
+      - type: vertical-stack
+        cards:
+        - type: heading
+          heading: Hoftor · Klingel (letzte Aufnahme)
+          heading_style: subtitle
+        - type: picture-entity
+          entity: camera.hoftor_letzte_aufnahme
+          camera_view: auto
+          show_name: false
+          show_state: false
+          tap_action:
+            action: more-info
+      - type: vertical-stack
+        cards:
+        - type: heading
+          heading: Hof-Tor
+          heading_style: subtitle
+        - type: picture
+          image: http://localhost:1984/api/stream.mjpeg?src=draussen_hot_tor_kamera
+          alt_text: Hof-Tor
+          tap_action:
+            action: navigate
+            navigation_path: /flur-display/kamera-hof-tor
+      - type: vertical-stack
+        cards:
+        - type: heading
+          heading: Giebel vorne
+          heading_style: subtitle
+        - type: picture
+          image: http://localhost:1984/api/stream.mjpeg?src=draussen_giebel_vorne
+          alt_text: Giebel vorne
+          tap_action:
+            action: navigate
+            navigation_path: /flur-display/kamera-giebel-vorne
+      - type: vertical-stack
+        cards:
+        - type: heading
+          heading: Giebel hinten
+          heading_style: subtitle
+        - type: picture
+          image: http://localhost:1984/api/stream.mjpeg?src=draussen_giebel_hinten
+          alt_text: Giebel hinten
+          tap_action:
+            action: navigate
+            navigation_path: /flur-display/kamera-giebel-hinten
+      - type: vertical-stack
+        cards:
+        - type: heading
+          heading: Hof hinten
+          heading_style: subtitle
+        - type: picture
+          image: http://localhost:1984/api/stream.mjpeg?src=draussen_hof_hinten
+          alt_text: Hof hinten
+          tap_action:
+            action: navigate
+            navigation_path: /flur-display/kamera-hof-hinten
       - type: vertical-stack
         cards:
         - type: button
@@ -1858,6 +1876,178 @@ views:
             action: navigate
             navigation_path: /flur-display/start
           icon_height: 48px
+- title: Hof-Tor
+  path: kamera-hof-tor
+  icon: mdi:cctv
+  type: panel
+  subview: true
+  back_path: /flur-display/kameras
+  cards:
+  - type: vertical-stack
+    cards:
+    - type: horizontal-stack
+      cards:
+      - type: button
+        name: Alle Kameras
+        icon: mdi:view-grid
+        show_state: false
+        icon_height: 32px
+        tap_action:
+          action: navigate
+          navigation_path: /flur-display/kameras
+      - type: button
+        name: Hoftor öffnen
+        icon: mdi:gate-open
+        show_state: false
+        icon_height: 32px
+        entity: switch.shelly1g4_a085e3bd629c
+        tap_action:
+          action: toggle
+          confirmation:
+            text: Hoftor wirklich öffnen/schließen?
+      - type: button
+        name: Start
+        icon: mdi:home
+        show_state: false
+        icon_height: 32px
+        tap_action:
+          action: navigate
+          navigation_path: /flur-display/start
+    - type: picture
+      image: http://localhost:1984/api/stream.mjpeg?src=draussen_hot_tor_kamera_hd
+      alt_text: Hof-Tor
+      tap_action:
+        action: navigate
+        navigation_path: /flur-display/kameras
+- title: Giebel vorne
+  path: kamera-giebel-vorne
+  icon: mdi:cctv
+  type: panel
+  subview: true
+  back_path: /flur-display/kameras
+  cards:
+  - type: vertical-stack
+    cards:
+    - type: horizontal-stack
+      cards:
+      - type: button
+        name: Alle Kameras
+        icon: mdi:view-grid
+        show_state: false
+        icon_height: 32px
+        tap_action:
+          action: navigate
+          navigation_path: /flur-display/kameras
+      - type: button
+        name: Hoftor öffnen
+        icon: mdi:gate-open
+        show_state: false
+        icon_height: 32px
+        entity: switch.shelly1g4_a085e3bd629c
+        tap_action:
+          action: toggle
+          confirmation:
+            text: Hoftor wirklich öffnen/schließen?
+      - type: button
+        name: Start
+        icon: mdi:home
+        show_state: false
+        icon_height: 32px
+        tap_action:
+          action: navigate
+          navigation_path: /flur-display/start
+    - type: picture
+      image: http://localhost:1984/api/stream.mjpeg?src=draussen_giebel_vorne_hd
+      alt_text: Giebel vorne
+      tap_action:
+        action: navigate
+        navigation_path: /flur-display/kameras
+- title: Giebel hinten
+  path: kamera-giebel-hinten
+  icon: mdi:cctv
+  type: panel
+  subview: true
+  back_path: /flur-display/kameras
+  cards:
+  - type: vertical-stack
+    cards:
+    - type: horizontal-stack
+      cards:
+      - type: button
+        name: Alle Kameras
+        icon: mdi:view-grid
+        show_state: false
+        icon_height: 32px
+        tap_action:
+          action: navigate
+          navigation_path: /flur-display/kameras
+      - type: button
+        name: Hoftor öffnen
+        icon: mdi:gate-open
+        show_state: false
+        icon_height: 32px
+        entity: switch.shelly1g4_a085e3bd629c
+        tap_action:
+          action: toggle
+          confirmation:
+            text: Hoftor wirklich öffnen/schließen?
+      - type: button
+        name: Start
+        icon: mdi:home
+        show_state: false
+        icon_height: 32px
+        tap_action:
+          action: navigate
+          navigation_path: /flur-display/start
+    - type: picture
+      image: http://localhost:1984/api/stream.mjpeg?src=draussen_giebel_hinten_hd
+      alt_text: Giebel hinten
+      tap_action:
+        action: navigate
+        navigation_path: /flur-display/kameras
+- title: Hof hinten
+  path: kamera-hof-hinten
+  icon: mdi:cctv
+  type: panel
+  subview: true
+  back_path: /flur-display/kameras
+  cards:
+  - type: vertical-stack
+    cards:
+    - type: horizontal-stack
+      cards:
+      - type: button
+        name: Alle Kameras
+        icon: mdi:view-grid
+        show_state: false
+        icon_height: 32px
+        tap_action:
+          action: navigate
+          navigation_path: /flur-display/kameras
+      - type: button
+        name: Hoftor öffnen
+        icon: mdi:gate-open
+        show_state: false
+        icon_height: 32px
+        entity: switch.shelly1g4_a085e3bd629c
+        tap_action:
+          action: toggle
+          confirmation:
+            text: Hoftor wirklich öffnen/schließen?
+      - type: button
+        name: Start
+        icon: mdi:home
+        show_state: false
+        icon_height: 32px
+        tap_action:
+          action: navigate
+          navigation_path: /flur-display/start
+    - type: picture
+      image: http://localhost:1984/api/stream.mjpeg?src=draussen_hof_hinten_hd
+      alt_text: Hof hinten
+      tap_action:
+        action: navigate
+        navigation_path: /flur-display/kameras
 - type: sections
   max_columns: 4
   title: Grundriss
@@ -1920,14 +2110,12 @@ views:
         action: more-info
       grid_options:
         columns: 6
-    - type: picture-entity
-      entity: camera.draussen_hot_tor_kamera
-      name: Hof-Tor
-      camera_view: auto
-      show_name: true
-      show_state: false
+    - type: picture
+      image: http://localhost:1984/api/stream.mjpeg?src=draussen_hot_tor_kamera
+      alt_text: Hof-Tor
       tap_action:
-        action: more-info
+        action: navigate
+        navigation_path: /flur-display/kamera-hof-tor
       grid_options:
         columns: 6
     - type: button

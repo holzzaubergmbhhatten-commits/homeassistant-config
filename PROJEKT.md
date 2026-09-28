@@ -59,7 +59,14 @@ bearbeitet die Kalenderdatei direkt; vor jeder Änderung Sicherheitskopie nach
 Aufgaben: Liste todo.aufgaben (Lokale To-do-Liste „Aufgaben“, einmalig in der Oberfläche
 angelegt), auf der Startseite + eigene Seite „Aufgaben“ mit Schnell-Knöpfen; Telegram: „Aufgaben“.
 
+Kameras live: App go2rtc (a889bffc_go2rtc) wandelt die Tapo-Streams in MJPEG um, das kann der
+Kiosk-Browser. /config/go2rtc.yaml (lokal, mit Passwörtern) erzeugt claude_tools/go2rtc_einrichten.py
+beim HA-Start aus den Generic-Camera-Einträgen. Dashboard lädt http://localhost:1984/api/stream.mjpeg?src=<entity>
+(nur auf dem Monitor), Großansicht <entity>_hd (stream1). go2rtc-API von außen nur mit Passwort.
+
 Offen / morgen prüfen:
+- [ ] Kameras live auf dem Monitor? Flüssig? Mini-PC-Modell erfragen (Transcoding-Last)
+- [ ] Ring live über Ring-MQTT → go2rtc; Tapo schwenken über HACS „Tapo: Cameras Control“
 - [ ] Liste „Aufgaben“ in HA anlegen (Lokale To-do-Liste) – macht Marco
 - [ ] Termin ändern/löschen per Telegram in den ersten Tagen beobachten
 - [ ] Nachtmodus (22:30–6:30) prüfen; tagsüber alle 5 Min. Abschaltung aus
