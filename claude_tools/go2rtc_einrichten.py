@@ -51,11 +51,11 @@ def main():
         name = entitaeten.get(e["entry_id"], "camera." + re.sub(r"\W+", "_", e["title"].lower())).split(".", 1)[1]
         url = mit_zugang(quelle, o.get("username"), o.get("password"))
         # Zweite Quelle: Umwandlung nach MJPEG (das kann der Browser auf dem Monitor anzeigen),
-        # mit Grafikkarte, falls vorhanden – go2rtc startet sie nur, wenn jemand zuschaut
-        streams[name] = [url, f"ffmpeg:{name}#video=mjpeg#hardware"]
+        # per Prozessor (Grafikkarte klappt auf diesem Mini-PC nicht) – läuft nur, wenn jemand zuschaut
+        streams[name] = [url, f"ffmpeg:{name}#video=mjpeg"]
         if re.search(r"/stream2$", url):
             streams[name + "_hd"] = [re.sub(r"/stream2$", "/stream1", url),
-                                     f"ffmpeg:{name}_hd#video=mjpeg#hardware"]
+                                     f"ffmpeg:{name}_hd#video=mjpeg#width=1920"]
 
     alt = {}
     if os.path.exists(ZIEL):
