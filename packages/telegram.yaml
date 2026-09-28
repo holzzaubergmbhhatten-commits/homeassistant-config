@@ -3,6 +3,13 @@
 #    das passiert direkt im Familienkalender (calendar.geburtstage) und wird bestätigt.
 # 2. Alles andere (Licht, Einkaufsliste, Fragen) geht an den Claude-Gesprächsagenten.
 # Nur Chat-IDs, die in der Integration "Telegram bot" erlaubt sind, lösen das aus.
+# Letzte Nachricht merken ("Chat-ID~Text"), damit Rückfragen wie "als Aufgabe eintragen"
+# im Zusammenhang verstanden werden (gilt 15 Minuten).
+input_text:
+  telegram_vorherige:
+    name: Telegram vorherige Nachricht
+    max: 255
+
 shell_command:
   kalender_bearbeiten: python3 /config/claude_tools/kalender.py {{ auftrag }}
 
@@ -37,6 +44,18 @@ automation:
       agent: >-
         {{ states.conversation | map(attribute='entity_id') | select('search', 'claude|anthropic')
            | first | default('conversation.home_assistant', true) }}
+  - variables:
+      vorher: >-
+        {% set v = states('input_text.telegram_vorherige') %}
+        {% set frisch = states.input_text.telegram_vorherige is not none and
+           (now() - states.input_text.telegram_vorherige.last_changed).total_seconds() < 900 %}
+        {{ v.split('~', 1)[1] if frisch and v.startswith(chat ~ '~') else '' }}
+  - action: input_text.set_value
+    continue_on_error: true
+    target:
+      entity_id: input_text.telegram_vorherige
+    data:
+      value: '{{ (chat ~ ''~'' ~ text | replace(''\n'', '' ''))[:250] }}'
   # Aufgabenliste (Lokale To-do-Liste "Aufgaben") und ihre offenen Einträge
   - variables:
       aufgaben_entity: >-
@@ -106,6 +125,9 @@ automation:
         Vorhandene Termine (Datum Uhrzeit: Titel):
         {{ terminliste }}
 
+        {% if vorher %}Vorherige Nachricht aus diesem Chat (nur als Zusammenhang, z. B. wenn jetzt
+        "als Aufgabe eintragen" oder "ja" kommt – dann gilt der Inhalt der vorherigen Nachricht): {{ vorher }}
+        {% endif %}
         Nachricht: {{ text }}
       structure:
         aktion:
@@ -289,6 +311,7 @@ automation:
         text: '{{ text }}'
         language: de
         agent_id: '{{ agent }}'
+        conversation_id: 'telegram_{{ chat }}'
       response_variable: antwort
     - action: telegram_bot.send_message
       data:
@@ -296,7 +319,8 @@ automation:
         message: >-
           {% set t %}{{ antwort.response.speech.plain.speech
              if antwort.response is defined and antwort.response.speech.plain is defined
-             else 'Erledigt.' }}{% endset %}{{ t | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}
+             else 'Erledigt.' }}{% endset %}{{ t | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;')
+             | regex_replace('\\*\\*(.+?)\\*\\*', '<b>\\1</b>') }}
         parse_mode: html
   # Weitere Wünsche aus derselben Nachricht (z. B. "... und Milch auf die Liste")
   - if: '{{ aktion != ''keine'' and (d.rest | default('''', true) | string | trim) | length > 2 }}'
@@ -306,6 +330,7 @@ automation:
         text: '{{ d.rest }}'
         language: de
         agent_id: '{{ agent }}'
+        conversation_id: 'telegram_{{ chat }}'
       response_variable: antwort_rest
     - action: telegram_bot.send_message
       data:
@@ -313,7 +338,8 @@ automation:
         message: >-
           {% set t %}{{ antwort_rest.response.speech.plain.speech
              if antwort_rest.response is defined and antwort_rest.response.speech.plain is defined
-             else 'Erledigt.' }}{% endset %}{{ t | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}
+             else 'Erledigt.' }}{% endset %}{{ t | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;')
+             | regex_replace('\\*\\*(.+?)\\*\\*', '<b>\\1</b>') }}
         parse_mode: html
 - id: telegram_einkaufsliste
   alias: 'Telegram: Einkaufsliste schicken'
