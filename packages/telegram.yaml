@@ -37,6 +37,25 @@ automation:
       agent: >-
         {{ states.conversation | map(attribute='entity_id') | select('search', 'claude|anthropic')
            | first | default('conversation.home_assistant', true) }}
+  # Aufgabenliste (Lokale To-do-Liste "Aufgaben") und ihre offenen Einträge
+  - variables:
+      aufgaben_entity: >-
+        {{ states.todo | selectattr('name', 'search', '(?i)^aufgaben')
+           | map(attribute='entity_id') | first | default('', true) }}
+  - if: "{{ aufgaben_entity != '' }}"
+    then:
+    - action: todo.get_items
+      continue_on_error: true
+      target:
+        entity_id: '{{ aufgaben_entity }}'
+      data:
+        status: needs_action
+      response_variable: aufgaben_offen
+  - variables:
+      aufgabenliste: >-
+        {% set items = aufgaben_offen[aufgaben_entity]['items']
+           if aufgaben_offen is defined and aufgaben_entity in aufgaben_offen else [] %}
+        {{ items | map(attribute='summary') | join('; ') if items else '(keine)' }}
   # Bestehende Termine mitschicken, damit Claude weiß, welcher geändert/gelöscht werden soll
   - action: calendar.get_events
     continue_on_error: true
@@ -70,9 +89,19 @@ automation:
           GENAU wie in der Liste unten, und nur die neuen Angaben in titel/datum/uhrzeit/dauer_minuten
           (was gleich bleibt, leer lassen).
         - "loeschen": einen vorhandenen Termin absagen/löschen. Dann alt_titel und alt_datum genau wie in der Liste.
-        - "keine": alles andere (Fragen, Licht, Einkaufsliste, Aufgaben/To-dos ohne festen Termin, Sonstiges).
+        - "aufgabe": etwas soll auf die Aufgabenliste (To-do ohne feste Uhrzeit, z. B. "Aufgabe: Garage aufräumen",
+          "wir müssen noch den Rasen mähen", "erinnere uns an Müll rausbringen"). Die Aufgaben kurz und klar
+          in "eintraege" schreiben, mehrere mit ; getrennt.
+        - "aufgabe_erledigt": eine oder mehrere offene Aufgaben sind erledigt/abhaken. In "eintraege" die Namen
+          GENAU so wie in der Liste der offenen Aufgaben unten, mehrere mit ; getrennt.
+        - "einkauf": etwas soll auf die Einkaufsliste (Lebensmittel, Drogerie, "wir brauchen Milch").
+          Die Artikel in "eintraege", mehrere mit ; getrennt.
+        - "keine": alles andere (Fragen, Licht, Musik, Sonstiges).
+        Im Zweifel zwischen Termin und Aufgabe: mit Datum UND Uhrzeit = Termin, sonst Aufgabe.
         Relative Angaben wie "morgen", "übermorgen" oder "nächsten Dienstag" rechnest du in ein Datum um.
         Enthält die Nachricht zusätzlich andere Wünsche (z. B. Einkaufsliste), schreibe diese in das Feld rest.
+
+        Offene Aufgaben: {{ aufgabenliste }}
 
         Vorhandene Termine (Datum Uhrzeit: Titel):
         {{ terminliste }}
@@ -80,8 +109,12 @@ automation:
         Nachricht: {{ text }}
       structure:
         aktion:
-          description: 'neu, aendern, loeschen oder keine'
+          description: 'neu, aendern, loeschen, aufgabe, aufgabe_erledigt, einkauf oder keine'
           required: true
+          selector:
+            text: null
+        eintraege:
+          description: Bei aufgabe/aufgabe_erledigt/einkauf die Einträge, mehrere mit ; getrennt
           selector:
             text: null
         alt_titel:
@@ -120,6 +153,7 @@ automation:
         {% set a = (d.aktion | default('keine', true) | string | lower | trim) -%}
         {%- if a == 'neu' and (d.datum | default('') | string) is match('^\d{4}-\d{2}-\d{2}$') %}neu
         {%- elif a in ['aendern', 'ändern', 'loeschen', 'löschen'] and (d.alt_datum | default('') | string) is match('^\d{4}-\d{2}-\d{2}$') %}{{ a | replace('ä','ae') | replace('ö','oe') }}
+        {%- elif a in ['aufgabe', 'aufgabe_erledigt', 'einkauf'] and (d.eintraege | default('', true) | string | trim) != '' %}{{ a }}
         {%- else %}keine{% endif %}
   - choose:
     - conditions: '{{ aktion == ''neu'' }}'
@@ -196,6 +230,50 @@ automation:
             {% set t %}{{ meldung or '⚠️ Der Termin konnte nicht bearbeitet werden (Zusatzprogramm hat nicht geantwortet).' }}{% endset %}{{ t
             | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}
           parse_mode: html
+    # Aufgaben / Einkauf direkt eintragen (zuverlässiger als über den Gesprächsagenten)
+    - conditions: "{{ aktion in ['aufgabe', 'aufgabe_erledigt', 'einkauf'] }}"
+      sequence:
+      - variables:
+          liste: "{{ 'todo.einkaufsliste' if aktion == 'einkauf' else aufgaben_entity }}"
+          eintraege: >-
+            {{ (d.eintraege | string).split(';') | map('trim') | reject('eq', '') | list }}
+      - if: "{{ liste == '' }}"
+        then:
+        - action: telegram_bot.send_message
+          data:
+            chat_id: '{{ chat }}'
+            parse_mode: html
+            message: >-
+              ⚠️ Es gibt noch keine Liste „Aufgaben“. Bitte in Home Assistant unter Einstellungen →
+              Geräte &amp; Dienste → „Lokale To-do-Liste“ mit dem Namen Aufgaben anlegen.
+        - stop: Keine Aufgabenliste
+      - repeat:
+          for_each: '{{ eintraege }}'
+          sequence:
+          - if: "{{ aktion == 'aufgabe_erledigt' }}"
+            then:
+            - action: todo.update_item
+              continue_on_error: true
+              target:
+                entity_id: '{{ liste }}'
+              data:
+                item: '{{ repeat.item }}'
+                status: completed
+            else:
+            - action: todo.add_item
+              continue_on_error: true
+              target:
+                entity_id: '{{ liste }}'
+              data:
+                item: '{{ repeat.item }}'
+      - action: telegram_bot.send_message
+        data:
+          chat_id: '{{ chat }}'
+          parse_mode: html
+          message: >-
+            {% set t %}{{ {'aufgabe': '✅ Neue Aufgabe', 'aufgabe_erledigt': '☑️ Erledigt',
+            'einkauf': '🛒 Auf die Einkaufsliste'}[aktion] }}: {{ eintraege | join(', ') }}{% endset %}{{ t
+            | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}
     default:
     - if: '{{ erkannt is not defined or erkannt.data is not defined }}'
       then:
