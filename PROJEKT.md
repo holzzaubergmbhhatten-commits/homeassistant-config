@@ -62,7 +62,7 @@ angelegt), auf der Startseite + eigene Seite „Aufgaben“ mit Schnell-Knöpfen
 Offen / morgen prüfen:
 - [ ] Liste „Aufgaben“ in HA anlegen (Lokale To-do-Liste) – macht Marco
 - [ ] Termin ändern/löschen per Telegram in den ersten Tagen beobachten
-- [ ] Nachtmodus: geht der Monitor morgens um 6:30 wieder an, weckt Antippen? Danach Startzeit auf 22:30 zurück
+- [ ] Nachtmodus (22:30–6:30) prüfen; tagsüber alle 5 Min. Abschaltung aus
 - [ ] Design-Entscheidung (Hell/Dunkel/Automatisch), Tastatur-Variante wählen
 - [ ] Music-Assistant-Gruppe „Ganzes Haus“ + Knopf „Favoriten überall“; Name der Favoriten-Playlist prüfen
 - [ ] Ring echtes Live-Bild auf dem Monitor (Ring-MQTT), falls gewünscht
