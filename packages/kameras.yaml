@@ -7,6 +7,35 @@
 shell_command:
   go2rtc_einrichten: python3 /config/claude_tools/go2rtc_einrichten.py
   kamera_check: python3 /config/claude_tools/kamera_check.py
+  kamera_drehen_befehl: python3 /config/claude_tools/kamera_drehen.py {{ kamera }} {{ richtung }}
+
+# Pfeil-Knöpfe in der Großansicht: Tapo-Kamera schwenken/neigen (ONVIF, siehe claude_tools/kamera_drehen.py)
+script:
+  kamera_drehen:
+    alias: Kamera drehen
+    mode: queued
+    max: 5
+    fields:
+      kamera:
+        description: Entitäts-ID ohne "camera.", z. B. draussen_hof_hinten
+        example: draussen_hof_hinten
+      richtung:
+        description: links, rechts, hoch oder runter
+        example: links
+    sequence:
+      - action: shell_command.kamera_drehen_befehl
+        continue_on_error: true
+        data:
+          kamera: "{{ kamera | regex_replace('[^a-z0-9_]', '') }}"
+          richtung: "{{ richtung if richtung in ['links', 'rechts', 'hoch', 'runter'] else 'links' }}"
+        response_variable: ergebnis
+      - if: "{{ ergebnis is not defined or (ergebnis.stdout | default('') | trim) != 'ok' }}"
+        then:
+          - action: persistent_notification.create
+            data:
+              notification_id: kamera_drehen
+              title: Kamera drehen
+              message: "{{ kamera }} {{ richtung }}: {{ ergebnis.stdout if ergebnis is defined else 'keine Antwort' }}"
 
 automation:
   - id: go2rtc_kameras_einrichten
