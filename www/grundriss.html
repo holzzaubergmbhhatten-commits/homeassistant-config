@@ -16,7 +16,7 @@
   :root {
     --bg: #E9EBE4; --text: #1C1C1E; --grau: #8E8E93; --akzent: #007AFF; --rot: #FF3B30; --panel: rgba(255,255,255,0.97);
     --knopf: #FFFFFF; --mauer: #3A3A3C; --boden: #FBF8F2; --fliese: #EDF2F5; --fenster: #9CC7E6; --tuer: #AEAEB2;
-    --gebaeude: #D6D2CA; --rasen: #CADDB4; --hof: #D8D4CC; --kies: #E2DCCE; --holz: #DCC6A4;
+    --gebaeude: #D6D2CA; --rasen: #C3D9AC; --hof: #DDD6C8; --kies: #E6DECD; --holz: #DCC6A4;
     --aus: #FFFFFF; --aus-rand: #C7C7CC; --an: #FFCC00; --symbol-aus: #8E8E93;
   }
   :root.dunkel {
@@ -79,6 +79,19 @@
   .treppe { fill: none; stroke: var(--tuer); stroke-width: 0.025; }
   .raumname { fill: var(--grau); font-size: 0.34px; font-weight: 700; }
   .gebaeudename { fill: var(--mauer); font-size: 0.55px; font-weight: 800; letter-spacing: 0.05px; }
+  .wiese { fill: var(--rasen); }
+  .hofflaeche { fill: var(--hof); stroke: var(--kies); stroke-width: 0.3; stroke-linejoin: round; }
+  .fahrweg { fill: none; stroke: var(--kies); stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; }
+  .baum { fill: #7FA66A; opacity: 0.9; }
+  .baum-licht { fill: #97BE7F; opacity: 0.7; }
+  :root.dunkel .baum { fill: #2E4526; } :root.dunkel .baum-licht { fill: #3A5530; }
+  .nebengebaeude { fill: var(--gebaeude); stroke: var(--mauer); stroke-width: 0.25; stroke-linejoin: round; }
+  .nebengebaeude.glas { fill: #D7ECEC; stroke: #9DB8B8; stroke-width: 0.12; }
+  .stellplatz { fill: #E9E7E1; stroke: #B9B4A8; stroke-width: 0.12; }
+  .gelaendename { fill: var(--mauer); font-size: 1.1px; font-weight: 700; text-anchor: middle; dominant-baseline: middle; opacity: 0.8; }
+  .gelaendename.klein { font-size: 0.8px; }
+  .wegbeleuchtung { fill: none; stroke: #FFCC00; stroke-width: 0.3; stroke-dasharray: 0.6 0.9; stroke-linecap: round; }
+  .hoftor { fill: #C0392B; }
   .flaeche.typ-innen { fill: var(--boden); stroke: var(--mauer); stroke-width: 0.15; }
   .flaeche.typ-nass { fill: var(--fliese); stroke: var(--mauer); stroke-width: 0.15; }
   .flaeche.typ-gebaeude { fill: var(--gebaeude); stroke: var(--mauer); stroke-width: 0.3; }
@@ -116,11 +129,11 @@
   <span class="luecke"></span>
   <span id="knoepfe-ansicht"><button id="alle-aus"></button> <button id="bearbeiten"></button></span>
   <span id="knoepfe-bearbeiten" style="display:none">
-    <button id="raum-neu"></button> <button id="geraet-neu"></button> <button id="foto"></button>
+    <button id="raum-neu"></button> <button id="geraet-neu"></button> <button id="foto"></button> <button id="gelaende"></button>
     <button id="abbrechen" class="rot"></button> <button id="speichern" class="voll"></button>
   </span>
 </div>
-<div class="zoom"><button id="zoom-rein"></button><button id="zoom-raus"></button><button id="zoom-alles"></button></div>
+<div class="zoom"><button id="zoom-rein"></button><button id="zoom-raus"></button><button id="zoom-haus"></button><button id="zoom-alles"></button></div>
 <div class="panel" id="panel"></div>
 <div class="kamera" id="kamera"></div>
 <div class="meldung" id="meldung"></div>
@@ -203,6 +216,8 @@ const FENSTER = [
 const TREPPE = { x: 15.6, y: 4.125, w: 2.4, h: 1.225, stufen: 10, richtung: "rechts" };
 // Lage des Original-Plans (Foto /local/grundriss.jpg, 1024×768 px) über dem Haus
 const PLANFOTO = { x: A - 143 / 35.3, y: A - 200 / 34.4, w: 1024 / 35.3, h: 768 / 34.4 };
+// Gelände nach Luftbild (Meter, im Koordinatensystem des Haupthauses)
+const GELAENDE = {"gebaeude": [{"name": "Scheune", "nr": 2, "p": [[17.0, 11.4], [32.4, 10.4], [33.4, 21.6], [17.9, 21.1]]}, {"name": "Vordach", "nr": 0, "glas": true, "p": [[12.9, 11.5], [17.3, 11.7], [17.9, 21.1], [12.9, 20.7]]}, {"name": "Nebengebäude", "nr": 3, "p": [[21.4, 24.7], [30.0, 25.4], [31.0, 37.2], [22.2, 37.3]]}, {"name": "Anbau", "nr": 0, "p": [[16.8, 26.9], [20.6, 27.8], [20.2, 34.3], [16.3, 33.7]]}, {"name": "Alte Garage (künftige FeWo)", "nr": 4, "p": [[42.5, 27.1], [48.1, 28.1], [47.3, 34.9], [42.0, 34.0]]}, {"name": "Gewächshaus", "nr": 5, "glas": true, "p": [[35.7, -10.6], [43.2, -10.5], [44.9, -4.9], [37.3, -4.7]]}, {"name": "Halle", "nr": 0, "p": [[-2.9, 52.1], [26.5, 50.0], [27.1, 57.7], [-0.6, 57.5]]}, {"name": "Halle", "nr": 0, "p": [[28.1, 45.6], [37.8, 46.2], [38.5, 56.1], [27.3, 57.0]]}], "stellplaetze": [{"name": "Stellplatz 1", "p": [[64.9, 20.5], [68.2, 21.1], [69.4, 29.0], [67.1, 29.3]]}, {"name": "Stellplatz 2", "p": [[69.4, 33.5], [71.9, 34.2], [72.0, 40.9], [69.9, 40.7]]}, {"name": "Stellplatz 3", "p": [[72.3, 43.5], [75.2, 44.3], [76.5, 51.7], [74.2, 51.5]]}], "hof": [[20.7, -1.5], [28.1, -2.5], [35.2, 1.4], [36.9, 9.5], [38.7, 17.7], [40.7, 22.6], [49.2, 24.9], [56.4, 23.4], [60.5, 27.5], [65.6, 34.3], [70.7, 43.7], [75.5, 52.6], [69.7, 54.2], [57.2, 49.6], [49.2, 45.8], [42.0, 39.8], [36.4, 34.4], [33.5, 26.7], [32.4, 19.6], [31.4, 11.7], [25.8, 3.8]], "weg": [[16.6, -7.2], [23.4, -13.0], [31.2, -16.4], [41.4, -16.0], [52.1, -11.6], [57.6, -6.2], [59.2, 1.1], [59.2, 10.2], [58.8, 19.3], [61.1, 26.0]], "weg2": [[32.7, 44.7], [43.7, 45.5], [56.1, 45.0], [69.1, 48.2], [71.9, 53.4]], "wegbeleuchtung": [[-1.0, -7.8], [2.5, -8.6], [9.7, -11.5], [16.1, -10.9], [21.9, -8.7], [24.1, -5.9], [24.6, -1.9]], "hoftor": [-6.1, -4.3], "baeume": [[30.2, -30.6, 1.8], [32.7, -25.9, 1.5], [20.5, -25.8, 1.5], [14.0, -20.7, 2.0], [6.8, -16.6, 1.7], [0.8, -13.0, 1.8], [-8.3, -8.4, 2.2], [-14.2, -2.6, 1.8], [68.5, -10.2, 2.8], [71.8, -6.4, 2.3], [75.6, 1.3, 3.3], [80.6, 5.6, 2.8], [85.7, 10.0, 2.5], [91.1, 7.8, 2.2], [45.9, 5.3, 3.7], [48.8, 10.6, 3.3], [41.0, 6.0, 2.9], [50.5, 16.2, 2.3], [44.8, 0.7, 2.5], [-0.6, 6.6, 2.5], [-5.8, 10.5, 2.2], [-1.0, 20.6, 2.2], [-4.9, 31.7, 4.6], [-4.8, 41.8, 3.7], [-2.7, 59.3, 4.6], [-10.6, 65.6, 3.3], [-0.6, 74.3, 3.3], [20.8, 41.2, 2.9], [12.0, 42.1, 2.5], [-23.5, 49.1, 3.3], [-30.0, 56.7, 3.3]]};
 
 // ================= Einstellungen =================
 const SYMBOLE = [
@@ -403,14 +418,22 @@ function ergaenzen(h) {
 }
 
 // ================= Ausschnitt / Zoom (nur viewBox ändern = flüssig) =================
+function inhaltsBoxHaus() { return { x: -0.5, y: -0.5, w: HAUS.w + 1, h: HAUS.h + 1.5 }; }
 function inhaltsBox() {
   let x1 = 0, y1 = 0, x2 = HAUS.w, y2 = HAUS.h + 0.8;
   for (const f of daten.flaechen) { x1 = Math.min(x1, f.x); y1 = Math.min(y1, f.y); x2 = Math.max(x2, f.x + f.w); y2 = Math.max(y2, f.y + f.h); }
   for (const l of daten.lampen) { x1 = Math.min(x1, l.x - 0.5); y1 = Math.min(y1, l.y - 0.5); x2 = Math.max(x2, l.x + 0.5); y2 = Math.max(y2, l.y + 0.7); }
   return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
 }
-function allesZeigen() {
-  const b = inhaltsBox(), rect = svg.getBoundingClientRect(), a = (rect.width || 16) / (rect.height || 9);
+function grundstueckBox() {
+  const alle = [...GELAENDE.hof, ...GELAENDE.gebaeude.flatMap(b => b.p), ...GELAENDE.stellplaetze.flatMap(s => s.p), GELAENDE.hoftor];
+  const i = inhaltsBox();
+  const x1 = Math.min(i.x, ...alle.map(p => p[0])), y1 = Math.min(i.y, ...alle.map(p => p[1]));
+  const x2 = Math.max(i.x + i.w, ...alle.map(p => p[0])), y2 = Math.max(i.y + i.h, ...alle.map(p => p[1]));
+  return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+}
+function allesZeigen(nurHaus) {
+  const b = nurHaus ? inhaltsBoxHaus() : grundstueckBox(), rect = svg.getBoundingClientRect(), a = (rect.width || 16) / (rect.height || 9);
   let w = b.w + 1.5, h = b.h + 3.2;
   if (w / h > a) h = w / a; else w = h * a;
   ansicht = { x: b.x + b.w / 2 - w / 2, y: b.y + b.h / 2 - h / 2 - 0.7, w, h };
@@ -433,6 +456,35 @@ function weltPunkt(ev) {
 }
 
 // ================= Zeichnen =================
+// ================= Gelände (aus dem Luftbild abgezeichnet, fest) =================
+const punkte = p => p.map(q => q.join(",")).join(" ");
+function mitteVon(p) { return [p.reduce((s, q) => s + q[0], 0) / p.length, p.reduce((s, q) => s + q[1], 0) / p.length]; }
+function zeichneGelaende(g) {
+  const G = GELAENDE;
+  el("rect", { class: "wiese", x: -150, y: -150, width: 400, height: 350 }, g);
+  el("polygon", { class: "hofflaeche", points: punkte(G.hof) }, g);
+  for (const w of [G.weg, G.weg2]) el("polyline", { class: "fahrweg", points: punkte(w) }, g);
+  for (const [x, y, r] of G.baeume) {
+    el("circle", { class: "baum", cx: x, cy: y, r }, g);
+    el("circle", { class: "baum-licht", cx: x - r * 0.25, cy: y - r * 0.25, r: r * 0.55 }, g);
+  }
+  for (const b of G.gebaeude) {
+    el("polygon", { class: b.glas ? "nebengebaeude glas" : "nebengebaeude", points: punkte(b.p) }, g);
+    if (b.nr) {
+      const [x, y] = mitteVon(b.p);
+      el("text", { class: "gelaendename", x, y }, g).textContent = b.name;
+    }
+  }
+  for (const s of G.stellplaetze) {
+    el("polygon", { class: "stellplatz", points: punkte(s.p) }, g);
+    const [x, y] = mitteVon(s.p);
+    el("text", { class: "gelaendename klein", x, y, transform: `rotate(-75 ${x} ${y})` }, g).textContent = s.name;
+  }
+  el("polyline", { class: "wegbeleuchtung", points: punkte(G.wegbeleuchtung) }, g);
+  const [tx, ty] = G.hoftor;
+  el("rect", { class: "hoftor", x: tx - 2, y: ty - 0.3, width: 4, height: 0.6, transform: `rotate(60 ${tx} ${ty})` }, g);
+  el("text", { class: "gelaendename", x: tx, y: ty - 2.2 }, g).textContent = "Hoftor · Eingang";
+}
 function zeichneFlaeche(f, g) {
   const sel = auswahl && auswahl.art === "fl" && auswahl.id === f.id;
   const gr = el("g", { class: sel ? "gewaehlt" : "", "data-flaeche": f.id }, g);
@@ -526,6 +578,7 @@ function zeichnen() {
   document.documentElement.classList.toggle("dunkel", !!(h.themes && h.themes.darkMode));
   const g = document.createElementNS(NS, "g");
   const fl = geordneteFlaechen();
+  zeichneGelaende(g);
   for (const f of fl) if (EBENE[f.typ] <= 2) zeichneFlaeche(f, g);
   zeichneHaus(g);
   for (const f of fl) if (!(EBENE[f.typ] <= 2)) zeichneFlaeche(f, g);
@@ -599,7 +652,8 @@ function runter(ev) {
   } else if (flEl) {
     const f = daten.flaechen.find(f => f.id === flEl.dataset.flaeche);
     const r = rechteck(f);
-    const mit = f.typ === "gebaeude" ? daten.flaechen.filter(q => q !== f && q.x >= f.x && q.y >= f.y && q.x + q.w <= f.x + f.w && q.y + q.h <= f.y + f.h) : [];
+    const t = 0.5;
+    const mit = f.typ === "gebaeude" ? daten.flaechen.filter(q => q !== f && q.x >= f.x - t && q.y >= f.y - t && q.x + q.w <= f.x + f.w + t && q.y + q.h <= f.y + f.h + t) : [];
     zug = { ...basis, art: "flaeche", f, alt: [f, ...mit].map(q => ({ q, x: q.x, y: q.y })),
       lampenAlt: daten.lampen.filter(l => drin(l.x, l.y, r)).map(l => ({ l, x: l.x, y: l.y })) };
   } else if (planEl) {
@@ -837,6 +891,8 @@ const mitte = () => { const r = svg.getBoundingClientRect(); return [r.left + r.
 K("zoom-rein").onclick = () => zoomen(1 / 1.5, ...mitte());
 K("zoom-raus").onclick = () => zoomen(1.5, ...mitte());
 K("zoom-alles").onclick = () => allesZeigen();
+K("zoom-haus").innerHTML = icon("haus");
+K("zoom-haus").onclick = () => allesZeigen(true);
 K("alle-aus").onclick = () => {
   const h = hass(); if (!h) return;
   schalten(h, daten.lampen.filter(l => !l.versteckt && l.entity.startsWith("light.") && istAn(h, l.entity)).map(l => l.entity), false);
@@ -847,6 +903,29 @@ K("raum-neu").onclick = () => {
   daten.flaechen.push(f); auswahl = { art: "fl", id: f.id }; panelZeigen(); zeichnen();
 };
 K("geraet-neu").onclick = () => { auswahl = { art: "neu" }; panelZeigen(); };
+K("gelaende").innerHTML = `${icon("scheune")} Grundstück einpassen`;
+// Eigene Scheune (mit Räumen und Lampen) in das Scheunen-Gebäude des Luftbilds setzen, alte Groß-Flächen entfernen
+K("gelaende").onclick = () => grundstueckEinpassen();
+function grundstueckEinpassen() {
+  const ziel = GELAENDE.gebaeude.find(b => b.nr === 2).p;
+  const zx1 = Math.min(...ziel.map(p => p[0])), zy1 = Math.min(...ziel.map(p => p[1]));
+  const zx2 = Math.max(...ziel.map(p => p[0])), zy2 = Math.max(...ziel.map(p => p[1]));
+  const s = daten.flaechen.find(f => f.typ === "gebaeude" && /scheune/i.test(f.name));
+  if (s) {
+    const r = rechteck(s), sx = (zx2 - zx1) / s.w, sy = (zy2 - zy1) / s.h;
+    const um = (x, y) => [zx1 + (x - s.x) * sx, zy1 + (y - s.y) * sy];
+    const t = 0.5;   // Toleranz: Räume, die nur knapp überstehen, gehören trotzdem dazu
+    for (const l of daten.lampen) if (drin(l.x, l.y, [r[0] - t, r[1] - t, r[2] + t, r[3] + t])) [l.x, l.y] = um(l.x, l.y);
+    for (const f of daten.flaechen) if (f !== s && f.x >= r[0] - t && f.y >= r[1] - t && f.x + f.w <= r[2] + t && f.y + f.h <= r[3] + t) {
+      const [x, y] = um(f.x, f.y); f.x = rund(x); f.y = rund(y); f.w = rund(f.w * sx); f.h = rund(f.h * sy);
+    }
+    Object.assign(s, { x: rund(zx1), y: rund(zy1), w: rund(zx2 - zx1), h: rund(zy2 - zy1) });
+  }
+  daten.flaechen = daten.flaechen.filter(f => !(["hof", "rasen", "kies"].includes(f.typ) && /^(hof|rasen|drau(ß|ss)en|garten)$/i.test(f.name.trim())));
+  daten.gelaendeEingepasst = true;
+  zeichnen(); allesZeigen();
+  meldung(s ? "Grundstück eingezeichnet, Scheune eingepasst – bitte prüfen und speichern" : "Grundstück eingezeichnet – bitte prüfen und speichern");
+}
 K("foto").onclick = () => { fotoAn = !fotoAn; knoepfe(); zeichnen(); };
 K("abbrechen").onclick = () => { daten = JSON.parse(gesichert); verlassen(); };
 K("speichern").onclick = async () => {
@@ -871,6 +950,7 @@ async function laden() {
   if (!daten.treppe) daten.treppe = { ...TREPPE };
   ergaenzen(h);
   knoepfe(); zeichnen(); allesZeigen();
+  if (!daten.gelaendeEingepasst) grundstueckEinpassen();
   let letzter = "";
   setInterval(() => {
     const hh = hass(); if (!hh || zug) return;
