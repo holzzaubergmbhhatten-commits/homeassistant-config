@@ -64,7 +64,8 @@ Kiosk-Browser. /config/go2rtc.yaml (lokal, mit Passwörtern) erzeugt claude_tool
 beim HA-Start aus den Generic-Camera-Einträgen. Dashboard lädt http://localhost:1984/api/stream.mjpeg?src=<entity>
 (nur auf dem Monitor), Großansicht <entity>_hd (stream1). go2rtc-API von außen nur mit Passwort.
 
-Grundriss: eigene Vollbild-Seite www/grundriss.html (iframe im Dashboard, liest hass aus dem
+Grundriss (v3): Haupthaus fest nach Bauplan (Maßketten, Meter; Türen/Fenster/Treppe), Zusatzflächen
+frei; alte Kästchen-Anordnung wird beim Laden per Raumnamen übertragen. Eigene Vollbild-Seite www/grundriss.html (iframe im Dashboard, liest hass aus dem
 Eltern-Fenster). Bearbeiten-Modus: Wände ziehen (gemeinsame Wände wandern mit), Räume verschieben,
 Lampen platzieren, Name/Symbol wählen, Foto-Vorlage /local/grundriss.jpg. Gespeichert über
 script.grundriss_speichern → /config/www/grundriss_daten.json (lokal). Neue Lampen landen automatisch im Raum.

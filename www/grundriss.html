@@ -6,23 +6,24 @@
 <title>Grundriss</title>
 <!--
   Grundriss für den Touchmonitor (im Dashboard als Vollbild-iframe).
-  - Liest Lampen/Schalter, Räume und Zustände direkt aus der Home-Assistant-Oberfläche (window.parent … hass).
-  - Anordnung liegt in /local/grundriss_daten.json, gespeichert über script.grundriss_speichern.
-  - Flächen-Arten: Innenraum, Bad/Fliesen, Gebäude (Außenmauer + Name), Terrasse, Rasen, Hof/Pflaster, Kies.
-  - Zoomen: zwei Finger / Mausrad / Knöpfe unten rechts; Verschieben: mit einem Finger ziehen.
+  - Haupthaus nach dem Original-Bauplan (/local/grundriss.jpg) in Metern: Außenmauer 31,5 cm, Innenwände 15 cm,
+    Türen, Fenster, Treppe. Maße aus den Maßketten des Plans (19,47 × 10,95 m).
+  - Weitere Flächen (Scheune, Hof, Rasen, Terrasse …) und alle Lampen/Schalter/Kameras frei platzierbar.
+  - Zustände direkt aus der Home-Assistant-Oberfläche (window.parent … hass).
+  - Anordnung in /local/grundriss_daten.json, gespeichert über script.grundriss_speichern.
 -->
 <style>
   :root {
-    --bg: #E8EAE3; --text: #1C1C1E; --grau: #8E8E93; --akzent: #007AFF; --rot: #FF3B30; --panel: rgba(255,255,255,0.97);
-    --knopf: #FFFFFF; --mauer: #3A3A3C; --boden: #FFFDF8; --fliese: #EEF3F6; --gebaeude: #DAD6CE;
-    --rasen: #C9DDB1; --rasen2: #B7D09C; --hof: #D7D3CB; --hof2: #C4BFB5; --kies: #E3DDCF; --kies2: #CFC7B5;
-    --holz: #D9C2A0; --holz2: #C8AD86; --aus: #FFFFFF; --aus-rand: #C7C7CC; --an: #FFCC00; --symbol-aus: #8E8E93;
+    --bg: #E9EBE4; --text: #1C1C1E; --grau: #8E8E93; --akzent: #007AFF; --rot: #FF3B30; --panel: rgba(255,255,255,0.97);
+    --knopf: #FFFFFF; --mauer: #3A3A3C; --boden: #FBF8F2; --fliese: #EDF2F5; --fenster: #9CC7E6; --tuer: #AEAEB2;
+    --gebaeude: #D6D2CA; --rasen: #CADDB4; --hof: #D8D4CC; --kies: #E2DCCE; --holz: #DCC6A4;
+    --aus: #FFFFFF; --aus-rand: #C7C7CC; --an: #FFCC00; --symbol-aus: #8E8E93;
   }
   :root.dunkel {
     --bg: #1C1C1E; --text: #F2F2F7; --grau: #98989D; --akzent: #0A84FF; --rot: #FF453A; --panel: rgba(44,44,46,0.97);
-    --knopf: #2C2C2E; --mauer: #AEAEB2; --boden: #2C2C2E; --fliese: #283036; --gebaeude: #3A3A3C;
-    --rasen: #26331E; --rasen2: #2F3F25; --hof: #34332F; --hof2: #3E3C37; --kies: #3A372F; --kies2: #454135;
-    --holz: #3F3426; --holz2: #4A3D2C; --aus: #3A3A3C; --aus-rand: #545458; --an: #FFD60A; --symbol-aus: #AEAEB2;
+    --knopf: #2C2C2E; --mauer: #C7C7CC; --boden: #2C2C2E; --fliese: #27313A; --fenster: #3F6E91; --tuer: #636366;
+    --gebaeude: #3A3A3C; --rasen: #25321D; --hof: #34332F; --kies: #3A372F; --holz: #413528;
+    --aus: #3A3A3C; --aus-rand: #545458; --an: #FFD60A; --symbol-aus: #AEAEB2;
   }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
     font-family: -apple-system, "SF Pro Text", Roboto, "Helvetica Neue", system-ui, sans-serif;
@@ -40,10 +41,10 @@
   button.rot { color: var(--rot); }
   button svg { width: 20px; height: 20px; fill: currentColor; }
   .zoom { position: absolute; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; }
-  .zoom button { width: 52px; height: 52px; justify-content: center; padding: 0; }
-  .zoom button svg { width: 26px; height: 26px; }
-  .panel { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(760px, calc(100% - 120px));
-    max-height: 60%; overflow: auto; background: var(--panel); border-radius: 18px; padding: 16px 18px;
+  .zoom button { width: 56px; height: 56px; justify-content: center; padding: 0; }
+  .zoom button svg { width: 28px; height: 28px; }
+  .panel { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(780px, calc(100% - 130px));
+    max-height: 62%; overflow: auto; background: var(--panel); border-radius: 18px; padding: 16px 18px;
     box-shadow: 0 8px 30px rgba(0,0,0,0.25); display: none; }
   .panel.offen { display: block; }
   .panel h3 { margin: 0 0 10px; font-size: 17px; }
@@ -53,49 +54,62 @@
   .symbole button { flex-direction: column; font-size: 12px; font-weight: 500; color: var(--text); padding: 8px 10px; min-width: 74px; }
   .symbole button svg { width: 28px; height: 28px; }
   .symbole button.gewaehlt { background: var(--akzent); color: #fff; }
-  .arten button { flex-direction: row; font-size: 14px; min-width: 0; }
+  .arten button { flex-direction: row; font-size: 14px; }
   .arten button i { display: inline-block; width: 18px; height: 18px; border-radius: 5px; border: 1px solid var(--aus-rand); }
   .liste { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
   .liste button { justify-content: flex-start; color: var(--text); font-weight: 500; }
   .liste button small { color: var(--grau); font-weight: 400; margin-left: auto; }
   .zeile { display: flex; gap: 10px; flex-wrap: wrap; }
   .hinweis { color: var(--grau); font-size: 14px; margin-top: 8px; }
-  .kamera { position: absolute; inset: 0; background: rgba(0,0,0,0.55); display: none; flex-direction: column;
+  .meldung { position: absolute; left: 50%; top: 70px; transform: translateX(-50%); background: var(--text); color: var(--bg);
+    padding: 10px 18px; border-radius: 12px; font-size: 16px; display: none; z-index: 5; }
+  .kamera { position: absolute; inset: 0; background: rgba(0,0,0,0.6); display: none; flex-direction: column;
     align-items: center; justify-content: center; gap: 12px; padding: 20px; box-sizing: border-box; }
   .kamera.offen { display: flex; }
   .kamera-kopf { width: min(1400px, 100%); display: flex; align-items: center; gap: 10px; color: #fff; font-size: 22px; }
   .kamera img { width: min(1400px, 100%); max-height: calc(100% - 80px); object-fit: contain; border-radius: 14px; background: #000; }
-  .meldung { position: absolute; left: 50%; top: 70px; transform: translateX(-50%); background: var(--text); color: var(--bg);
-    padding: 10px 18px; border-radius: 12px; font-size: 16px; display: none; }
   /* Plan */
-  .flaeche { stroke-linejoin: round; }
-  .typ-innen .flaeche { fill: var(--boden); stroke: var(--mauer); stroke-width: 0.22; }
-  .typ-nass .flaeche { fill: url(#muster-fliese); stroke: var(--mauer); stroke-width: 0.22; }
-  .typ-gebaeude .flaeche { fill: var(--gebaeude); stroke: var(--mauer); stroke-width: 0.45; filter: url(#schatten); }
-  .typ-terrasse .flaeche { fill: url(#muster-holz); stroke: var(--holz2); stroke-width: 0.08; }
-  .typ-rasen .flaeche { fill: url(#muster-rasen); stroke: none; }
-  .typ-hof .flaeche { fill: url(#muster-hof); stroke: none; }
-  .typ-kies .flaeche { fill: url(#muster-kies); stroke: none; }
-  .raum text { fill: var(--grau); font-size: 0.62px; font-weight: 700; }
-  .typ-gebaeude text { fill: var(--mauer); font-size: 0.9px; font-weight: 800; letter-spacing: 0.08px; text-transform: uppercase; }
-  .raum .schalter { cursor: pointer; }
-  .raum.gewaehlt .flaeche { stroke: var(--akzent) !important; stroke-width: 0.3; }
-  .bearbeiten .raum .flaeche { stroke-dasharray: none; }
+  .mauer { fill: var(--mauer); }
+  .boden { fill: var(--boden); }
+  .boden.nass { fill: var(--fliese); }
+  .zone { fill: none; stroke: var(--aus-rand); stroke-width: 0.03; stroke-dasharray: 0.15 0.12; }
+  .fenster { fill: var(--boden); stroke: var(--fenster); stroke-width: 0.05; }
+  .tuer-oeffnung { fill: var(--boden); }
+  .tuer { fill: none; stroke: var(--tuer); stroke-width: 0.03; }
+  .treppe { fill: none; stroke: var(--tuer); stroke-width: 0.025; }
+  .raumname { fill: var(--grau); font-size: 0.34px; font-weight: 700; }
+  .gebaeudename { fill: var(--mauer); font-size: 0.55px; font-weight: 800; letter-spacing: 0.05px; }
+  .flaeche.typ-innen { fill: var(--boden); stroke: var(--mauer); stroke-width: 0.15; }
+  .flaeche.typ-nass { fill: var(--fliese); stroke: var(--mauer); stroke-width: 0.15; }
+  .flaeche.typ-gebaeude { fill: var(--gebaeude); stroke: var(--mauer); stroke-width: 0.3; }
+  .flaeche.typ-terrasse { fill: var(--holz); stroke: none; }
+  .flaeche.typ-rasen { fill: var(--rasen); stroke: none; }
+  .flaeche.typ-hof { fill: var(--hof); stroke: none; }
+  .flaeche.typ-kies { fill: var(--kies); stroke: none; }
+  .gewaehlt .flaeche, .gewaehlt.flaeche { stroke: var(--akzent) !important; stroke-width: 0.12; }
   .wand { fill: var(--akzent); fill-opacity: 0; }
   .wand.aktiv { fill-opacity: 0.4; }
-  .lampe circle { fill: var(--aus); stroke: var(--aus-rand); stroke-width: 0.06; }
+  .lampe circle { fill: var(--aus); stroke: var(--aus-rand); stroke-width: 0.03; }
   .lampe.an circle { fill: var(--an); stroke: none; }
   .lampe path { fill: var(--symbol-aus); }
   .lampe.an path { fill: #3A2E00; }
-  .lampe text { fill: var(--text); font-size: 0.42px; font-weight: 600; text-anchor: middle; paint-order: stroke;
-    stroke: var(--boden); stroke-width: 0.12px; stroke-linejoin: round; }
+  .lampe.kam circle { fill: #1C1C1E; stroke: none; }
+  .lampe.kam path { fill: #fff; }
+  .lampe text { fill: var(--text); font-size: 0.26px; font-weight: 600; text-anchor: middle; paint-order: stroke;
+    stroke: var(--boden); stroke-width: 0.07px; stroke-linejoin: round; }
   .lampe.versteckt { opacity: 0.35; }
-  .lampe.gewaehlt circle { stroke: var(--akzent); stroke-width: 0.15; }
-  .lampe.nicht-da circle { fill: none; stroke: var(--rot); stroke-dasharray: 0.2 0.15; stroke-width: 0.08; }
+  .lampe.gewaehlt circle { stroke: var(--akzent); stroke-width: 0.08; }
+  .lampe.nicht-da circle { fill: none; stroke: var(--rot); stroke-dasharray: 0.1 0.08; stroke-width: 0.04; }
 </style>
 </head>
 <body>
-<svg id="plan" xmlns="http://www.w3.org/2000/svg"></svg>
+<svg id="plan" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="lichtschein"><stop offset="0" stop-color="#FFD000" stop-opacity="0.55"/>
+      <stop offset="0.5" stop-color="#FFD000" stop-opacity="0.18"/><stop offset="1" stop-color="#FFD000" stop-opacity="0"/></radialGradient>
+  </defs>
+  <g id="inhalt"></g>
+</svg>
 <div class="leiste">
   <span class="titel">Grundriss</span><span class="info" id="info"></span>
   <span class="luecke"></span>
@@ -107,11 +121,12 @@
 </div>
 <div class="zoom"><button id="zoom-rein"></button><button id="zoom-raus"></button><button id="zoom-alles"></button></div>
 <div class="panel" id="panel"></div>
-<div class="meldung" id="meldung"></div>
 <div class="kamera" id="kamera"></div>
+<div class="meldung" id="meldung"></div>
 <script>
 const ICON = {
   kamera: "M6.03 12.03L8.03 15.5L5.5 18.68L2 12.62L6.03 12.03M17 18V15.29C17.88 14.9 18.5 14.03 18.5 13C18.5 12.43 18.3 11.9 17.97 11.5L19.94 10.35C20.95 9.76 21.3 8.47 20.71 7.46L19.33 5.06C18.74 4.05 17.45 3.7 16.44 4.28L8.31 9C7.36 9.53 7.03 10.75 7.58 11.71L9.08 14.31C9.63 15.26 10.86 15.59 11.81 15.04L13.69 13.96C13.94 14.55 14.41 15.03 15 15.29V18C15 19.1 15.9 20 17 20H22V18H17Z",
+  plan: "M10,5V10H9V5H5V13H9V12H10V17H9V14H5V19H12V17H13V19H19V17H21V21H3V3H21V15H19V10H13V15H12V9H19V5H10Z",
   decke: "M8,9H11V4H13V9H16L20,17H4L8,9M14,18A2,2 0 0,1 12,20A2,2 0 0,1 10,18H14Z",
   mehrfach: "M10 11H13V6H15V11H18L22 19H6L10 11M16 20C16 21.11 15.11 22 14 22S12 21.11 12 20H16M8.21 10.11L8.76 9H11V2H9V7H6L2 15H5.76L8.21 10.11Z",
   steh: "M15,2L17,9H7L9,2M11,10H13V20H16V22H8V20H11V10Z",
@@ -142,6 +157,52 @@ const ICON = {
   haus: "M12 5.69L17 10.19V18H15V12H9V18H7V10.19L12 5.69M12 3L2 12H5V20H11V14H13V20H19V12H22",
   foto: "M19,19H5V5H19M19,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M13.96,12.29L11.21,15.83L9.25,13.47L6.5,17H17.5L13.96,12.29Z",
 };
+
+// ================= Haupthaus nach Bauplan (Meter, Ursprung = Außenecke oben links) =================
+const A = 0.315, I = 0.15;            // Außenmauer, Innenwand
+const HAUS = { w: 19.47, h: 10.95 };
+// Räume: id, Standardname, Rechteck [x1,y1,x2,y2], nass = Fliesen
+const PLAN_RAEUME = [
+  { id: "schlafen", name: "Schlafen", r: [A, A, 4.845, 4.535], suche: /schlaf/ },
+  { id: "bad", name: "Badezimmer", r: [4.995, A, 8.385, 4.535], nass: true, suche: /^bade?zimmer$|^bad$/ },
+  { id: "kueche", name: "Küche", r: [8.535, A, 13.665, 4.6], suche: /k(ü|ue)che/ },
+  { id: "wohn", name: "Wohnzimmer", r: [8.535, 4.6, 13.665, 10.635], suche: /wohn/ },
+  { id: "tv", name: "Fernsehzimmer", r: [13.665, 7.205, 15.935, 10.635], suche: /fernseh|tv/ },
+  { id: "gaeste", name: "Gäste Bad", r: [13.815, A, 15.895, 3.975], nass: true, suche: /g(ä|ae)ste/ },
+  { id: "hwr", name: "HWR", r: [16.045, A, 19.155, 3.975], suche: /hwr|hauswirtschaft/ },
+  { id: "diele", name: "Diele", r: [13.815, 4.125, 19.155, 7.055], suche: /diele/ },
+  { id: "buero", name: "Büro", r: [16.085, 7.205, 19.155, 10.635], suche: /b(ü|ue)ro/ },
+  { id: "flur", name: "Flur", r: [3.685, 4.685, 8.385, 6.795], suche: /flur|haupthaus/ },
+  { id: "mucki", name: "Muckis Zimmer", r: [A, 4.685, 3.535, 10.635], suche: /mucki/ },
+  { id: "kind2", name: "Kind 2", r: [3.685, 6.945, 8.385, 10.635], suche: /kind/ },
+];
+// offene Übergänge (keine Wand, nur gestrichelte Zonengrenze)
+const ZONEN = [[8.535, 4.6, 13.665, 4.6], [13.665, 7.205, 13.665, 10.635]];
+// Türen: Wand "h" (waagrecht) oder "v" (senkrecht), Wandanfang, Wanddicke, Öffnung von–bis, Aufschlag-Seite (+1/-1), Anschlag vorn/hinten
+const TUEREN = [
+  { w: "h", a: 4.535, d: I, von: 3.8, bis: 4.65, seite: -1 },          // Flur → Schlafen
+  { w: "v", a: 3.535, d: I, von: 5.2, bis: 6.05, seite: -1 },          // Flur → Muckis Zimmer
+  { w: "h", a: 4.535, d: I, von: 6.3, bis: 7.15, seite: 1 },           // Bad → Flur
+  { w: "h", a: 6.795, d: I, von: 5.0, bis: 5.85, seite: 1 },           // Flur → Kind 2
+  { w: "v", a: 8.385, d: I, von: 5.1, bis: 5.95, seite: -1 },          // Wohnen → Flur
+  { w: "v", a: 13.665, d: I, von: 4.55, bis: 5.35, seite: -1 },        // Diele → Wohnen (Doppeltür)
+  { w: "v", a: 13.665, d: I, von: 5.35, bis: 6.15, seite: -1, rueck: true },
+  { w: "h", a: 3.975, d: I, von: 14.0, bis: 14.85, seite: 1 },         // Gäste Bad → Diele
+  { w: "h", a: 3.975, d: I, von: 18.1, bis: 18.95, seite: -1, rueck: true }, // Diele → HWR
+  { w: "h", a: 7.055, d: I, von: 16.9, bis: 17.75, seite: 1 },         // Diele → Büro
+  { w: "v", a: 19.155, d: A, von: 5.3, bis: 6.3, seite: -1 },          // Haustür
+  { w: "h", a: 10.635, d: A, von: 9.5, bis: 12.1, schiebe: true },     // Terrassentür (Schiebetür)
+];
+const FENSTER = [
+  ["h", 0, 1.6, 2.6], ["h", 0, 6.2, 7.2], ["h", 0, 10.0, 12.2], ["h", 0, 14.4, 15.3], ["h", 0, 17.1, 18.1],
+  ["h", 10.635, 1.4, 2.4], ["h", 10.635, 5.4, 6.4], ["h", 10.635, 14.3, 15.3], ["h", 10.635, 17.1, 18.1],
+  ["v", 0, 1.6, 2.6], ["v", 0, 6.8, 7.8], ["v", 19.155, 1.5, 2.5], ["v", 19.155, 8.4, 9.4],
+];
+const TREPPE = { x1: 15.6, y1: 4.125, x2: 18.0, y2: 5.35, stufen: 10 };
+// Lage des Original-Plans (Foto /local/grundriss.jpg, 1024×768 px) über dem Haus
+const PLANFOTO = { x: A - 143 / 35.3, y: A - 200 / 34.4, w: 1024 / 35.3, h: 768 / 34.4 };
+
+// ================= Einstellungen =================
 const SYMBOLE = [
   ["decke", "Decke"], ["mehrfach", "Mehrfach"], ["steh", "Stehlampe"], ["tisch", "Tischlampe"], ["lampe", "Lampe"],
   ["wand", "Wand"], ["wandflach", "Wand flach"], ["spot", "Spot"], ["led", "LED / Gesims"], ["birne", "Birne"],
@@ -156,24 +217,21 @@ const ARTEN = [
 const EBENE = { rasen: 0, kies: 0, hof: 0, terrasse: 1, gebaeude: 2, innen: 3, nass: 3 };
 const DATEN_URL = "/local/grundriss_daten.json";
 const FOTO_URL = "/local/grundriss.jpg";
-const RASTER = 0.5;
-const LAMPE_R = 0.6;
+const RASTER = 0.1, LAMPE_R = 0.36;
 const NS = "http://www.w3.org/2000/svg";
+const GROSSANSICHT = { draussen_hot_tor_kamera: "kamera-hof-tor", draussen_giebel_vorne: "kamera-giebel-vorne",
+  draussen_giebel_hinten: "kamera-giebel-hinten", draussen_hof_hinten: "kamera-hof-hinten" };
 
 const svg = document.getElementById("plan");
 let daten = null, gesichert = null, bearbeiten = false, auswahl = null, fotoAn = false;
-let ansicht = null;            // aktueller Ausschnitt {x,y,w,h} (Seitenverhältnis = Bildschirm)
-const finger = new Map();      // aktive Zeiger (für Zwei-Finger-Zoom)
-let zug = null;                // laufende Aktion
-let bestaetigt = {};           // Tor: erster Tipp
+let ansicht = null, zug = null, bestaetigt = {}, kameraTimer = null, rafAnsicht = 0;
+const finger = new Map();
 
-// ---------- Home Assistant ----------
+// ================= Home Assistant =================
 function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
 function sichtbar(h, id) { const e = h.entities && h.entities[id]; return !(e && (e.hidden || e.entity_category)); }
 function lichter(h) { return Object.keys(h.states).filter(id => id.startsWith("light.") && sichtbar(h, id)); }
-function kandidaten(h) {
-  return Object.keys(h.states).filter(id => /^(light|switch|camera)\./.test(id) && sichtbar(h, id));
-}
+function kandidaten(h) { return Object.keys(h.states).filter(id => /^(light|switch|camera)\./.test(id) && sichtbar(h, id)); }
 function bereichVon(h, id) {
   const e = h.entities && h.entities[id];
   if (!e) return null;
@@ -184,15 +242,14 @@ function bereichVon(h, id) {
 function bereichName(h, a) { return (a && h.areas && h.areas[a] && h.areas[a].name) || "Ohne Raum"; }
 function istAn(h, id) { return h.states[id] && h.states[id].state === "on"; }
 function schalten(h, ids, an) {
-  const liste = [].concat(ids).filter(id => h.states[id]);
+  const liste = [].concat(ids).filter(id => h.states[id] && !id.startsWith("camera."));
   if (!liste.length) return;
-  if (an === undefined) h.callService("homeassistant", "toggle", { entity_id: liste });
-  else h.callService("homeassistant", an ? "turn_on" : "turn_off", { entity_id: liste });
+  h.callService("homeassistant", an === undefined ? "toggle" : an ? "turn_on" : "turn_off", { entity_id: liste });
 }
 
-// ---------- Hilfen ----------
+// ================= Hilfen =================
 const rund = v => Math.round(v / RASTER) * RASTER;
-const neueId = () => "r" + Math.random().toString(36).slice(2, 8);
+const neueId = () => "f" + Math.random().toString(36).slice(2, 8);
 function el(tag, attrs, eltern) {
   const n = document.createElementNS(NS, tag);
   for (const k in attrs) n.setAttribute(k, attrs[k]);
@@ -201,6 +258,11 @@ function el(tag, attrs, eltern) {
 }
 function icon(name) { return `<svg viewBox="0 0 24 24"><path d="${ICON[name]}"/></svg>`; }
 function esc(t) { return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;"); }
+function meldung(text) {
+  const m = document.getElementById("meldung");
+  m.textContent = text; m.style.display = "block";
+  clearTimeout(meldung.t); meldung.t = setTimeout(() => m.style.display = "none", 2500);
+}
 function symbolRaten(text) {
   const n = (text || "").toLowerCase();
   if (/camera\./.test(n)) return "kamera";
@@ -211,7 +273,6 @@ function symbolRaten(text) {
     if (/scheune|werkstatt|stall/.test(n)) return "scheune";
     return "schalter";
   }
-  if (/steckdose|plug/.test(n)) return "steckdose";
   if (/steh/.test(n)) return "steh";
   if (/tisch|nacht|schreib/.test(n)) return "tisch";
   if (/gesims|led|streifen|strip/.test(n)) return "led";
@@ -220,190 +281,250 @@ function symbolRaten(text) {
   if (/kette/.test(n)) return "kette";
   if (/weg/.test(n)) return "weg";
   if (/au(ß|ss)en|garten|hof|terrasse|eingang|garage|haust/.test(n)) return "aussen";
-  if (/switch\./.test(n)) return "schalter";
   return "decke";
 }
-function artVon(name) { return /bad|wc|dusch/i.test(name || "") ? "nass" : /terrasse/i.test(name || "") ? "terrasse" : "innen"; }
-function meldung(text) {
-  const m = document.getElementById("meldung");
-  m.textContent = text; m.style.display = "block";
-  clearTimeout(meldung.t); meldung.t = setTimeout(() => m.style.display = "none", 2500);
+function artVon(name) {
+  const n = (name || "").toLowerCase();
+  return /terrasse/.test(n) ? "terrasse" : /drau(ß|ss)en|au(ß|ss)en|hof|garten|einfahrt/.test(n) ? "hof" : /bad|wc|dusch/.test(n) ? "nass" : "innen";
 }
-function geordnet() {
-  return daten.raeume.map((r, i) => [r, i]).sort((a, b) => (EBENE[a[0].typ] ?? 3) - (EBENE[b[0].typ] ?? 3) || a[1] - b[1]).map(x => x[0]);
+const planName = p => (daten.namen && daten.namen[p.id]) || p.name;
+const drin = (x, y, r) => x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3];
+const rechteck = f => [f.x, f.y, f.x + f.w, f.y + f.h];
+function geordneteFlaechen() {
+  return daten.flaechen.map((f, i) => [f, i]).sort((a, b) => (EBENE[a[0].typ] ?? 3) - (EBENE[b[0].typ] ?? 3) || a[1] - b[1]).map(x => x[0]);
 }
-function raumAn(x, y) {
-  // oberste Fläche an dieser Stelle, Gebäude-Umrisse nur, wenn kein Raum darin liegt
-  const liste = geordnet();
-  for (let i = liste.length - 1; i >= 0; i--) {
-    const r = liste[i];
-    if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return r;
-  }
+// Raum an einer Stelle: Räume des Haupthauses, sonst oberste Fläche
+function raumBei(x, y) {
+  const p = PLAN_RAEUME.find(p => drin(x, y, p.r));
+  if (p) return { art: "plan", id: p.id, name: planName(p), r: p.r };
+  const fl = geordneteFlaechen();
+  for (let i = fl.length - 1; i >= 0; i--) if (drin(x, y, rechteck(fl[i]))) return { art: "fl", id: fl[i].id, name: fl[i].name, r: rechteck(fl[i]) };
   return null;
 }
-function lampenIn(r) { return daten.lampen.filter(l => !l.versteckt && raumAn(l.x, l.y) === r); }
+function lampenIm(schl) {
+  return daten.lampen.filter(l => { if (l.versteckt) return false; const r = raumBei(l.x, l.y); return r && r.art + ":" + r.id === schl; });
+}
 function lampenName(h, l) {
   if (l.name) return l.name;
   const s = h.states[l.entity];
   let n = (s && s.attributes.friendly_name) || l.entity;
-  const r = raumAn(l.x, l.y);
+  const r = raumBei(l.x, l.y);
   if (r && n.toLowerCase().startsWith(r.name.toLowerCase() + " ")) n = n.slice(r.name.length + 1);
   return n;
 }
+function platzIn(r, nr) {   // Position Nr. nr in einem Rechteck, zeilenweise im Abstand von 1,2 m
+  const sp = Math.max(1, Math.floor((r[2] - r[0] - 0.4) / 1.2));
+  return { x: Math.min(r[2] - 0.4, r[0] + 0.6 + (nr % sp) * 1.2), y: Math.min(r[3] - 0.5, r[1] + 0.95 + Math.floor(nr / sp) * 1.0) };
+}
 
-// ---------- Anfangs-Grundriss / Ergänzen ----------
-function startGrundriss(h) {
-  const gruppen = {};
-  for (const id of lichter(h)) { const k = bereichVon(h, id) || "_ohne"; if (!gruppen[k]) gruppen[k] = []; gruppen[k].push(id); }
-  const ids = Object.keys(gruppen).sort((a, b) => bereichName(h, a === "_ohne" ? null : a).localeCompare(bereichName(h, b === "_ohne" ? null : b), "de"));
-  const d = { version: 2, raeume: [], lampen: [] };
-  let x = 0, y = 0, zeilenH = 0;
-  for (const a of ids) {
-    const n = gruppen[a].length, spalten = Math.min(3, n), zeilen = Math.ceil(n / 3);
-    const w = Math.max(8, spalten * 3.3 + 0.6), hh = Math.max(6, zeilen * 3 + 2.4);
-    if (x + w > 48) { x = 0; y += zeilenH; zeilenH = 0; }
-    const name = bereichName(h, a === "_ohne" ? null : a);
-    d.raeume.push({ id: neueId(), name, typ: artVon(name), bereich: a === "_ohne" ? null : a, x, y, w, h: hh });
-    gruppen[a].forEach((id, i) => d.lampen.push({ entity: id, x: x + 1.9 + (i % 3) * 3.3, y: y + 3.2 + Math.floor(i / 3) * 3,
-      icon: symbolRaten((h.states[id].attributes.friendly_name || "") + " " + id) }));
-    x += w; zeilenH = Math.max(zeilenH, hh);
+// ================= Daten anlegen / umstellen =================
+function neuerStand() { return { version: 3, namen: {}, flaechen: [], lampen: [] }; }
+function planRaumFuer(name) {
+  const n = (name || "").toLowerCase().trim();
+  if (!n || /scheune/.test(n)) return null;
+  return PLAN_RAEUME.find(p => p.suche.test(n)) || null;
+}
+function zusatzFlaecheFuer(name) {
+  let f = daten.flaechen.find(f => f.name === name);
+  if (!f) {
+    const unten = daten.flaechen.filter(f => f.x >= HAUS.w).reduce((m, f) => Math.max(m, f.y + f.h + 0.6), 0);
+    f = { id: neueId(), name, typ: artVon(name), x: HAUS.w + 2, y: unten, w: 5, h: 3.5 };
+    daten.flaechen.push(f);
+  }
+  return f;
+}
+function lampeEinsetzen(h, id) {
+  const bereich = bereichName(h, bereichVon(h, id));
+  const p = planRaumFuer(bereich);
+  const r = p ? p.r : rechteck(zusatzFlaecheFuer(bereich));
+  const nr = daten.lampen.filter(l => drin(l.x, l.y, r)).length;
+  daten.lampen.push({ ...platzIn(r, nr), entity: id, icon: symbolRaten((h.states[id].attributes.friendly_name || "") + " " + id) });
+}
+// Anordnung aus der Kästchen-Version (1/2) übernehmen: Räume per Namen dem Bauplan zuordnen
+function umstellen(alt) {
+  const d = neuerStand();
+  const raeume = alt.raeume || [];
+  const paare = [], benutzt = new Set();
+  for (const r of raeume) {
+    if (r.typ === "gebaeude") continue;
+    const p = planRaumFuer(r.name);
+    if (p && !benutzt.has(p.id)) { benutzt.add(p.id); paare.push({ alt: r, p }); d.namen[p.id] = r.name; }
+  }
+  // Umrechnung für alles Übrige: Umriss der zugeordneten Räume alt → neu
+  let t = v => v;
+  const ax1 = Math.min(...paare.map(q => q.alt.x)), ay1 = Math.min(...paare.map(q => q.alt.y));
+  const ax2 = Math.max(...paare.map(q => q.alt.x + q.alt.w)), ay2 = Math.max(...paare.map(q => q.alt.y + q.alt.h));
+  const nx1 = Math.min(...paare.map(q => q.p.r[0])), ny1 = Math.min(...paare.map(q => q.p.r[1]));
+  const nx2 = Math.max(...paare.map(q => q.p.r[2])), ny2 = Math.max(...paare.map(q => q.p.r[3]));
+  const sx = paare.length ? (nx2 - nx1) / (ax2 - ax1) : 0.55, sy = paare.length ? (ny2 - ny1) / (ay2 - ay1) : 0.55;
+  const tx = x => paare.length ? nx1 + (x - ax1) * sx : x * sx, ty = y => paare.length ? ny1 + (y - ay1) * sy : y * sy;
+  for (const r of raeume) {
+    if (paare.some(q => q.alt === r)) continue;
+    if (r.typ === "gebaeude" && /haupthaus/i.test(r.name)) continue;
+    d.flaechen.push({ id: r.id || neueId(), name: r.name, typ: r.typ || artVon(r.name),
+      x: rund(tx(r.x)), y: rund(ty(r.y)), w: rund(r.w * sx), h: rund(r.h * sy) });
+  }
+  // Scheune: Gebäude-Umriss um ihre Räume
+  const scheune = d.flaechen.filter(f => /scheune/i.test(f.name) && f.typ !== "gebaeude");
+  if (scheune.length && !d.flaechen.some(f => f.typ === "gebaeude" && /scheune/i.test(f.name))) {
+    const x1 = Math.min(...scheune.map(f => f.x)), y1 = Math.min(...scheune.map(f => f.y));
+    const x2 = Math.max(...scheune.map(f => f.x + f.w)), y2 = Math.max(...scheune.map(f => f.y + f.h));
+    d.flaechen.unshift({ id: neueId(), name: "Scheune", typ: "gebaeude", x: x1 - 0.3, y: y1 - 0.3, w: x2 - x1 + 0.6, h: y2 - y1 + 0.6 });
+  }
+  // Lampen: in zugeordneten Räumen an dieselbe relative Stelle, sonst umrechnen
+  for (const l of alt.lampen || []) {
+    const r = [...raeume].reverse().find(r => r.typ !== "gebaeude" && l.x >= r.x && l.x <= r.x + r.w && l.y >= r.y && l.y <= r.y + r.h);
+    const q = r && paare.find(q => q.alt === r);
+    let x, y;
+    if (q) {
+      const u = (l.x - r.x) / r.w, v = (l.y - r.y) / r.h, [a, b, c, e] = q.p.r;
+      x = a + 0.35 + u * (c - a - 0.7); y = b + 0.35 + v * (e - b - 0.7);
+    } else { x = tx(l.x); y = ty(l.y); }
+    d.lampen.push({ ...l, x: Math.round(x * 20) / 20, y: Math.round(y * 20) / 20 });
   }
   return d;
 }
-function geraetEinsetzen(h, id, r) {
-  const drin = daten.lampen.filter(l => l.x >= r.x && l.x <= r.x + r.w && l.y >= r.y && l.y <= r.y + r.h).length;
-  daten.lampen.push({ entity: id, x: Math.min(r.x + r.w - 1, r.x + 1.9 + (drin % 3) * 3.3),
-    y: Math.min(r.y + r.h - 1, r.y + 3.2 + Math.floor(drin / 3) * 3),
-    icon: symbolRaten((h.states[id].attributes.friendly_name || "") + " " + id) });
-}
-function neueLampenErgaenzen(h) {
+function ergaenzen(h) {
   const bekannt = new Set(daten.lampen.map(l => l.entity));
-  for (const id of lichter(h)) {
-    if (bekannt.has(id)) continue;
-    const a = bereichVon(h, id);
-    let r = daten.raeume.find(r => r.bereich && r.bereich === a) || daten.raeume.find(r => r.name === bereichName(h, a));
-    if (!r) {
-      const b = inhaltsBox();
-      r = { id: neueId(), name: bereichName(h, a), typ: "innen", bereich: a, x: b.x, y: b.y + b.h + 1, w: 8, h: 6 };
-      daten.raeume.push(r);
-    }
-    geraetEinsetzen(h, id, r);
-  }
-  for (const r of daten.raeume) if (!r.typ) r.typ = artVon(r.name);
+  for (const id of lichter(h)) if (!bekannt.has(id)) lampeEinsetzen(h, id);
 }
 
-// ---------- Ausschnitt / Zoom ----------
+// ================= Ausschnitt / Zoom (nur viewBox ändern = flüssig) =================
 function inhaltsBox() {
-  let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
-  for (const r of daten.raeume) { x1 = Math.min(x1, r.x); y1 = Math.min(y1, r.y); x2 = Math.max(x2, r.x + r.w); y2 = Math.max(y2, r.y + r.h); }
-  for (const l of daten.lampen) { x1 = Math.min(x1, l.x - 1); y1 = Math.min(y1, l.y - 1); x2 = Math.max(x2, l.x + 1); y2 = Math.max(y2, l.y + 1.4); }
-  if (!isFinite(x1)) return { x: 0, y: 0, w: 40, h: 24 };
+  let x1 = 0, y1 = 0, x2 = HAUS.w, y2 = HAUS.h + 0.8;
+  for (const f of daten.flaechen) { x1 = Math.min(x1, f.x); y1 = Math.min(y1, f.y); x2 = Math.max(x2, f.x + f.w); y2 = Math.max(y2, f.y + f.h); }
+  for (const l of daten.lampen) { x1 = Math.min(x1, l.x - 0.5); y1 = Math.min(y1, l.y - 0.5); x2 = Math.max(x2, l.x + 0.5); y2 = Math.max(y2, l.y + 0.7); }
   return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
 }
-function seitenverhaeltnis() { const r = svg.getBoundingClientRect(); return (r.width || 16) / (r.height || 9); }
 function allesZeigen() {
-  const b = inhaltsBox(), a = seitenverhaeltnis();
-  let w = b.w + 3, h = b.h + 6;  // oben Platz für die Knopfleiste
+  const b = inhaltsBox(), rect = svg.getBoundingClientRect(), a = (rect.width || 16) / (rect.height || 9);
+  let w = b.w + 1.5, h = b.h + 3.2;
   if (w / h > a) h = w / a; else w = h * a;
-  ansicht = { x: b.x + b.w / 2 - w / 2, y: b.y + b.h / 2 - h / 2 - 1.2, w, h };
+  ansicht = { x: b.x + b.w / 2 - w / 2, y: b.y + b.h / 2 - h / 2 - 0.7, w, h };
+  ansichtSetzen();
+}
+function ansichtSetzen() {
+  if (rafAnsicht) return;
+  rafAnsicht = requestAnimationFrame(() => { rafAnsicht = 0; svg.setAttribute("viewBox", `${ansicht.x} ${ansicht.y} ${ansicht.w} ${ansicht.h}`); });
 }
 function zoomen(faktor, cx, cy) {
   const rect = svg.getBoundingClientRect();
   const wx = ansicht.x + (cx - rect.left) / rect.width * ansicht.w, wy = ansicht.y + (cy - rect.top) / rect.height * ansicht.h;
-  const w = Math.min(400, Math.max(4, ansicht.w * faktor)), f = w / ansicht.w;
+  const w = Math.min(250, Math.max(2, ansicht.w * faktor)), f = w / ansicht.w;
   ansicht = { x: wx - (wx - ansicht.x) * f, y: wy - (wy - ansicht.y) * f, w, h: ansicht.h * f };
-  zeichnen();
+  ansichtSetzen();
 }
 function weltPunkt(ev) {
   const rect = svg.getBoundingClientRect();
   return { x: ansicht.x + (ev.clientX - rect.left) / rect.width * ansicht.w, y: ansicht.y + (ev.clientY - rect.top) / rect.height * ansicht.h };
 }
 
-// ---------- Zeichnen ----------
-function muster(defs) {
-  defs.innerHTML = `
-    <pattern id="muster-rasen" width="0.6" height="0.6" patternUnits="userSpaceOnUse">
-      <rect width="0.6" height="0.6" fill="var(--rasen)"/><circle cx="0.15" cy="0.2" r="0.05" fill="var(--rasen2)"/>
-      <circle cx="0.45" cy="0.48" r="0.05" fill="var(--rasen2)"/></pattern>
-    <pattern id="muster-hof" width="0.8" height="0.4" patternUnits="userSpaceOnUse">
-      <rect width="0.8" height="0.4" fill="var(--hof)"/><path d="M0 0H0.8M0.4 0V0.2M0 0.2H0.8M0.2 0.2V0.4M0.6 0.2V0.4" stroke="var(--hof2)" stroke-width="0.03"/></pattern>
-    <pattern id="muster-kies" width="0.5" height="0.5" patternUnits="userSpaceOnUse">
-      <rect width="0.5" height="0.5" fill="var(--kies)"/><circle cx="0.1" cy="0.12" r="0.04" fill="var(--kies2)"/>
-      <circle cx="0.35" cy="0.3" r="0.05" fill="var(--kies2)"/><circle cx="0.2" cy="0.42" r="0.03" fill="var(--kies2)"/></pattern>
-    <pattern id="muster-holz" width="1" height="0.35" patternUnits="userSpaceOnUse">
-      <rect width="1" height="0.35" fill="var(--holz)"/><path d="M0 0.34H1" stroke="var(--holz2)" stroke-width="0.03"/></pattern>
-    <pattern id="muster-fliese" width="0.6" height="0.6" patternUnits="userSpaceOnUse">
-      <rect width="0.6" height="0.6" fill="var(--fliese)"/><path d="M0 0H0.6M0 0V0.6" stroke="var(--aus-rand)" stroke-width="0.02" opacity="0.6"/></pattern>
-    <radialGradient id="lichtschein"><stop offset="0" stop-color="#FFD000" stop-opacity="0.55"/>
-      <stop offset="0.5" stop-color="#FFD000" stop-opacity="0.18"/><stop offset="1" stop-color="#FFD000" stop-opacity="0"/></radialGradient>
-    <filter id="schatten" x="-5%" y="-5%" width="110%" height="115%"><feDropShadow dx="0" dy="0.15" stdDeviation="0.25" flood-opacity="0.25"/></filter>`;
+// ================= Zeichnen =================
+function zeichneFlaeche(f, g) {
+  const sel = auswahl && auswahl.art === "fl" && auswahl.id === f.id;
+  const gr = el("g", { class: sel ? "gewaehlt" : "", "data-flaeche": f.id }, g);
+  el("rect", { class: `flaeche typ-${f.typ || "innen"}`, x: f.x, y: f.y, width: f.w, height: f.h, rx: 0.05 }, gr);
+  const gebaeude = f.typ === "gebaeude";
+  const t = el("text", { class: gebaeude ? "gebaeudename" : "raumname", x: f.x + 0.2, y: gebaeude ? f.y + f.h + 0.6 : f.y + 0.45,
+    "data-raumschalter": "fl:" + f.id }, gr);
+  t.textContent = gebaeude ? f.name.toUpperCase() : f.name;
+  const gross = gebaeude ? 0.55 : 0.34, passt = (f.w - 0.35) / Math.max(1, f.name.length * (gebaeude ? 0.78 : 0.64));
+  if (passt < gross) t.style.fontSize = Math.max(0.14, passt) + "px";
+  if (bearbeiten) {
+    const d = 0.35;
+    el("rect", { class: "wand", "data-wand": "o", x: f.x, y: f.y - d / 2, width: f.w, height: d }, gr);
+    el("rect", { class: "wand", "data-wand": "u", x: f.x, y: f.y + f.h - d / 2, width: f.w, height: d }, gr);
+    el("rect", { class: "wand", "data-wand": "l", x: f.x - d / 2, y: f.y, width: d, height: f.h }, gr);
+    el("rect", { class: "wand", "data-wand": "r", x: f.x + f.w - d / 2, y: f.y, width: d, height: f.h }, gr);
+  }
+}
+function zeichneHaus(g) {
+  el("rect", { class: "mauer", x: 0, y: 0, width: HAUS.w, height: HAUS.h }, g);
+  for (const p of PLAN_RAEUME) {
+    const [a, b, c, d] = p.r;
+    el("rect", { class: "boden" + (p.nass ? " nass" : ""), x: a, y: b, width: c - a, height: d - b, "data-plan": p.id }, g);
+  }
+  for (const [a, b, c, d] of ZONEN) el("line", { class: "zone", x1: a, y1: b, x2: c, y2: d }, g);
+  // Fenster: Öffnung in der Außenmauer mit zwei Glaslinien
+  for (const [w, a, von, bis] of FENSTER) {
+    const r = w === "h" ? { x: von, y: a, width: bis - von, height: A } : { x: a, y: von, width: A, height: bis - von };
+    el("rect", { class: "fenster", ...r }, g);
+    if (w === "h") el("line", { class: "fenster", x1: von, y1: a + A / 2, x2: bis, y2: a + A / 2 }, g);
+    else el("line", { class: "fenster", x1: a + A / 2, y1: von, x2: a + A / 2, y2: bis }, g);
+  }
+  // Türen: Öffnung + Türblatt + Aufschlagbogen
+  for (const t of TUEREN) {
+    const b = t.bis - t.von;
+    if (t.w === "h") {
+      el("rect", { class: "tuer-oeffnung", x: t.von, y: t.a - 0.01, width: b, height: t.d + 0.02 }, g);
+      if (t.schiebe) { el("line", { class: "tuer", x1: t.von, y1: t.a + t.d * 0.35, x2: t.von + b * 0.55, y2: t.a + t.d * 0.35 }, g);
+        el("line", { class: "tuer", x1: t.bis - b * 0.55, y1: t.a + t.d * 0.65, x2: t.bis, y2: t.a + t.d * 0.65 }, g); continue; }
+      const ya = t.seite > 0 ? t.a + t.d : t.a, sx = t.rueck ? t.bis : t.von, ex = t.rueck ? t.von : t.bis;
+      el("path", { class: "tuer", d: `M${sx} ${ya} L${sx} ${ya + t.seite * b} A${b} ${b} 0 0 ${(t.seite > 0) !== !!t.rueck ? 0 : 1} ${ex} ${ya}` }, g);
+    } else {
+      el("rect", { class: "tuer-oeffnung", x: t.a - 0.01, y: t.von, width: t.d + 0.02, height: b }, g);
+      const xa = t.seite > 0 ? t.a + t.d : t.a, sy = t.rueck ? t.bis : t.von, ey = t.rueck ? t.von : t.bis;
+      el("path", { class: "tuer", d: `M${xa} ${sy} L${xa + t.seite * b} ${sy} A${b} ${b} 0 0 ${(t.seite > 0) !== !!t.rueck ? 1 : 0} ${xa} ${ey}` }, g);
+    }
+  }
+  // Treppe
+  const tr = TREPPE, st = (tr.x2 - tr.x1) / tr.stufen;
+  el("rect", { class: "treppe", x: tr.x1, y: tr.y1, width: tr.x2 - tr.x1, height: tr.y2 - tr.y1 }, g);
+  for (let i = 1; i < tr.stufen; i++) el("line", { class: "treppe", x1: tr.x1 + i * st, y1: tr.y1, x2: tr.x1 + i * st, y2: tr.y2 }, g);
+  el("path", { class: "treppe", d: `M${tr.x1 + 0.1} ${(tr.y1 + tr.y2) / 2} H${tr.x2 - 0.25} m-0.2 -0.12 l0.2 0.12 l-0.2 0.12` }, g);
+  // Raumnamen
+  for (const p of PLAN_RAEUME) {
+    const n = planName(p), w = p.r[2] - p.r[0];
+    const t = el("text", { class: "raumname", x: p.r[0] + 0.18, y: p.r[1] + 0.45, "data-raumschalter": "plan:" + p.id }, g);
+    t.textContent = n;
+    const passt = (w - 0.35) / Math.max(1, n.length * 0.64);
+    if (passt < 0.34) t.style.fontSize = Math.max(0.14, passt) + "px";
+  }
+  el("text", { class: "gebaeudename", x: 0.1, y: HAUS.h + 0.65 }, g).textContent = "HAUPTHAUS";
 }
 function zeichnen() {
   const h = hass();
   if (!h || !daten) return;
   if (!ansicht) allesZeigen();
   document.documentElement.classList.toggle("dunkel", !!(h.themes && h.themes.darkMode));
-  svg.setAttribute("viewBox", `${ansicht.x} ${ansicht.y} ${ansicht.w} ${ansicht.h}`);
-  svg.setAttribute("preserveAspectRatio", "none");
-  svg.classList.toggle("bearbeiten", bearbeiten);
-  svg.innerHTML = "";
-  muster(el("defs", {}, svg));
-
-  if (bearbeiten && fotoAn) {
-    if (!daten.foto) { const b = inhaltsBox(); daten.foto = { x: b.x, y: b.y, w: b.w, h: b.h }; }
-    el("image", { href: FOTO_URL, x: daten.foto.x, y: daten.foto.y, width: daten.foto.w, height: daten.foto.h || daten.foto.w * 0.6,
-      opacity: 0.4, preserveAspectRatio: "xMidYMid meet" }, svg);
-  }
-  // Flächen und Räume (Außenflächen unten, Gebäude darüber, Räume oben)
-  for (const r of geordnet()) {
-    const g = el("g", { class: `raum typ-${r.typ || "innen"}` + (auswahl && auswahl.art === "raum" && auswahl.id === r.id ? " gewaehlt" : ""),
-      "data-raum": r.id }, svg);
-    el("rect", { class: "flaeche", x: r.x, y: r.y, width: r.w, height: r.h, rx: r.typ === "gebaeude" ? 0.1 : 0.05 }, g);
-    const t = el("text", { x: r.x + 0.45, y: r.y + (r.typ === "gebaeude" ? r.h + 1.05 : 0.95), class: "schalter", "data-raumschalter": r.id }, g);
-    t.textContent = r.name;
-    // lange Namen in schmalen Räumen kleiner schreiben, damit sie hineinpassen
-    const gross = r.typ === "gebaeude" ? 0.9 : 0.62;
-    const passend = (r.w - 0.7) / Math.max(1, r.name.length * (r.typ === "gebaeude" ? 0.75 : 0.6));
-    if (passend < gross) t.style.fontSize = Math.max(0.3, passend) + "px";
-    if (bearbeiten) {
-      const d = 0.5;
-      el("rect", { class: "wand", "data-wand": "o", x: r.x, y: r.y - d / 2, width: r.w, height: d }, g);
-      el("rect", { class: "wand", "data-wand": "u", x: r.x, y: r.y + r.h - d / 2, width: r.w, height: d }, g);
-      el("rect", { class: "wand", "data-wand": "l", x: r.x - d / 2, y: r.y, width: d, height: r.h }, g);
-      el("rect", { class: "wand", "data-wand": "r", x: r.x + r.w - d / 2, y: r.y, width: d, height: r.h }, g);
-    }
-  }
-  // Lichtschein eingeschalteter Lampen
-  const schein = el("g", { "pointer-events": "none" }, svg);
+  const g = document.createElementNS(NS, "g");
+  const fl = geordneteFlaechen();
+  for (const f of fl) if (EBENE[f.typ] <= 2) zeichneFlaeche(f, g);
+  zeichneHaus(g);
+  for (const f of fl) if (!(EBENE[f.typ] <= 2)) zeichneFlaeche(f, g);
+  if (fotoAn) el("image", { href: FOTO_URL, x: PLANFOTO.x, y: PLANFOTO.y, width: PLANFOTO.w, height: PLANFOTO.h,
+    opacity: 0.5, preserveAspectRatio: "none", "pointer-events": "none" }, g);
+  // Lichtschein
+  const schein = el("g", { "pointer-events": "none" }, g);
   let an = 0;
   for (const l of daten.lampen) {
     if (l.versteckt || !istAn(h, l.entity)) continue;
     an++;
-    if (l.entity.startsWith("light.") || l.icon !== "tor") el("circle", { cx: l.x, cy: l.y, r: 3.2, fill: "url(#lichtschein)" }, schein);
+    if (l.entity.startsWith("light.")) el("circle", { cx: l.x, cy: l.y, r: 1.8, fill: "url(#lichtschein)" }, schein);
   }
-  // Lampen und Schalter
   daten.lampen.forEach((l, i) => {
     if (l.versteckt && !bearbeiten) return;
-    const vorhanden = !!h.states[l.entity], ein = vorhanden && istAn(h, l.entity);
-    const g = el("g", { class: "lampe" + (ein ? " an" : "") + (l.versteckt ? " versteckt" : "") + (vorhanden ? "" : " nicht-da") +
-      (auswahl && auswahl.art === "lampe" && auswahl.id === i ? " gewaehlt" : ""), "data-lampe": i, transform: `translate(${l.x} ${l.y})` }, svg);
-    el("circle", { r: LAMPE_R }, g);
-    el("path", { d: ICON[l.icon] || ICON.decke, transform: "translate(-0.42 -0.42) scale(0.035)" }, g);
+    const da = !!h.states[l.entity], ein = da && istAn(h, l.entity), kam = l.entity.startsWith("camera.");
+    const gr = el("g", { class: "lampe" + (ein ? " an" : "") + (kam ? " kam" : "") + (l.versteckt ? " versteckt" : "") + (da ? "" : " nicht-da") +
+      (auswahl && auswahl.art === "lampe" && auswahl.id === i ? " gewaehlt" : ""), "data-lampe": i, transform: `translate(${l.x} ${l.y})` }, g);
+    el("circle", { r: LAMPE_R }, gr);
+    el("path", { d: ICON[l.icon] || ICON.decke, transform: "translate(-0.25 -0.25) scale(0.0208)" }, gr);
     const name = lampenName(h, l);
-    el("text", { y: LAMPE_R + 0.55 }, g).textContent = name.length > 18 ? name.slice(0, 17) + "…" : name;
+    el("text", { y: LAMPE_R + 0.3 }, gr).textContent = name.length > 20 ? name.slice(0, 19) + "…" : name;
   });
+  g.id = "inhalt"; document.getElementById("inhalt").replaceWith(g);
   document.getElementById("info").textContent = bearbeiten
-    ? "Bearbeiten: Kanten ziehen = Wände · Mitte ziehen = verschieben · antippen = Name, Art, Symbol"
+    ? "Bearbeiten: Lampen ziehen · antippen = Name/Symbol · Flächen: Kanten = Größe, Mitte = verschieben"
     : (an === 0 ? "Alles aus" : an === 1 ? "1 an" : an + " an") + " · Raumname antippen = ganzer Raum";
 }
 
-// ---------- Bedienung ----------
+// ================= Bedienung =================
 svg.addEventListener("wheel", ev => { ev.preventDefault(); zoomen(ev.deltaY > 0 ? 1.15 : 1 / 1.15, ev.clientX, ev.clientY); }, { passive: false });
 svg.addEventListener("pointerdown", ev => {
   if (!hass() || !daten) return;
   svg.setPointerCapture(ev.pointerId);
   finger.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
-  if (finger.size === 2) {         // Zwei Finger: zoomen
+  if (finger.size === 2) {
     const [a, b] = [...finger.values()];
     zug = { art: "zwei", d0: Math.hypot(a.x - b.x, a.y - b.y), m0: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, a0: { ...ansicht } };
     return;
@@ -411,29 +532,33 @@ svg.addEventListener("pointerdown", ev => {
   if (finger.size > 2) return;
   const p = weltPunkt(ev);
   const lampeEl = ev.target.closest("[data-lampe]"), wandEl = ev.target.closest("[data-wand]");
-  const raumEl = ev.target.closest("[data-raum]"), schalterEl = ev.target.closest("[data-raumschalter]");
+  const flEl = ev.target.closest("[data-flaeche]"), planEl = ev.target.closest("[data-plan]");
+  const schalterEl = ev.target.closest("[data-raumschalter]");
   const basis = { start: p, sx: ev.clientX, sy: ev.clientY, a0: { ...ansicht }, bewegt: false };
   if (!bearbeiten) {
     zug = { ...basis, art: "schieben", tipp: lampeEl ? { lampe: +lampeEl.dataset.lampe } : schalterEl ? { raum: schalterEl.dataset.raumschalter } : null };
   } else if (lampeEl) {
     const i = +lampeEl.dataset.lampe, l = daten.lampen[i];
     zug = { ...basis, art: "lampe", i, dx: p.x - l.x, dy: p.y - l.y };
-  } else if (wandEl && raumEl) {
-    const r = daten.raeume.find(r => r.id === raumEl.dataset.raum);
+  } else if (wandEl && flEl) {
+    const f = daten.flaechen.find(f => f.id === flEl.dataset.flaeche);
     const seite = wandEl.dataset.wand, gegen = { o: "u", u: "o", l: "r", r: "l" }[seite];
     const kante = (q, s) => s === "o" ? q.y : s === "u" ? q.y + q.h : s === "l" ? q.x : q.x + q.w;
-    const ueberlappt = q => (seite === "o" || seite === "u") ? q.x < r.x + r.w && q.x + q.w > r.x : q.y < r.y + r.h && q.y + q.h > r.y;
-    const nachbarn = daten.raeume.filter(q => q !== r && EBENE[q.typ] === EBENE[r.typ] && ueberlappt(q) &&
-      Math.abs(kante(q, gegen) - kante(r, seite)) < 0.01).map(q => ({ q, seite: gegen }));
-    zug = { ...basis, art: "wand", r, teile: [{ q: r, seite }, ...nachbarn] };
+    const ueberlappt = q => (seite === "o" || seite === "u") ? q.x < f.x + f.w && q.x + q.w > f.x : q.y < f.y + f.h && q.y + q.h > f.y;
+    const nachbarn = daten.flaechen.filter(q => q !== f && EBENE[q.typ] === EBENE[f.typ] && ueberlappt(q) &&
+      Math.abs(kante(q, gegen) - kante(f, seite)) < 0.01).map(q => ({ q, seite: gegen }));
+    zug = { ...basis, art: "wand", f, teile: [{ q: f, seite }, ...nachbarn] };
     wandEl.classList.add("aktiv");
-  } else if (raumEl) {
-    const r = daten.raeume.find(r => r.id === raumEl.dataset.raum);
-    const mitRaeume = r.typ === "gebaeude" ? daten.raeume.filter(q => q !== r && q.x >= r.x && q.y >= r.y && q.x + q.w <= r.x + r.w && q.y + q.h <= r.y + r.h) : [];
-    const mitLampen = daten.lampen.filter(l => l.x >= r.x && l.x <= r.x + r.w && l.y >= r.y && l.y <= r.y + r.h);
-    zug = { ...basis, art: "raum", r, alt: [r, ...mitRaeume].map(q => ({ q, x: q.x, y: q.y })), lampenAlt: mitLampen.map(l => ({ l, x: l.x, y: l.y })) };
+  } else if (flEl) {
+    const f = daten.flaechen.find(f => f.id === flEl.dataset.flaeche);
+    const r = rechteck(f);
+    const mit = f.typ === "gebaeude" ? daten.flaechen.filter(q => q !== f && q.x >= f.x && q.y >= f.y && q.x + q.w <= f.x + f.w && q.y + q.h <= f.y + f.h) : [];
+    zug = { ...basis, art: "flaeche", f, alt: [f, ...mit].map(q => ({ q, x: q.x, y: q.y })),
+      lampenAlt: daten.lampen.filter(l => drin(l.x, l.y, r)).map(l => ({ l, x: l.x, y: l.y })) };
+  } else if (planEl) {
+    zug = { ...basis, art: "schieben", planRaum: planEl.dataset.plan };
   } else {
-    zug = { ...basis, art: "schieben", tipp: { leer: true } };
+    zug = { ...basis, art: "schieben" };
   }
 });
 svg.addEventListener("pointermove", ev => {
@@ -444,26 +569,32 @@ svg.addEventListener("pointermove", ev => {
     if (finger.size < 2) return;
     const [a, b] = [...finger.values()];
     const d = Math.hypot(a.x - b.x, a.y - b.y) || 1, m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-    const f = Math.min(400 / zug.a0.w, Math.max(4 / zug.a0.w, zug.d0 / d));
+    const f = Math.min(250 / zug.a0.w, Math.max(2 / zug.a0.w, zug.d0 / d));
     const wx = zug.a0.x + (zug.m0.x - rect.left) / rect.width * zug.a0.w, wy = zug.a0.y + (zug.m0.y - rect.top) / rect.height * zug.a0.h;
     const w = zug.a0.w * f, hh = zug.a0.h * f;
     ansicht = { x: wx - (m.x - rect.left) / rect.width * w, y: wy - (m.y - rect.top) / rect.height * hh, w, h: hh };
-    zeichnen(); return;
+    ansichtSetzen(); return;
   }
-  if (!zug.bewegt && Math.hypot(ev.clientX - zug.sx, ev.clientY - zug.sy) < 8) return;
+  if (!zug.bewegt && Math.hypot(ev.clientX - zug.sx, ev.clientY - zug.sy) < 10) return;
   zug.bewegt = true;
-  const p = weltPunkt(ev);
   if (zug.art === "schieben") {
     ansicht = { ...zug.a0, x: zug.a0.x - (ev.clientX - zug.sx) / rect.width * zug.a0.w, y: zug.a0.y - (ev.clientY - zug.sy) / rect.height * zug.a0.h };
-  } else if (zug.art === "lampe") {
+    ansichtSetzen(); return;
+  }
+  const p = weltPunkt(ev);
+  if (zug.art === "lampe") {
     const l = daten.lampen[zug.i];
-    l.x = Math.round((p.x - zug.dx) * 4) / 4; l.y = Math.round((p.y - zug.dy) * 4) / 4;
-  } else if (zug.art === "raum") {
+    l.x = Math.round((p.x - zug.dx) * 20) / 20; l.y = Math.round((p.y - zug.dy) * 20) / 20;
+    const g = svg.querySelector(`[data-lampe="${zug.i}"]`);
+    if (g) g.setAttribute("transform", `translate(${l.x} ${l.y})`);   // nur verschieben, nicht alles neu zeichnen
+    return;
+  }
+  if (zug.art === "flaeche") {
     const dx = rund(p.x - zug.start.x), dy = rund(p.y - zug.start.y);
     for (const a of zug.alt) { a.q.x = a.x + dx; a.q.y = a.y + dy; }
     for (const a of zug.lampenAlt) { a.l.x = a.x + dx; a.l.y = a.y + dy; }
   } else if (zug.art === "wand") {
-    const MIN = 1;
+    const MIN = 0.6;
     for (const { q: r, seite } of zug.teile) {
       if (seite === "o") { const u = r.y + r.h; r.y = Math.min(rund(p.y), u - MIN); r.h = u - r.y; }
       if (seite === "u") r.h = Math.max(MIN, rund(p.y) - r.y);
@@ -471,45 +602,41 @@ svg.addEventListener("pointermove", ev => {
       if (seite === "r") r.w = Math.max(MIN, rund(p.x) - r.x);
     }
   }
-  zeichnen();
+  zeichnenBald();
 });
+function zeichnenBald() { if (zeichnenBald.t) return; zeichnenBald.t = requestAnimationFrame(() => { zeichnenBald.t = 0; zeichnen(); }); }
 function loslassen(ev) {
   finger.delete(ev.pointerId);
   if (!zug) return;
   if (zug.art === "zwei") { if (finger.size === 0) zug = null; return; }
-  if (!zug.bewegt) {
-    const h = hass();
-    if (!bearbeiten && zug.tipp) {
-      if (zug.tipp.lampe !== undefined) {
-        const l = daten.lampen[zug.tipp.lampe];
-        if (l.entity.startsWith("camera.")) { kameraZeigen(h, l); zug = null; return; }
-        // Tor nicht aus Versehen öffnen: zweimal tippen
-        if (l.icon === "tor" && !(bestaetigt.id === l.entity && Date.now() - bestaetigt.zeit < 4000)) {
-          bestaetigt = { id: l.entity, zeit: Date.now() }; meldung("Zum Öffnen/Schließen nochmal tippen");
-        } else { bestaetigt = {}; schalten(h, l.entity); }
+  const z = zug; zug = null;
+  if (z.bewegt) { if (z.art !== "schieben") zeichnen(); return; }
+  const h = hass();
+  if (!bearbeiten) {
+    if (z.tipp && z.tipp.lampe !== undefined) {
+      const l = daten.lampen[z.tipp.lampe];
+      if (l.entity.startsWith("camera.")) return kameraZeigen(h, l);
+      if (l.icon === "tor" && !(bestaetigt.id === l.entity && Date.now() - bestaetigt.zeit < 4000)) {
+        bestaetigt = { id: l.entity, zeit: Date.now() }; return meldung("Zum Öffnen/Schließen nochmal tippen");
       }
-      if (zug.tipp.raum) {
-        const ids = lampenIn(daten.raeume.find(r => r.id === zug.tipp.raum)).map(l => l.entity);
-        if (ids.length) schalten(h, ids, !ids.some(id => istAn(h, id)));
-      }
-    } else if (bearbeiten) {
-      if (zug.art === "lampe") auswahl = { art: "lampe", id: zug.i };
-      else if (zug.r) auswahl = { art: "raum", id: zug.r.id };
-      else auswahl = null;
-      panelZeigen();
+      bestaetigt = {}; schalten(h, l.entity);
+    } else if (z.tipp && z.tipp.raum) {
+      const ids = lampenIm(z.tipp.raum).map(l => l.entity).filter(id => !id.startsWith("camera."));
+      if (ids.length) schalten(h, ids, !ids.some(id => istAn(h, id)));
+      else meldung("In diesem Raum ist noch keine Lampe eingezeichnet");
     }
+    return;
   }
-  zug = null; zeichnen();
+  if (z.art === "lampe") auswahl = { art: "lampe", id: z.i };
+  else if (z.f) auswahl = { art: "fl", id: z.f.id };
+  else if (z.planRaum) auswahl = { art: "plan", id: z.planRaum };
+  else auswahl = null;
+  panelZeigen(); zeichnen();
 }
 svg.addEventListener("pointerup", loslassen);
 svg.addEventListener("pointercancel", loslassen);
 
-// ---------- Kamera-Fenster ----------
-// Auf dem Monitor: Live-Bild über go2rtc (nur dort erreichbar). Sonst (Laptop/Handy):
-// Standbild von Home Assistant, alle 2 Sekunden erneuert.
-const GROSSANSICHT = { draussen_hot_tor_kamera: "kamera-hof-tor", draussen_giebel_vorne: "kamera-giebel-vorne",
-  draussen_giebel_hinten: "kamera-giebel-hinten", draussen_hof_hinten: "kamera-hof-hinten" };
-let kameraTimer = null;
+// ================= Kamera-Fenster =================
 function kameraZeigen(h, l) {
   const name = l.entity.slice(7), titel = lampenName(h, l);
   const f = document.getElementById("kamera");
@@ -517,83 +644,88 @@ function kameraZeigen(h, l) {
     ${GROSSANSICHT[name] ? `<button id="k-gross">${icon("alles")} Großansicht &amp; drehen</button>` : ""}
     <button id="k-zu" class="voll">${icon("x")} Schließen</button></div><img id="k-bild" alt="">`;
   const img = f.querySelector("#k-bild");
-  const standbild = () => {
-    const s = hass().states[l.entity];
-    if (s && s.attributes.entity_picture) img.src = s.attributes.entity_picture + "&t=" + Date.now();
-  };
+  const standbild = () => { const s = hass().states[l.entity]; if (s && s.attributes.entity_picture) img.src = s.attributes.entity_picture + "&t=" + Date.now(); };
+  const live = /^draussen_/.test(name) || name === "hoftor_klingel";
   img.onerror = () => { if (!kameraTimer) { standbild(); kameraTimer = setInterval(standbild, 2000); } };
-  img.src = /^camera\.draussen_/.test(l.entity) || name === "hoftor_klingel"
-    ? `http://localhost:1984/api/stream.mjpeg?src=${name}` : "about:blank#";
-  if (!img.src.startsWith("http://localhost")) img.onerror();
+  if (live) img.src = `http://localhost:1984/api/stream.mjpeg?src=${name}`; else img.onerror();
   f.querySelector("#k-zu").onclick = kameraSchliessen;
   const g = f.querySelector("#k-gross");
   if (g) g.onclick = () => {
     kameraSchliessen();
-    const w = window.parent;
-    w.history.pushState(null, "", "/flur-display/" + GROSSANSICHT[name]);
-    w.dispatchEvent(new CustomEvent("location-changed"));
+    window.parent.history.pushState(null, "", "/flur-display/" + GROSSANSICHT[name]);
+    window.parent.dispatchEvent(new CustomEvent("location-changed"));
   };
   f.classList.add("offen");
 }
 function kameraSchliessen() {
   const f = document.getElementById("kamera");
   clearInterval(kameraTimer); kameraTimer = null;
-  f.classList.remove("offen"); f.innerHTML = "";   // Bild entfernen = Live-Übertragung beenden
+  f.classList.remove("offen"); f.innerHTML = "";
 }
 
-// ---------- Einstellungsfeld unten ----------
+// ================= Einstellungsfeld unten =================
 function panelZeigen() {
   const p = document.getElementById("panel"), h = hass();
   if (!bearbeiten || !auswahl) { p.classList.remove("offen"); p.innerHTML = ""; return; }
-  if (auswahl.art === "raum") {
-    const r = daten.raeume.find(r => r.id === auswahl.id);
-    if (!r) { auswahl = null; return panelZeigen(); }
-    p.innerHTML = `<h3>Fläche / Raum</h3><input id="p-name">
+  if (auswahl.art === "plan") {
+    const pr = PLAN_RAEUME.find(x => x.id === auswahl.id);
+    p.innerHTML = `<h3>Raum im Haupthaus</h3><input id="p-name">
+      <div class="zeile"><button id="p-test">${icon("gruppe")} Alle Lampen im Raum ein/aus</button>
+      <button id="p-fertig" class="voll">${icon("haken")} Fertig</button></div>
+      <div class="hinweis">Die Wände des Haupthauses kommen aus dem Bauplan und bleiben fest. Nur der Name lässt sich ändern.</div>`;
+    const inp = p.querySelector("#p-name"); inp.value = planName(pr);
+    inp.oninput = () => { daten.namen[pr.id] = inp.value; zeichnen(); };
+    p.querySelector("#p-test").onclick = () => {
+      const ids = lampenIm("plan:" + pr.id).map(l => l.entity); schalten(h, ids, !ids.some(id => istAn(h, id)));
+    };
+  } else if (auswahl.art === "fl") {
+    const f = daten.flaechen.find(f => f.id === auswahl.id);
+    if (!f) { auswahl = null; return panelZeigen(); }
+    p.innerHTML = `<h3>Fläche</h3><input id="p-name">
       <div class="symbole arten">${ARTEN.map(([k, t, farbe]) =>
-        `<button data-art="${k}" class="${(r.typ || "innen") === k ? "gewaehlt" : ""}"><i style="background:${farbe}"></i>${t}</button>`).join("")}</div>
+        `<button data-art="${k}" class="${(f.typ || "innen") === k ? "gewaehlt" : ""}"><i style="background:${farbe}"></i>${t}</button>`).join("")}</div>
       <div class="zeile"><button id="p-loeschen" class="rot">${icon("muell")} Löschen</button>
       <button id="p-fertig" class="voll">${icon("haken")} Fertig</button></div>
-      <div class="hinweis">Kanten ziehen = Wände versetzen (angrenzende Räume wandern mit) · Mitte ziehen = verschieben.
-      „Gebäude“ = Außenmauer mit Namen (z. B. Haupthaus, Scheune) – darin liegende Räume wandern beim Verschieben mit.</div>`;
-    const inp = p.querySelector("#p-name"); inp.value = r.name;
-    inp.oninput = () => { r.name = inp.value; zeichnen(); };
-    p.querySelectorAll("[data-art]").forEach(b => b.onclick = () => { r.typ = b.dataset.art; panelZeigen(); zeichnen(); });
-    p.querySelector("#p-loeschen").onclick = () => { daten.raeume = daten.raeume.filter(x => x !== r); auswahl = null; panelZeigen(); zeichnen(); };
+      <div class="hinweis">Kanten ziehen = Größe · Mitte ziehen = verschieben (Lampen wandern mit).
+      „Gebäude“ = Außenmauer mit Namen, z. B. Scheune – Räume darin wandern beim Verschieben mit.</div>`;
+    const inp = p.querySelector("#p-name"); inp.value = f.name;
+    inp.oninput = () => { f.name = inp.value; zeichnen(); };
+    p.querySelectorAll("[data-art]").forEach(b => b.onclick = () => { f.typ = b.dataset.art; panelZeigen(); zeichnen(); });
+    p.querySelector("#p-loeschen").onclick = () => { daten.flaechen = daten.flaechen.filter(x => x !== f); auswahl = null; panelZeigen(); zeichnen(); };
   } else if (auswahl.art === "lampe") {
-    const l = daten.lampen[auswahl.id];
+    const l = daten.lampen[auswahl.id], art = l.entity.split(".")[0];
     const original = (h.states[l.entity] && h.states[l.entity].attributes.friendly_name) || l.entity;
-    p.innerHTML = `<h3>${l.entity.startsWith("switch.") ? "Schalter" : l.entity.startsWith("camera.") ? "Kamera" : "Lampe"} · <span style="font-weight:400;color:var(--grau)">${esc(original)}</span></h3>
-      <input id="p-name" placeholder="Anzeigename, z. B. Esstisch (leer = automatisch)">
+    p.innerHTML = `<h3>${art === "switch" ? "Schalter" : art === "camera" ? "Kamera" : "Lampe"} · <span style="font-weight:400;color:var(--grau)">${esc(original)}</span></h3>
+      <input id="p-name" placeholder="Anzeigename, z. B. Esstisch oder Hoftor · Eingang (leer = automatisch)">
       <div class="symbole">${SYMBOLE.map(([k, t]) => `<button data-symbol="${k}" class="${l.icon === k ? "gewaehlt" : ""}">${icon(k)}${t}</button>`).join("")}</div>
-      <div class="zeile"><button id="p-test">${icon("birne")} Ein/Aus testen</button>
+      <div class="zeile"><button id="p-test">${icon(art === "camera" ? "kamera" : "birne")} ${art === "camera" ? "Bild zeigen" : "Ein/Aus testen"}</button>
       <button id="p-versteckt" class="rot">${l.versteckt ? "Wieder anzeigen" : "Ausblenden"}</button>
-      ${!l.entity.startsWith("light.") ? `<button id="p-weg" class="rot">${icon("muell")} Entfernen</button>` : ""}
+      ${art !== "light" ? `<button id="p-weg" class="rot">${icon("muell")} Entfernen</button>` : ""}
       <button id="p-fertig" class="voll">${icon("haken")} Fertig</button></div>`;
     const inp = p.querySelector("#p-name"); inp.value = l.name || "";
     inp.oninput = () => { l.name = inp.value.trim() || undefined; zeichnen(); };
     p.querySelectorAll("[data-symbol]").forEach(b => b.onclick = () => { l.icon = b.dataset.symbol; panelZeigen(); zeichnen(); });
-    p.querySelector("#p-test").onclick = () => l.entity.startsWith("camera.") ? kameraZeigen(h, l) : schalten(h, l.entity);
+    p.querySelector("#p-test").onclick = () => art === "camera" ? kameraZeigen(h, l) : schalten(h, l.entity);
     p.querySelector("#p-versteckt").onclick = () => { l.versteckt = !l.versteckt || undefined; panelZeigen(); zeichnen(); };
     const weg = p.querySelector("#p-weg");
     if (weg) weg.onclick = () => { daten.lampen.splice(auswahl.id, 1); auswahl = null; panelZeigen(); zeichnen(); };
   } else if (auswahl.art === "neu") {
     const drauf = new Set(daten.lampen.map(l => l.entity));
-    const liste = kandidaten(h).filter(id => !drauf.has(id))
-      .map(id => [id, h.states[id].attributes.friendly_name || id]).sort((a, b) => a[1].localeCompare(b[1], "de"));
-    p.innerHTML = `<h3>Gerät hinzufügen</h3><input id="p-suche" placeholder="Suchen, z. B. Shelly, Weg, Scheune">
-      <div class="liste" id="p-liste"></div>
-      <div class="zeile"><button id="p-fertig" class="voll">${icon("haken")} Fertig</button></div>`;
+    const liste = kandidaten(h).filter(id => !drauf.has(id)).map(id => [id, h.states[id].attributes.friendly_name || id])
+      .sort((a, b) => (a[0].split(".")[0] === "camera" ? 0 : 1) - (b[0].split(".")[0] === "camera" ? 0 : 1) || a[1].localeCompare(b[1], "de"));
+    p.innerHTML = `<h3>Gerät hinzufügen · Kameras, Schalter (Shelly) und Lampen</h3><input id="p-suche" placeholder="Suchen, z. B. Giebel, Hoftor, Weg, Scheune">
+      <div class="liste" id="p-liste"></div><div class="zeile"><button id="p-fertig" class="voll">${icon("haken")} Fertig</button></div>`;
     const zeigen = filter => {
       const f = filter.toLowerCase();
-      p.querySelector("#p-liste").innerHTML = liste.filter(([id, n]) => !f || (n + " " + id).toLowerCase().includes(f)).slice(0, 40)
+      p.querySelector("#p-liste").innerHTML = liste.filter(([id, n]) => !f || (n + " " + id).toLowerCase().includes(f)).slice(0, 60)
         .map(([id, n]) => `<button data-neu="${id}">${icon(id.startsWith("switch.") ? "schalter" : id.startsWith("camera.") ? "kamera" : "birne")} ${esc(n)} <small>${id}</small></button>`).join("")
         || `<div class="hinweis">Nichts gefunden.</div>`;
       p.querySelectorAll("[data-neu]").forEach(b => b.onclick = () => {
         const id = b.dataset.neu;
-        daten.lampen.push({ entity: id, x: ansicht.x + ansicht.w / 2, y: ansicht.y + ansicht.h / 2,
+        daten.lampen.push({ entity: id, x: rund(ansicht.x + ansicht.w / 2), y: rund(ansicht.y + ansicht.h / 2),
           icon: symbolRaten((h.states[id].attributes.friendly_name || "") + " " + id) });
         auswahl = { art: "lampe", id: daten.lampen.length - 1 }; panelZeigen(); zeichnen();
-        meldung("Hinzugefügt – jetzt an die richtige Stelle ziehen");
+        meldung("Hinzugefügt (Bildmitte) – jetzt an die richtige Stelle ziehen");
       });
     };
     const suche = p.querySelector("#p-suche"); suche.oninput = () => zeigen(suche.value); zeigen("");
@@ -602,36 +734,34 @@ function panelZeigen() {
   p.classList.add("offen");
 }
 
-// ---------- Knöpfe ----------
+// ================= Knöpfe =================
 const K = id => document.getElementById(id);
 function knoepfe() {
   K("knoepfe-ansicht").style.display = bearbeiten ? "none" : "";
   K("knoepfe-bearbeiten").style.display = bearbeiten ? "" : "none";
-  K("foto").innerHTML = `${icon("foto")} Foto-Vorlage ${fotoAn ? "aus" : "an"}`;
+  K("foto").innerHTML = `${icon("plan")} Bauplan ${fotoAn ? "ausblenden" : "einblenden"}`;
 }
 K("alle-aus").innerHTML = `${icon("alleaus")} Alle aus`;
 K("bearbeiten").innerHTML = `${icon("stift")} Bearbeiten`;
 K("raum-neu").innerHTML = `${icon("plus")} Fläche`;
-K("geraet-neu").innerHTML = `${icon("plus")} Gerät`;
+K("geraet-neu").innerHTML = `${icon("plus")} Gerät / Kamera`;
 K("abbrechen").innerHTML = `${icon("x")} Abbrechen`;
 K("speichern").innerHTML = `${icon("haken")} Speichern`;
 K("zoom-rein").innerHTML = icon("lupeplus");
 K("zoom-raus").innerHTML = icon("lupeminus");
 K("zoom-alles").innerHTML = icon("alles");
 const mitte = () => { const r = svg.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
-K("zoom-rein").onclick = () => zoomen(1 / 1.4, ...mitte());
-K("zoom-raus").onclick = () => zoomen(1.4, ...mitte());
-K("zoom-alles").onclick = () => { allesZeigen(); zeichnen(); };
-
+K("zoom-rein").onclick = () => zoomen(1 / 1.5, ...mitte());
+K("zoom-raus").onclick = () => zoomen(1.5, ...mitte());
+K("zoom-alles").onclick = () => allesZeigen();
 K("alle-aus").onclick = () => {
   const h = hass(); if (!h) return;
   schalten(h, daten.lampen.filter(l => !l.versteckt && l.entity.startsWith("light.") && istAn(h, l.entity)).map(l => l.entity), false);
 };
 K("bearbeiten").onclick = () => { gesichert = JSON.stringify(daten); bearbeiten = true; knoepfe(); zeichnen(); };
 K("raum-neu").onclick = () => {
-  const r = { id: neueId(), name: "Neuer Raum", typ: "innen", bereich: null,
-    x: rund(ansicht.x + ansicht.w / 2 - 3), y: rund(ansicht.y + ansicht.h / 2 - 2), w: 6, h: 4 };
-  daten.raeume.push(r); auswahl = { art: "raum", id: r.id }; panelZeigen(); zeichnen();
+  const f = { id: neueId(), name: "Neue Fläche", typ: "innen", x: rund(ansicht.x + ansicht.w / 2 - 2), y: rund(ansicht.y + ansicht.h / 2 - 1.5), w: 4, h: 3 };
+  daten.flaechen.push(f); auswahl = { art: "fl", id: f.id }; panelZeigen(); zeichnen();
 };
 K("geraet-neu").onclick = () => { auswahl = { art: "neu" }; panelZeigen(); };
 K("foto").onclick = () => { fotoAn = !fotoAn; knoepfe(); zeichnen(); };
@@ -639,24 +769,24 @@ K("abbrechen").onclick = () => { daten = JSON.parse(gesichert); verlassen(); };
 K("speichern").onclick = async () => {
   const h = hass(); if (!h) return;
   try {
-    daten.version = 2;
     await h.callService("script", "grundriss_speichern", { daten: JSON.stringify(daten) });
     meldung("Gespeichert ✓"); verlassen();
   } catch (e) { meldung("Speichern fehlgeschlagen: " + (e && e.message || e)); }
 };
 function verlassen() { bearbeiten = false; auswahl = null; fotoAn = false; panelZeigen(); knoepfe(); zeichnen(); }
 
-// ---------- Start ----------
+// ================= Start =================
 async function laden() {
   const h = hass();
   if (!h) { setTimeout(laden, 500); return; }
-  try {
-    const r = await fetch(DATEN_URL + "?t=" + Date.now(), { cache: "no-store" });
-    if (r.ok) daten = await r.json();
-  } catch (e) { /* noch nichts gespeichert */ }
-  if (!daten || !Array.isArray(daten.raeume) || !Array.isArray(daten.lampen)) daten = startGrundriss(h);
-  neueLampenErgaenzen(h);
-  knoepfe(); allesZeigen(); zeichnen();
+  let alt = null;
+  try { const r = await fetch(DATEN_URL + "?t=" + Date.now(), { cache: "no-store" }); if (r.ok) alt = await r.json(); } catch (e) { /* neu */ }
+  if (alt && alt.version === 3) daten = alt;
+  else if (alt && Array.isArray(alt.raeume)) { daten = umstellen(alt); meldung("Deine Einteilung wurde auf den Bauplan übertragen – bitte prüfen und speichern"); }
+  else daten = neuerStand();
+  daten.namen = daten.namen || {}; daten.flaechen = daten.flaechen || []; daten.lampen = daten.lampen || [];
+  ergaenzen(h);
+  knoepfe(); zeichnen(); allesZeigen();
   let letzter = "";
   setInterval(() => {
     const hh = hass(); if (!hh || zug) return;
@@ -664,7 +794,7 @@ async function laden() {
     if (jetzt !== letzter) { letzter = jetzt; zeichnen(); }
   }, 700);
 }
-window.addEventListener("resize", () => { if (daten) { allesZeigen(); zeichnen(); } });
+window.addEventListener("resize", () => { if (daten) allesZeigen(); });
 laden();
 </script>
 </body>
