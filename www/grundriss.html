@@ -82,16 +82,30 @@
   .wiese { fill: var(--rasen); }
   .hofflaeche { fill: var(--hof); stroke: var(--kies); stroke-width: 0.3; stroke-linejoin: round; }
   .fahrweg { fill: none; stroke: var(--kies); stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; }
+  .kiesweg { fill: none; stroke: var(--kies); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .kiesflaeche { fill: var(--kies); }
+  .teich { fill: #9CC9E6; stroke: #7FB2D4; stroke-width: 0.2; }
+  .hecke { fill: none; stroke: #5E8A4C; stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; }
   .baum { fill: #7FA66A; opacity: 0.9; }
   .baum-licht { fill: #97BE7F; opacity: 0.7; }
-  :root.dunkel .baum { fill: #2E4526; } :root.dunkel .baum-licht { fill: #3A5530; }
+  .birke { fill: #A9C98E; opacity: 0.95; }
+  .birke-stamm { fill: #F2F2F2; }
+  .rondell { fill: var(--rasen); stroke: #B9B09C; stroke-width: 0.12; }
+  :root.dunkel .baum, :root.dunkel .birke { fill: #2E4526; } :root.dunkel .baum-licht { fill: #3A5530; } :root.dunkel .hecke { stroke: #2C4222; }
   .nebengebaeude { fill: var(--gebaeude); stroke: var(--mauer); stroke-width: 0.25; stroke-linejoin: round; }
   .nebengebaeude.glas { fill: #D7ECEC; stroke: #9DB8B8; stroke-width: 0.12; }
+  .nachbar { fill: #E6E3DC; stroke: #BDB7AA; stroke-width: 0.15; stroke-linejoin: round; }
+  :root.dunkel .nachbar { fill: #2F2F31; stroke: #48484A; }
+  .terrasse { fill: var(--holz); stroke: #9DB8B8; stroke-width: 0.15; stroke-dasharray: 0.5 0.3; }
+  .sitzecke { fill: var(--holz); stroke: #B39A74; stroke-width: 0.12; }
   .stellplatz { fill: #E9E7E1; stroke: #B9B4A8; stroke-width: 0.12; }
+  .zaun { fill: none; stroke: #8B6F4E; stroke-width: 0.15; stroke-dasharray: 0.8 0.4; }
+  .torpfosten { fill: #5A4632; }
+  .torfluegel { stroke: #8B6F4E; stroke-width: 0.18; }
   .gelaendename { fill: var(--mauer); font-size: 1.1px; font-weight: 700; text-anchor: middle; dominant-baseline: middle; opacity: 0.8; }
-  .gelaendename.klein { font-size: 0.8px; }
+  .gelaendename.klein { font-size: 0.75px; }
+  .gelaendename.nachbarname { opacity: 0.45; font-weight: 600; }
   .wegbeleuchtung { fill: none; stroke: #FFCC00; stroke-width: 0.3; stroke-dasharray: 0.6 0.9; stroke-linecap: round; }
-  .hoftor { fill: #C0392B; }
   .flaeche.typ-innen { fill: var(--boden); stroke: var(--mauer); stroke-width: 0.15; }
   .flaeche.typ-nass { fill: var(--fliese); stroke: var(--mauer); stroke-width: 0.15; }
   .flaeche.typ-gebaeude { fill: var(--gebaeude); stroke: var(--mauer); stroke-width: 0.3; }
@@ -216,8 +230,8 @@ const FENSTER = [
 const TREPPE = { x: 15.6, y: 4.125, w: 2.4, h: 1.225, stufen: 10, richtung: "rechts" };
 // Lage des Original-Plans (Foto /local/grundriss.jpg, 1024×768 px) über dem Haus
 const PLANFOTO = { x: A - 143 / 35.3, y: A - 200 / 34.4, w: 1024 / 35.3, h: 768 / 34.4 };
-// Gelände nach Luftbild (Meter, im Koordinatensystem des Haupthauses)
-const GELAENDE = {"gebaeude": [{"name": "Scheune", "nr": 2, "p": [[17.0, 11.4], [32.4, 10.4], [33.4, 21.6], [17.9, 21.1]]}, {"name": "Vordach", "nr": 0, "glas": true, "p": [[12.9, 11.5], [17.3, 11.7], [17.9, 21.1], [12.9, 20.7]]}, {"name": "Nebengebäude", "nr": 3, "p": [[21.4, 24.7], [30.0, 25.4], [31.0, 37.2], [22.2, 37.3]]}, {"name": "Anbau", "nr": 0, "p": [[16.8, 26.9], [20.6, 27.8], [20.2, 34.3], [16.3, 33.7]]}, {"name": "Alte Garage (künftige FeWo)", "nr": 4, "p": [[42.5, 27.1], [48.1, 28.1], [47.3, 34.9], [42.0, 34.0]]}, {"name": "Gewächshaus", "nr": 5, "glas": true, "p": [[35.7, -10.6], [43.2, -10.5], [44.9, -4.9], [37.3, -4.7]]}, {"name": "Halle", "nr": 0, "p": [[-2.9, 52.1], [26.5, 50.0], [27.1, 57.7], [-0.6, 57.5]]}, {"name": "Halle", "nr": 0, "p": [[28.1, 45.6], [37.8, 46.2], [38.5, 56.1], [27.3, 57.0]]}], "stellplaetze": [{"name": "Stellplatz 1", "p": [[64.9, 20.5], [68.2, 21.1], [69.4, 29.0], [67.1, 29.3]]}, {"name": "Stellplatz 2", "p": [[69.4, 33.5], [71.9, 34.2], [72.0, 40.9], [69.9, 40.7]]}, {"name": "Stellplatz 3", "p": [[72.3, 43.5], [75.2, 44.3], [76.5, 51.7], [74.2, 51.5]]}], "hof": [[20.7, -1.5], [28.1, -2.5], [35.2, 1.4], [36.9, 9.5], [38.7, 17.7], [40.7, 22.6], [49.2, 24.9], [56.4, 23.4], [60.5, 27.5], [65.6, 34.3], [70.7, 43.7], [75.5, 52.6], [69.7, 54.2], [57.2, 49.6], [49.2, 45.8], [42.0, 39.8], [36.4, 34.4], [33.5, 26.7], [32.4, 19.6], [31.4, 11.7], [25.8, 3.8]], "weg": [[16.6, -7.2], [23.4, -13.0], [31.2, -16.4], [41.4, -16.0], [52.1, -11.6], [57.6, -6.2], [59.2, 1.1], [59.2, 10.2], [58.8, 19.3], [61.1, 26.0]], "weg2": [[32.7, 44.7], [43.7, 45.5], [56.1, 45.0], [69.1, 48.2], [71.9, 53.4]], "wegbeleuchtung": [[-1.0, -7.8], [2.5, -8.6], [9.7, -11.5], [16.1, -10.9], [21.9, -8.7], [24.1, -5.9], [24.6, -1.9]], "hoftor": [-6.1, -4.3], "baeume": [[30.2, -30.6, 1.8], [32.7, -25.9, 1.5], [20.5, -25.8, 1.5], [14.0, -20.7, 2.0], [6.8, -16.6, 1.7], [0.8, -13.0, 1.8], [-8.3, -8.4, 2.2], [-14.2, -2.6, 1.8], [68.5, -10.2, 2.8], [71.8, -6.4, 2.3], [75.6, 1.3, 3.3], [80.6, 5.6, 2.8], [85.7, 10.0, 2.5], [91.1, 7.8, 2.2], [45.9, 5.3, 3.7], [48.8, 10.6, 3.3], [41.0, 6.0, 2.9], [50.5, 16.2, 2.3], [44.8, 0.7, 2.5], [-0.6, 6.6, 2.5], [-5.8, 10.5, 2.2], [-1.0, 20.6, 2.2], [-4.9, 31.7, 4.6], [-4.8, 41.8, 3.7], [-2.7, 59.3, 4.6], [-10.6, 65.6, 3.3], [-0.6, 74.3, 3.3], [20.8, 41.2, 2.9], [12.0, 42.1, 2.5], [-23.5, 49.1, 3.3], [-30.0, 56.7, 3.3]]};
+// Gelände nach Luftbild mit Einzeichnungen (Meter, Koordinaten des Haupthauses; von Hand abgezeichnet)
+const GELAENDE = {"gebaeude": [{"name": "Scheune", "nr": 1, "p": [[18.94, 12.34], [34.26, 12.15], [36.82, 22.23], [20.2, 22.93]]}, {"name": "Nebengebäude", "nr": 2, "p": [[23.42, 29.14], [33.38, 29.15], [36.12, 44.24], [26.12, 44.39], [24.57, 35.76], [19.55, 35.91], [18.83, 31.82], [23.58, 31.34]]}, {"name": "Garage (künftige FeWo)", "nr": 3, "p": [[40.34, 5.81], [48.42, 6.5], [49.44, 15.6], [41.17, 15.51]]}, {"name": "Gewächshaus", "nr": 5, "glas": true, "p": [[37.73, -10.96], [44.2, -13.93], [47.42, -11.96], [50.01, -7.94], [45.78, -6.02], [43.88, -9.39], [38.67, -7.8]]}], "nachbar": [{"p": [[-40.65, 9.68], [-21.64, 9.1], [-18.48, 23.24], [-39.42, 25.31]]}, {"p": [[-16.07, 17.71], [-5.46, 16.45], [-3.35, 25.12], [-13.78, 24.77]]}, {"p": [[-3.5, 52.85], [41.85, 51.54], [44.1, 62.85], [6.16, 63.74]]}], "sitzecken": [{"name": "Sitzecke", "p": [[15.98, 30.72], [18.24, 31.03], [18.12, 33.91], [15.86, 33.6]]}, {"name": "Sitzecke (überdacht)", "p": [[11.69, 46.04], [15.45, 46.08], [15.58, 49.78], [11.77, 49.72]]}, {"name": "", "p": [[14.3, -3.5], [19.85, -3.28], [20.21, -0.11], [14.83, -0.49]]}], "terrasse": [[12.3, 10.95], [18.89, 10.95], [20.15, 22.93], [14.2, 21.83]], "stellplaetze": [{"name": "Stellplatz 1", "p": [[70.56, 23.7], [73.71, 23.22], [76.84, 32.28], [73.81, 32.8]]}, {"name": "Stellplatz 2", "p": [[76.56, 38.35], [79.57, 37.93], [81.68, 44.53], [79.08, 44.65]]}, {"name": "Stellplatz 3", "p": [[81.55, 50.09], [84.67, 49.72], [87.11, 56.89], [84.13, 57.26]]}], "fahrwege": [[[-45.25, 2.86], [-24.25, -3.12], [-11.45, -9.44], [4.01, -11.94], [19.31, -13.93], [27.86, -16.83], [40.31, -19.92], [50.24, -16.95], [55.41, -13.0], [58.26, -5.73], [60.19, 4.56], [61.45, 12.9], [62.75, 19.02]], [[19.31, -13.93], [21.75, -7.38], [25.54, -3.12]]], "kieswege": [[[-21.61, -5.48], [-19.52, 4.3], [-14.8, 11.73], [-7.17, 11.85], [-0.9, 8.08], [3.14, 7.38]]], "hof": [[[19.01, -0.57], [24.71, -4.56], [30.31, -4.1], [36.12, -0.18], [39.19, 4.36], [39.87, 12.49], [40.76, 17.88], [33.91, 15.25], [27.37, 11.62], [22.28, 7.42]], [[36.09, 14.4], [42.47, 18.54], [50.14, 16.43], [59.22, 15.98], [63.27, 21.46], [66.08, 30.96], [75.89, 36.41], [84.3, 46.37], [82.91, 57.07], [72.96, 64.49], [56.21, 67.04], [44.54, 67.62], [33.23, 71.15], [27.6, 72.86], [16.18, 68.48], [28.66, 63.22], [36.69, 51.7], [36.27, 44.8], [36.57, 31.43], [36.77, 22.53]]], "zaun": [[41.25, 47.27], [72.27, 47.09]], "tor": {"pfosten": [[-10.87, -11.92], [-8.85, -7.1]]}, "rondell": {"mitte": [30.28, 3.86]}, "teich": {"mitte": [74.57, -10.98], "rx": 3.5, "ry": 2.3}, "hecken": [[[-8.49, -6.62], [-0.66, -9.24], [10.34, -11.76], [19.46, -14.43], [24.15, -13.09], [26.55, -5.99], [23.57, -5.0]], [[32.09, -19.14], [30.01, -16.56], [30.6, -13.92], [33.83, -5.16], [38.92, -0.96], [40.28, 3.94]]], "birken": [[-7.69, -13.34], [-3.22, -14.99], [1.91, -16.51], [6.97, -18.22], [10.86, -19.25], [15.12, -21.04], [19.8, -23.18], [24.79, -24.46], [30.45, -26.23], [34.98, -27.46]], "baeume": [[-4.21, -6.0, 3.1], [6.01, -8.08, 3.1], [9.91, -8.72, 1.5], [13.45, -9.44, 1.5], [17.46, -10.03, 1.5], [31.18, -17.24, 1.2], [-4.42, -3.66, 1.1], [-4.04, 9.96, 1.2], [-0.18, 15.66, 1.2], [48.98, -3.56, 1.2], [54.91, 9.27, 1.5], [51.62, 11.66, 1.2], [55.7, 13.95, 1.5], [65.75, 7.25, 1.2], [70.88, 9.22, 1.4], [69.95, 12.23, 1.5], [70.71, 17.01, 1.5], [74.49, 15.1, 1.4], [77.58, 15.44, 1.4], [80.79, 10.21, 1.7], [80.07, 13.59, 1.5], [85.43, 11.71, 1.4], [83.49, 14.9, 1.5], [89.79, 10.01, 1.2], [88.39, 14.53, 1.2], [93.03, 12.94, 1.1], [96.87, 14.98, 1.1], [64.11, 9.43, 1.2], [26.42, 47.76, 1.2], [45.85, -23.4, 1.7], [56.96, -18.02, 1.7], [61.48, -1.68, 2.3], [65.89, -5.61, 2.0], [99.57, 19.66, 2.3], [104.29, 14.73, 2.3], [104.04, 25.87, 2.3], [96.94, 34.38, 2.0], [-40.12, -1.35, 2.3], [-45.91, 13.27, 2.5], [-46.0, 30.09, 2.5], [-28.26, 34.64, 2.3], [-12.9, 42.78, 2.3], [-15.56, -31.24, 2.0], [-23.13, -27.4, 2.0], [-9.14, -35.51, 1.7], [2.69, -36.59, 1.7], [14.72, -34.22, 1.7]], "wegbeleuchtung": [[-1.0, -7.8], [2.5, -8.6], [9.7, -11.5], [16.1, -10.9], [21.9, -8.7], [24.1, -5.9], [24.6, -1.9]]};
 
 // ================= Einstellungen =================
 const SYMBOLE = [
@@ -426,7 +440,7 @@ function inhaltsBox() {
   return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
 }
 function grundstueckBox() {
-  const alle = [...GELAENDE.hof, ...GELAENDE.gebaeude.flatMap(b => b.p), ...GELAENDE.stellplaetze.flatMap(s => s.p), GELAENDE.hoftor];
+  const alle = [...GELAENDE.gebaeude.flatMap(b => b.p), ...GELAENDE.stellplaetze.flatMap(s => s.p), ...GELAENDE.tor.pfosten, GELAENDE.teich.mitte];
   const i = inhaltsBox();
   const x1 = Math.min(i.x, ...alle.map(p => p[0])), y1 = Math.min(i.y, ...alle.map(p => p[1]));
   const x2 = Math.max(i.x + i.w, ...alle.map(p => p[0])), y2 = Math.max(i.y + i.h, ...alle.map(p => p[1]));
@@ -462,28 +476,59 @@ function mitteVon(p) { return [p.reduce((s, q) => s + q[0], 0) / p.length, p.red
 function zeichneGelaende(g) {
   const G = GELAENDE;
   el("rect", { class: "wiese", x: -150, y: -150, width: 400, height: 350 }, g);
-  el("polygon", { class: "hofflaeche", points: punkte(G.hof) }, g);
-  for (const w of [G.weg, G.weg2]) el("polyline", { class: "fahrweg", points: punkte(w) }, g);
+  for (const h of G.hof) el("polygon", { class: "hofflaeche", points: punkte(h) }, g);
+  for (const w of G.fahrwege) el("polyline", { class: "fahrweg", points: punkte(w) }, g);
+  for (const w of G.kieswege) el("polyline", { class: "kiesweg", points: punkte(w) }, g);
+  // Kiesstreifen ums Haus und zur Scheune (1,20 m Abstand)
+  el("rect", { class: "kiesflaeche", x: -1, y: -1, width: HAUS.w + 2, height: HAUS.h + 2, rx: 0.3 }, g);
+  const sch = G.gebaeude.find(b => b.nr === 1).p;
+  el("polygon", { class: "kiesflaeche", points: punkte([[sch[0][0] - 1, HAUS.h], [sch[1][0] + 1, sch[1][1] - 1], sch[1], sch[0]]) }, g);
+  el("ellipse", { class: "teich", cx: G.teich.mitte[0], cy: G.teich.mitte[1], rx: G.teich.rx, ry: G.teich.ry }, g);
+  for (const h of G.hecken) el("polyline", { class: "hecke", points: punkte(h) }, g);
   for (const [x, y, r] of G.baeume) {
     el("circle", { class: "baum", cx: x, cy: y, r }, g);
     el("circle", { class: "baum-licht", cx: x - r * 0.25, cy: y - r * 0.25, r: r * 0.55 }, g);
   }
+  for (const [x, y] of G.birken) {        // Birkenallee: helle, schmale Kronen
+    el("circle", { class: "birke", cx: x, cy: y, r: 1.3 }, g);
+    el("circle", { class: "birke-stamm", cx: x, cy: y, r: 0.18 }, g);
+  }
+  // Rondell mit Säuleneiche
+  const [rx, ry] = G.rondell.mitte;
+  el("circle", { class: "rondell", cx: rx, cy: ry, r: 0.9 }, g);
+  el("circle", { class: "baum", cx: rx, cy: ry, r: 0.6 }, g);
+  el("text", { class: "gelaendename klein", x: rx, y: ry + 1.7 }, g).textContent = "Rondell · Säuleneiche";
+  for (const n of G.nachbar) {
+    el("polygon", { class: "nachbar", points: punkte(n.p) }, g);
+    const [x, y] = mitteVon(n.p);
+    el("text", { class: "gelaendename nachbarname", x, y }, g).textContent = "Nachbar";
+  }
+  el("polygon", { class: "terrasse", points: punkte(G.terrasse) }, g);
+  { const [x, y] = mitteVon(G.terrasse);
+    el("text", { class: "gelaendename klein", x, y, transform: `rotate(84 ${x} ${y})` }, g).textContent = "Terrasse · Holzdeck mit Glasdach"; }
   for (const b of G.gebaeude) {
     el("polygon", { class: b.glas ? "nebengebaeude glas" : "nebengebaeude", points: punkte(b.p) }, g);
-    if (b.nr) {
-      const [x, y] = mitteVon(b.p);
-      el("text", { class: "gelaendename", x, y }, g).textContent = b.name;
-    }
+    const [x, y] = mitteVon(b.p);
+    el("text", { class: "gelaendename", x, y: b.nr === 1 ? y + 4.3 : y }, g).textContent = (b.nr && b.nr < 5 ? ["", "I ", "II ", "III "][b.nr] : "") + b.name;
+  }
+  for (const s of G.sitzecken) {
+    el("polygon", { class: "sitzecke", points: punkte(s.p) }, g);
+    if (s.name) { const [x, y] = mitteVon(s.p); el("text", { class: "gelaendename klein", x, y: y - 2 }, g).textContent = s.name; }
   }
   for (const s of G.stellplaetze) {
     el("polygon", { class: "stellplatz", points: punkte(s.p) }, g);
     const [x, y] = mitteVon(s.p);
-    el("text", { class: "gelaendename klein", x, y, transform: `rotate(-75 ${x} ${y})` }, g).textContent = s.name;
+    el("text", { class: "gelaendename klein", x, y, transform: `rotate(-68 ${x} ${y})` }, g).textContent = s.name;
   }
+  el("polyline", { class: "zaun", points: punkte(G.zaun) }, g);
+  { const [x, y] = mitteVon(G.zaun); el("text", { class: "gelaendename klein", x, y: y - 1 }, g).textContent = "Zaun"; }
   el("polyline", { class: "wegbeleuchtung", points: punkte(G.wegbeleuchtung) }, g);
-  const [tx, ty] = G.hoftor;
-  el("rect", { class: "hoftor", x: tx - 2, y: ty - 0.3, width: 4, height: 0.6, transform: `rotate(60 ${tx} ${ty})` }, g);
-  el("text", { class: "gelaendename", x: tx, y: ty - 2.2 }, g).textContent = "Hoftor · Eingang";
+  // Hoftor: zwei Pfosten, zweiflügeliges Tor
+  const [a, b] = G.tor.pfosten, m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  for (const [x, y] of [a, b]) el("rect", { class: "torpfosten", x: x - 0.25, y: y - 0.25, width: 0.5, height: 0.5 }, g);
+  el("line", { class: "torfluegel", x1: a[0], y1: a[1], x2: m[0] - 0.1, y2: m[1] - 0.1 }, g);
+  el("line", { class: "torfluegel", x1: b[0], y1: b[1], x2: m[0] + 0.1, y2: m[1] + 0.1 }, g);
+  el("text", { class: "gelaendename", x: m[0] - 3.5, y: m[1] }, g).textContent = "Hoftor · Eingang";
 }
 function zeichneFlaeche(f, g) {
   const sel = auswahl && auswahl.art === "fl" && auswahl.id === f.id;
@@ -907,7 +952,7 @@ K("gelaende").innerHTML = `${icon("scheune")} Grundstück einpassen`;
 // Eigene Scheune (mit Räumen und Lampen) in das Scheunen-Gebäude des Luftbilds setzen, alte Groß-Flächen entfernen
 K("gelaende").onclick = () => grundstueckEinpassen();
 function grundstueckEinpassen() {
-  const ziel = GELAENDE.gebaeude.find(b => b.nr === 2).p;
+  const ziel = GELAENDE.gebaeude.find(b => b.nr === 1).p;
   const zx1 = Math.min(...ziel.map(p => p[0])), zy1 = Math.min(...ziel.map(p => p[1]));
   const zx2 = Math.max(...ziel.map(p => p[0])), zy2 = Math.max(...ziel.map(p => p[1]));
   const s = daten.flaechen.find(f => f.typ === "gebaeude" && /scheune/i.test(f.name));
