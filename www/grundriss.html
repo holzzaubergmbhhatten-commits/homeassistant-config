@@ -98,6 +98,7 @@
   .lampe text { fill: var(--text); font-size: 0.26px; font-weight: 600; text-anchor: middle; paint-order: stroke;
     stroke: var(--boden); stroke-width: 0.07px; stroke-linejoin: round; }
   .lampe.versteckt { opacity: 0.35; }
+  .lampe.gedrueckt circle { stroke: var(--akzent); stroke-width: 0.12; opacity: 0.75; }
   .lampe.gewaehlt circle { stroke: var(--akzent); stroke-width: 0.08; }
   .lampe.nicht-da circle { fill: none; stroke: var(--rot); stroke-dasharray: 0.1 0.08; stroke-width: 0.04; }
 </style>
@@ -242,10 +243,21 @@ function bereichVon(h, id) {
 }
 function bereichName(h, a) { return (a && h.areas && h.areas[a] && h.areas[a].name) || "Ohne Raum"; }
 function istAn(h, id) { return h.states[id] && h.states[id].state === "on"; }
+// Sofort sichtbare Rückmeldung: bis Home Assistant den neuen Zustand meldet (max. 4 s), den erwarteten zeigen
+const erwartet = {};
+function anzeigeAn(h, id) {
+  const e = erwartet[id];
+  if (e && Date.now() < e.bis && istAn(h, id) !== e.an) return e.an;
+  delete erwartet[id];
+  return istAn(h, id);
+}
 function schalten(h, ids, an) {
   const liste = [].concat(ids).filter(id => h.states[id] && !id.startsWith("camera."));
   if (!liste.length) return;
-  h.callService("homeassistant", an === undefined ? "toggle" : an ? "turn_on" : "turn_off", { entity_id: liste });
+  for (const id of liste) erwartet[id] = { an: an === undefined ? !anzeigeAn(h, id) : !!an, bis: Date.now() + 4000 };
+  zeichnen();
+  Promise.resolve(h.callService("homeassistant", an === undefined ? "toggle" : an ? "turn_on" : "turn_off", { entity_id: liste }))
+    .catch(e => { for (const id of liste) delete erwartet[id]; zeichnen(); meldung("Schalten hat nicht geklappt: " + (e && e.message || e)); });
 }
 
 // ================= Hilfen =================
@@ -524,13 +536,13 @@ function zeichnen() {
   const schein = el("g", { "pointer-events": "none" }, g);
   let an = 0;
   for (const l of daten.lampen) {
-    if (l.versteckt || !istAn(h, l.entity)) continue;
+    if (l.versteckt || !anzeigeAn(h, l.entity)) continue;
     an++;
     if (l.entity.startsWith("light.")) el("circle", { cx: l.x, cy: l.y, r: 1.8, fill: "url(#lichtschein)" }, schein);
   }
   daten.lampen.forEach((l, i) => {
     if (l.versteckt && !bearbeiten) return;
-    const da = !!h.states[l.entity], ein = da && istAn(h, l.entity), kam = l.entity.startsWith("camera.");
+    const da = !!h.states[l.entity], ein = da && anzeigeAn(h, l.entity), kam = l.entity.startsWith("camera.");
     const gr = el("g", { class: "lampe" + (ein ? " an" : "") + (kam ? " kam" : "") + (l.versteckt ? " versteckt" : "") + (da ? "" : " nicht-da") +
       (auswahl && auswahl.art === "lampe" && auswahl.id === i ? " gewaehlt" : ""), "data-lampe": i, transform: `translate(${l.x} ${l.y})` }, g);
     el("circle", { r: LAMPE_R }, gr);
@@ -565,6 +577,7 @@ function runter(ev) {
   const schalterEl = ev.target.closest("[data-raumschalter]");
   const basis = { start: p, sx: ev.clientX, sy: ev.clientY, a0: { ...ansicht }, bewegt: false };
   if (!bearbeiten) {
+    if (lampeEl) lampeEl.classList.add("gedrueckt");
     zug = { ...basis, art: "schieben", tipp: lampeEl ? { lampe: +lampeEl.dataset.lampe } : schalterEl ? { raum: schalterEl.dataset.raumschalter } : null };
   } else if (lampeEl) {
     const i = +lampeEl.dataset.lampe, l = daten.lampen[i];
@@ -644,6 +657,7 @@ function hoch(ev) {
   if (!zug) return;
   if (zug.art === "zwei") { if (finger.size === 0) zug = null; return; }
   const z = zug; zug = null;
+  svg.querySelectorAll(".gedrueckt").forEach(e => e.classList.remove("gedrueckt"));
   if (z.bewegt) { if (z.art !== "schieben") zeichnen(); return; }
   const h = hass();
   if (!bearbeiten) {
@@ -656,7 +670,7 @@ function hoch(ev) {
       bestaetigt = {}; schalten(h, l.entity);
     } else if (z.tipp && z.tipp.raum) {
       const ids = lampenIm(z.tipp.raum).map(l => l.entity).filter(id => !id.startsWith("camera."));
-      if (ids.length) schalten(h, ids, !ids.some(id => istAn(h, id)));
+      if (ids.length) schalten(h, ids, !ids.some(id => anzeigeAn(h, id)));
       else meldung("In diesem Raum ist noch keine Lampe eingezeichnet");
     }
     return;
@@ -673,6 +687,13 @@ svg.addEventListener("pointerdown", ev => { if (!vonMaus(ev)) return; try { svg.
 svg.addEventListener("pointermove", ev => { if (vonMaus(ev)) weiter(ev); });
 svg.addEventListener("pointerup", ev => { if (vonMaus(ev)) hoch(ev); });
 svg.addEventListener("pointercancel", ev => { if (vonMaus(ev)) hoch(ev); });
+if (!window.PointerEvent) {
+  const maus = ev => ({ pointerId: "maus", clientX: ev.clientX, clientY: ev.clientY, target: ev.target });
+  let gedrueckt = false;
+  svg.addEventListener("mousedown", ev => { if (Date.now() - letzterTouch < 1000) return; gedrueckt = true; runter(maus(ev)); });
+  window.addEventListener("mousemove", ev => { if (gedrueckt) weiter(maus(ev)); });
+  window.addEventListener("mouseup", ev => { if (gedrueckt) { gedrueckt = false; hoch(maus(ev)); } });
+}
 const alsZeiger = t => ({ pointerId: "t" + t.identifier, clientX: t.clientX, clientY: t.clientY,
   target: t.target && t.target.closest ? t.target : svg });
 function beruehrung(fn) {
