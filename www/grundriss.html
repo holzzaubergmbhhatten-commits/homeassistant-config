@@ -198,7 +198,8 @@ const FENSTER = [
   ["h", 10.635, 1.4, 2.4], ["h", 10.635, 5.4, 6.4], ["h", 10.635, 14.3, 15.3], ["h", 10.635, 17.1, 18.1],
   ["v", 0, 1.6, 2.6], ["v", 0, 6.8, 7.8], ["v", 19.155, 1.5, 2.5], ["v", 19.155, 8.4, 9.4],
 ];
-const TREPPE = { x1: 15.6, y1: 4.125, x2: 18.0, y2: 5.35, stufen: 10 };
+// Treppe: Startwert, lässt sich im Bearbeiten-Modus verschieben, in der Größe ändern, drehen und ausblenden
+const TREPPE = { x: 15.6, y: 4.125, w: 2.4, h: 1.225, stufen: 10, richtung: "rechts" };
 // Lage des Original-Plans (Foto /local/grundriss.jpg, 1024×768 px) über dem Haus
 const PLANFOTO = { x: A - 143 / 35.3, y: A - 200 / 34.4, w: 1024 / 35.3, h: 768 / 34.4 };
 
@@ -467,11 +468,6 @@ function zeichneHaus(g) {
       el("path", { class: "tuer", d: `M${xa} ${sy} L${xa + t.seite * b} ${sy} A${b} ${b} 0 0 ${(t.seite > 0) !== !!t.rueck ? 1 : 0} ${xa} ${ey}` }, g);
     }
   }
-  // Treppe
-  const tr = TREPPE, st = (tr.x2 - tr.x1) / tr.stufen;
-  el("rect", { class: "treppe", x: tr.x1, y: tr.y1, width: tr.x2 - tr.x1, height: tr.y2 - tr.y1 }, g);
-  for (let i = 1; i < tr.stufen; i++) el("line", { class: "treppe", x1: tr.x1 + i * st, y1: tr.y1, x2: tr.x1 + i * st, y2: tr.y2 }, g);
-  el("path", { class: "treppe", d: `M${tr.x1 + 0.1} ${(tr.y1 + tr.y2) / 2} H${tr.x2 - 0.25} m-0.2 -0.12 l0.2 0.12 l-0.2 0.12` }, g);
   // Raumnamen
   for (const p of PLAN_RAEUME) {
     const n = planName(p), w = p.r[2] - p.r[0];
@@ -481,6 +477,35 @@ function zeichneHaus(g) {
     if (passt < 0.34) t.style.fontSize = Math.max(0.14, passt) + "px";
   }
   el("text", { class: "gebaeudename", x: 0.1, y: HAUS.h + 0.65 }, g).textContent = "HAUPTHAUS";
+}
+function zeichneTreppe(g) {
+  const t = daten.treppe;
+  if (!t || (t.versteckt && !bearbeiten)) return;
+  const sel = auswahl && auswahl.art === "treppe";
+  const gr = el("g", { "data-treppe": "1", class: sel ? "gewaehlt" : "", opacity: t.versteckt ? 0.35 : 1 }, g);
+  const rahmen = el("rect", { class: "treppe", x: t.x, y: t.y, width: t.w, height: t.h, fill: "var(--boden)", "fill-opacity": 0.01 }, gr);
+  if (sel) { rahmen.style.stroke = "var(--akzent)"; rahmen.style.strokeWidth = "0.06"; }
+  const quer = t.richtung === "rechts" || t.richtung === "links", n = Math.max(2, t.stufen);
+  for (let i = 1; i < n; i++) {
+    if (quer) el("line", { class: "treppe", x1: t.x + i * t.w / n, y1: t.y, x2: t.x + i * t.w / n, y2: t.y + t.h }, gr);
+    else el("line", { class: "treppe", x1: t.x, y1: t.y + i * t.h / n, x2: t.x + t.w, y2: t.y + i * t.h / n }, gr);
+  }
+  // Pfeil = Laufrichtung nach oben
+  const mx = t.x + t.w / 2, my = t.y + t.h / 2, s = 0.18;
+  const pfeil = {
+    rechts: `M${t.x + 0.1} ${my} H${t.x + t.w - 0.1} m${-s} ${-s * 0.7} l${s} ${s * 0.7} l${-s} ${s * 0.7}`,
+    links: `M${t.x + t.w - 0.1} ${my} H${t.x + 0.1} m${s} ${-s * 0.7} l${-s} ${s * 0.7} l${s} ${s * 0.7}`,
+    runter: `M${mx} ${t.y + 0.1} V${t.y + t.h - 0.1} m${-s * 0.7} ${-s} l${s * 0.7} ${s} l${s * 0.7} ${-s}`,
+    hoch: `M${mx} ${t.y + t.h - 0.1} V${t.y + 0.1} m${-s * 0.7} ${s} l${s * 0.7} ${-s} l${s * 0.7} ${s}`,
+  }[t.richtung] || "";
+  el("path", { class: "treppe", d: pfeil }, gr);
+  if (bearbeiten) {
+    const d = 0.3;
+    el("rect", { class: "wand", "data-wand": "o", x: t.x, y: t.y - d / 2, width: t.w, height: d }, gr);
+    el("rect", { class: "wand", "data-wand": "u", x: t.x, y: t.y + t.h - d / 2, width: t.w, height: d }, gr);
+    el("rect", { class: "wand", "data-wand": "l", x: t.x - d / 2, y: t.y, width: d, height: t.h }, gr);
+    el("rect", { class: "wand", "data-wand": "r", x: t.x + t.w - d / 2, y: t.y, width: d, height: t.h }, gr);
+  }
 }
 function zeichnen() {
   const h = hass();
@@ -492,6 +517,7 @@ function zeichnen() {
   for (const f of fl) if (EBENE[f.typ] <= 2) zeichneFlaeche(f, g);
   zeichneHaus(g);
   for (const f of fl) if (!(EBENE[f.typ] <= 2)) zeichneFlaeche(f, g);
+  zeichneTreppe(g);
   if (fotoAn) el("image", { href: FOTO_URL, x: PLANFOTO.x, y: PLANFOTO.y, width: PLANFOTO.w, height: PLANFOTO.h,
     opacity: 0.5, preserveAspectRatio: "none", "pointer-events": "none" }, g);
   // Lichtschein
@@ -533,6 +559,7 @@ svg.addEventListener("pointerdown", ev => {
   const p = weltPunkt(ev);
   const lampeEl = ev.target.closest("[data-lampe]"), wandEl = ev.target.closest("[data-wand]");
   const flEl = ev.target.closest("[data-flaeche]"), planEl = ev.target.closest("[data-plan]");
+  const treppeEl = bearbeiten && ev.target.closest("[data-treppe]");
   const schalterEl = ev.target.closest("[data-raumschalter]");
   const basis = { start: p, sx: ev.clientX, sy: ev.clientY, a0: { ...ansicht }, bewegt: false };
   if (!bearbeiten) {
@@ -540,6 +567,11 @@ svg.addEventListener("pointerdown", ev => {
   } else if (lampeEl) {
     const i = +lampeEl.dataset.lampe, l = daten.lampen[i];
     zug = { ...basis, art: "lampe", i, dx: p.x - l.x, dy: p.y - l.y };
+  } else if (treppeEl) {
+    const t = daten.treppe;
+    zug = wandEl ? { ...basis, art: "wand", treppe: true, teile: [{ q: t, seite: wandEl.dataset.wand }] }
+                 : { ...basis, art: "flaeche", treppe: true, alt: [{ q: t, x: t.x, y: t.y }], lampenAlt: [] };
+    if (wandEl) wandEl.classList.add("aktiv");
   } else if (wandEl && flEl) {
     const f = daten.flaechen.find(f => f.id === flEl.dataset.flaeche);
     const seite = wandEl.dataset.wand, gegen = { o: "u", u: "o", l: "r", r: "l" }[seite];
@@ -594,7 +626,7 @@ svg.addEventListener("pointermove", ev => {
     for (const a of zug.alt) { a.q.x = a.x + dx; a.q.y = a.y + dy; }
     for (const a of zug.lampenAlt) { a.l.x = a.x + dx; a.l.y = a.y + dy; }
   } else if (zug.art === "wand") {
-    const MIN = 0.6;
+    const MIN = zug.treppe ? 0.3 : 0.6;
     for (const { q: r, seite } of zug.teile) {
       if (seite === "o") { const u = r.y + r.h; r.y = Math.min(rund(p.y), u - MIN); r.h = u - r.y; }
       if (seite === "u") r.h = Math.max(MIN, rund(p.y) - r.y);
@@ -627,7 +659,8 @@ function loslassen(ev) {
     }
     return;
   }
-  if (z.art === "lampe") auswahl = { art: "lampe", id: z.i };
+  if (z.treppe) auswahl = { art: "treppe" };
+  else if (z.art === "lampe") auswahl = { art: "lampe", id: z.i };
   else if (z.f) auswahl = { art: "fl", id: z.f.id };
   else if (z.planRaum) auswahl = { art: "plan", id: z.planRaum };
   else auswahl = null;
@@ -678,6 +711,21 @@ function panelZeigen() {
     p.querySelector("#p-test").onclick = () => {
       const ids = lampenIm("plan:" + pr.id).map(l => l.entity); schalten(h, ids, !ids.some(id => istAn(h, id)));
     };
+  } else if (auswahl.art === "treppe") {
+    const t = daten.treppe;
+    const pfeile = [["hoch", "↑ hoch"], ["runter", "↓ runter"], ["links", "← links"], ["rechts", "→ rechts"]];
+    p.innerHTML = `<h3>Treppe</h3>
+      <div class="zeile" style="align-items:center;margin-bottom:12px">Stufen:
+        <button id="t-weniger">−</button><b style="min-width:30px;text-align:center">${t.stufen}</b><button id="t-mehr">+</button></div>
+      <div class="symbole arten">${pfeile.map(([k, txt]) => `<button data-richtung="${k}" class="${t.richtung === k ? "gewaehlt" : ""}">Laufrichtung ${txt}</button>`).join("")}</div>
+      <div class="zeile"><button id="t-weg" class="rot">${t.versteckt ? "Wieder anzeigen" : "Ausblenden"}</button>
+      <button id="p-fertig" class="voll">${icon("haken")} Fertig</button></div>
+      <div class="hinweis">Treppe in der Mitte anfassen = verschieben · Kanten ziehen = Größe ändern.
+      Tipp: „Bauplan einblenden“ zeigt, wo sie im Original liegt.</div>`;
+    p.querySelector("#t-weniger").onclick = () => { t.stufen = Math.max(2, t.stufen - 1); panelZeigen(); zeichnen(); };
+    p.querySelector("#t-mehr").onclick = () => { t.stufen = Math.min(30, t.stufen + 1); panelZeigen(); zeichnen(); };
+    p.querySelectorAll("[data-richtung]").forEach(b => b.onclick = () => { t.richtung = b.dataset.richtung; panelZeigen(); zeichnen(); });
+    p.querySelector("#t-weg").onclick = () => { t.versteckt = !t.versteckt || undefined; panelZeigen(); zeichnen(); };
   } else if (auswahl.art === "fl") {
     const f = daten.flaechen.find(f => f.id === auswahl.id);
     if (!f) { auswahl = null; return panelZeigen(); }
@@ -785,6 +833,7 @@ async function laden() {
   else if (alt && Array.isArray(alt.raeume)) { daten = umstellen(alt); meldung("Deine Einteilung wurde auf den Bauplan übertragen – bitte prüfen und speichern"); }
   else daten = neuerStand();
   daten.namen = daten.namen || {}; daten.flaechen = daten.flaechen || []; daten.lampen = daten.lampen || [];
+  if (!daten.treppe) daten.treppe = { ...TREPPE };
   ergaenzen(h);
   knoepfe(); zeichnen(); allesZeigen();
   let letzter = "";
