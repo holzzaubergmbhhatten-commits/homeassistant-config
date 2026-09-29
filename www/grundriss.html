@@ -546,9 +546,11 @@ function zeichnen() {
 
 // ================= Bedienung =================
 svg.addEventListener("wheel", ev => { ev.preventDefault(); zoomen(ev.deltaY > 0 ? 1.15 : 1 / 1.15, ev.clientX, ev.clientY); }, { passive: false });
-svg.addEventListener("pointerdown", ev => {
+// Maus/Stift über Pointer-Events, Finger über Touch-Events (der Kiosk-Browser wandelt Wischen sonst in
+// Seiten-Scrollen um, und die Seite bekommt nichts davon mit). Beide rufen runter/weiter/hoch auf.
+let letzterTouch = 0;
+function runter(ev) {
   if (!hass() || !daten) return;
-  svg.setPointerCapture(ev.pointerId);
   finger.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
   if (finger.size === 2) {
     const [a, b] = [...finger.values()];
@@ -592,8 +594,8 @@ svg.addEventListener("pointerdown", ev => {
   } else {
     zug = { ...basis, art: "schieben" };
   }
-});
-svg.addEventListener("pointermove", ev => {
+}
+function weiter(ev) {
   if (!finger.has(ev.pointerId) || !zug) return;
   finger.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
   const rect = svg.getBoundingClientRect();
@@ -635,9 +637,9 @@ svg.addEventListener("pointermove", ev => {
     }
   }
   zeichnenBald();
-});
+}
 function zeichnenBald() { if (zeichnenBald.t) return; zeichnenBald.t = requestAnimationFrame(() => { zeichnenBald.t = 0; zeichnen(); }); }
-function loslassen(ev) {
+function hoch(ev) {
   finger.delete(ev.pointerId);
   if (!zug) return;
   if (zug.art === "zwei") { if (finger.size === 0) zug = null; return; }
@@ -666,8 +668,20 @@ function loslassen(ev) {
   else auswahl = null;
   panelZeigen(); zeichnen();
 }
-svg.addEventListener("pointerup", loslassen);
-svg.addEventListener("pointercancel", loslassen);
+const vonMaus = ev => ev.pointerType !== "touch" && Date.now() - letzterTouch > 1000;
+svg.addEventListener("pointerdown", ev => { if (!vonMaus(ev)) return; try { svg.setPointerCapture(ev.pointerId); } catch (e) {} runter(ev); });
+svg.addEventListener("pointermove", ev => { if (vonMaus(ev)) weiter(ev); });
+svg.addEventListener("pointerup", ev => { if (vonMaus(ev)) hoch(ev); });
+svg.addEventListener("pointercancel", ev => { if (vonMaus(ev)) hoch(ev); });
+const alsZeiger = t => ({ pointerId: "t" + t.identifier, clientX: t.clientX, clientY: t.clientY,
+  target: t.target && t.target.closest ? t.target : svg });
+function beruehrung(fn) {
+  return ev => { ev.preventDefault(); letzterTouch = Date.now(); for (const t of ev.changedTouches) fn(alsZeiger(t)); };
+}
+svg.addEventListener("touchstart", beruehrung(runter), { passive: false });
+svg.addEventListener("touchmove", beruehrung(weiter), { passive: false });
+svg.addEventListener("touchend", beruehrung(hoch), { passive: false });
+svg.addEventListener("touchcancel", beruehrung(hoch), { passive: false });
 
 // ================= Kamera-Fenster =================
 function kameraZeigen(h, l) {
