@@ -5,67 +5,85 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Grundriss</title>
 <!--
-  Grundriss für den Touchmonitor (wird im Dashboard als Vollbild-iframe gezeigt).
-  - Liest Lampen, Räume und Zustände direkt aus der Home-Assistant-Oberfläche (window.parent … hass).
-  - Anordnung (Räume, Wände, Lampen-Positionen, Symbole) liegt in /local/grundriss_daten.json
-    und wird über script.grundriss_speichern gespeichert (packages/grundriss.yaml).
+  Grundriss für den Touchmonitor (im Dashboard als Vollbild-iframe).
+  - Liest Lampen/Schalter, Räume und Zustände direkt aus der Home-Assistant-Oberfläche (window.parent … hass).
+  - Anordnung liegt in /local/grundriss_daten.json, gespeichert über script.grundriss_speichern.
+  - Flächen-Arten: Innenraum, Bad/Fliesen, Gebäude (Außenmauer + Name), Terrasse, Rasen, Hof/Pflaster, Kies.
+  - Zoomen: zwei Finger / Mausrad / Knöpfe unten rechts; Verschieben: mit einem Finger ziehen.
 -->
 <style>
   :root {
-    --bg: #F2F2F7; --raum: #FFFFFF; --raum-an: #FFF7D6; --linie: #D1D1D6; --text: #1C1C1E;
-    --grau: #8E8E93; --aus: #E5E5EA; --an: #FFCC00; --akzent: #007AFF; --rot: #FF3B30;
-    --panel: rgba(255,255,255,0.97);
+    --bg: #E8EAE3; --text: #1C1C1E; --grau: #8E8E93; --akzent: #007AFF; --rot: #FF3B30; --panel: rgba(255,255,255,0.97);
+    --knopf: #FFFFFF; --mauer: #3A3A3C; --boden: #FFFDF8; --fliese: #EEF3F6; --gebaeude: #DAD6CE;
+    --rasen: #C9DDB1; --rasen2: #B7D09C; --hof: #D7D3CB; --hof2: #C4BFB5; --kies: #E3DDCF; --kies2: #CFC7B5;
+    --holz: #D9C2A0; --holz2: #C8AD86; --aus: #FFFFFF; --aus-rand: #C7C7CC; --an: #FFCC00; --symbol-aus: #8E8E93;
   }
   :root.dunkel {
-    --bg: #1C1C1E; --raum: #2C2C2E; --raum-an: #3D3522; --linie: #48484A; --text: #F2F2F7;
-    --grau: #98989D; --aus: #3A3A3C; --an: #FFD60A; --akzent: #0A84FF; --rot: #FF453A;
-    --panel: rgba(44,44,46,0.97);
+    --bg: #1C1C1E; --text: #F2F2F7; --grau: #98989D; --akzent: #0A84FF; --rot: #FF453A; --panel: rgba(44,44,46,0.97);
+    --knopf: #2C2C2E; --mauer: #AEAEB2; --boden: #2C2C2E; --fliese: #283036; --gebaeude: #3A3A3C;
+    --rasen: #26331E; --rasen2: #2F3F25; --hof: #34332F; --hof2: #3E3C37; --kies: #3A372F; --kies2: #454135;
+    --holz: #3F3426; --holz2: #4A3D2C; --aus: #3A3A3C; --aus-rand: #545458; --an: #FFD60A; --symbol-aus: #AEAEB2;
   }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
     font-family: -apple-system, "SF Pro Text", Roboto, "Helvetica Neue", system-ui, sans-serif;
     -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
   #plan { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
-  .leiste { position: absolute; top: 14px; left: 16px; right: 16px; display: flex; align-items: center; gap: 10px;
-    pointer-events: none; }
+  .leiste { position: absolute; top: 14px; left: 16px; right: 16px; display: flex; align-items: center; gap: 10px; pointer-events: none; }
   .leiste > * { pointer-events: auto; }
   .titel { font-size: 26px; font-weight: 700; letter-spacing: -0.3px; }
   .info { color: var(--grau); font-size: 16px; margin-left: 4px; }
   .luecke { flex: 1; }
   button { font: inherit; font-size: 16px; font-weight: 600; border: 0; border-radius: 12px; padding: 10px 16px;
-    background: var(--raum); color: var(--akzent); display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+    background: var(--knopf); color: var(--akzent); display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
   button.voll { background: var(--akzent); color: #fff; }
   button.rot { color: var(--rot); }
   button svg { width: 20px; height: 20px; fill: currentColor; }
-  .panel { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(720px, calc(100% - 32px));
-    background: var(--panel); border-radius: 18px; padding: 16px 18px; box-shadow: 0 8px 30px rgba(0,0,0,0.18); display: none; }
+  .zoom { position: absolute; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .zoom button { width: 52px; height: 52px; justify-content: center; padding: 0; }
+  .zoom button svg { width: 26px; height: 26px; }
+  .panel { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(760px, calc(100% - 120px));
+    max-height: 60%; overflow: auto; background: var(--panel); border-radius: 18px; padding: 16px 18px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.25); display: none; }
   .panel.offen { display: block; }
   .panel h3 { margin: 0 0 10px; font-size: 17px; }
   .panel input { font: inherit; font-size: 18px; width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 10px;
-    border: 1px solid var(--linie); background: var(--bg); color: var(--text); margin-bottom: 12px; }
+    border: 1px solid var(--aus-rand); background: var(--bg); color: var(--text); margin-bottom: 12px; }
   .symbole { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
   .symbole button { flex-direction: column; font-size: 12px; font-weight: 500; color: var(--text); padding: 8px 10px; min-width: 74px; }
   .symbole button svg { width: 28px; height: 28px; }
   .symbole button.gewaehlt { background: var(--akzent); color: #fff; }
+  .arten button { flex-direction: row; font-size: 14px; min-width: 0; }
+  .arten button i { display: inline-block; width: 18px; height: 18px; border-radius: 5px; border: 1px solid var(--aus-rand); }
+  .liste { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+  .liste button { justify-content: flex-start; color: var(--text); font-weight: 500; }
+  .liste button small { color: var(--grau); font-weight: 400; margin-left: auto; }
   .zeile { display: flex; gap: 10px; flex-wrap: wrap; }
   .hinweis { color: var(--grau); font-size: 14px; margin-top: 8px; }
   .meldung { position: absolute; left: 50%; top: 70px; transform: translateX(-50%); background: var(--text); color: var(--bg);
     padding: 10px 18px; border-radius: 12px; font-size: 16px; display: none; }
-  /* SVG */
-  .raum rect.flaeche { fill: var(--raum); stroke: var(--linie); stroke-width: 0.12; }
-  .raum.an rect.flaeche { fill: var(--raum-an); }
-  .raum text { fill: var(--grau); font-size: 0.75px; font-weight: 700; letter-spacing: 0.02px; }
-  .raum.gewaehlt rect.flaeche { stroke: var(--akzent); stroke-width: 0.2; }
-  .wand { fill: transparent; }
-  .bearbeiten .wand { fill: var(--akzent); fill-opacity: 0.0; }
-  .bearbeiten .wand:hover, .bearbeiten .wand.aktiv { fill-opacity: 0.35; }
-  .griff { fill: var(--akzent); }
-  .lampe circle { fill: var(--aus); }
-  .lampe.an circle { fill: var(--an); filter: drop-shadow(0 0 0.35px rgba(255,204,0,0.9)); }
-  .lampe path { fill: var(--grau); }
+  /* Plan */
+  .flaeche { stroke-linejoin: round; }
+  .typ-innen .flaeche { fill: var(--boden); stroke: var(--mauer); stroke-width: 0.22; }
+  .typ-nass .flaeche { fill: url(#muster-fliese); stroke: var(--mauer); stroke-width: 0.22; }
+  .typ-gebaeude .flaeche { fill: var(--gebaeude); stroke: var(--mauer); stroke-width: 0.45; filter: url(#schatten); }
+  .typ-terrasse .flaeche { fill: url(#muster-holz); stroke: var(--holz2); stroke-width: 0.08; }
+  .typ-rasen .flaeche { fill: url(#muster-rasen); stroke: none; }
+  .typ-hof .flaeche { fill: url(#muster-hof); stroke: none; }
+  .typ-kies .flaeche { fill: url(#muster-kies); stroke: none; }
+  .raum text { fill: var(--grau); font-size: 0.62px; font-weight: 700; }
+  .typ-gebaeude text { fill: var(--mauer); font-size: 0.9px; font-weight: 800; letter-spacing: 0.08px; text-transform: uppercase; }
+  .raum .schalter { cursor: pointer; }
+  .raum.gewaehlt .flaeche { stroke: var(--akzent) !important; stroke-width: 0.3; }
+  .bearbeiten .raum .flaeche { stroke-dasharray: none; }
+  .wand { fill: var(--akzent); fill-opacity: 0; }
+  .wand.aktiv { fill-opacity: 0.4; }
+  .lampe circle { fill: var(--aus); stroke: var(--aus-rand); stroke-width: 0.06; }
+  .lampe.an circle { fill: var(--an); stroke: none; }
+  .lampe path { fill: var(--symbol-aus); }
   .lampe.an path { fill: #3A2E00; }
-  .lampe text { fill: var(--text); font-size: 0.5px; font-weight: 600; text-anchor: middle; }
-  .lampe.aus-geschaltet text { fill: var(--grau); }
+  .lampe text { fill: var(--text); font-size: 0.42px; font-weight: 600; text-anchor: middle; paint-order: stroke;
+    stroke: var(--boden); stroke-width: 0.12px; stroke-linejoin: round; }
   .lampe.versteckt { opacity: 0.35; }
   .lampe.gewaehlt circle { stroke: var(--akzent); stroke-width: 0.15; }
   .lampe.nicht-da circle { fill: none; stroke: var(--rot); stroke-dasharray: 0.2 0.15; stroke-width: 0.08; }
@@ -76,17 +94,13 @@
 <div class="leiste">
   <span class="titel">Grundriss</span><span class="info" id="info"></span>
   <span class="luecke"></span>
-  <span id="knoepfe-ansicht">
-    <button id="alle-aus"></button>
-    <button id="bearbeiten"></button>
-  </span>
+  <span id="knoepfe-ansicht"><button id="alle-aus"></button> <button id="bearbeiten"></button></span>
   <span id="knoepfe-bearbeiten" style="display:none">
-    <button id="raum-neu"></button>
-    <button id="foto"></button>
-    <button id="abbrechen" class="rot"></button>
-    <button id="speichern" class="voll"></button>
+    <button id="raum-neu"></button> <button id="geraet-neu"></button> <button id="foto"></button>
+    <button id="abbrechen" class="rot"></button> <button id="speichern" class="voll"></button>
   </span>
 </div>
+<div class="zoom"><button id="zoom-rein"></button><button id="zoom-raus"></button><button id="zoom-alles"></button></div>
 <div class="panel" id="panel"></div>
 <div class="meldung" id="meldung"></div>
 <script>
@@ -99,42 +113,59 @@ const ICON = {
   birne: "M12,2A7,7 0 0,0 5,9C5,11.38 6.19,13.47 8,14.74V17A1,1 0 0,0 9,18H15A1,1 0 0,0 16,17V14.74C17.81,13.47 19,11.38 19,9A7,7 0 0,0 12,2M9,21A1,1 0 0,0 10,22H14A1,1 0 0,0 15,21V20H9V21Z",
   led: "M2.95 3L2 6.91L19.34 11.25L20.29 7.34L2.95 3M6.09 6.89L4.16 6.41L4.64 4.46L6.57 4.94L6.09 6.89M9.94 7.86L8 7.38L8.5 5.42L10.42 5.91L9.94 7.86M13.8 8.82L11.87 8.34L12.35 6.39L14.27 6.87L13.8 8.82M17.65 9.79L15.72 9.31L16.2 7.35L18.13 7.84L17.65 9.79M4.66 12.75L3.71 16.66L21.05 21L22 17.1L4.66 12.75M7.8 16.65L5.88 16.16L6.35 14.21L8.28 14.69L7.8 16.65M11.65 17.61L9.73 17.13L10.2 15.18L12.13 15.66L11.65 17.61M15.5 18.58L13.58 18.09L14.06 16.14L16 16.62L15.5 18.58M19.36 19.54L17.43 19.06L17.91 17.11L19.84 17.59L19.36 19.54M6.25 12.11L11 10.2L17.75 11.89L13 13.8L6.25 12.11Z",
   wand: "M13 19V16H11V19H13M19.09 16.5L20.5 15.09L18.73 13.32L17.32 14.73L19.09 16.5M4.91 16.5L6.68 14.73L5.27 13.32L3.5 15.09L4.91 16.5M20 12C20 9.14 18.5 6.5 16 5.07S10.5 3.64 8 5.07 4 9.14 4 12H20Z",
+  wandflach: "M5,5V11H19V5H5M5.27,13.32L3.5,15.09L4.91,16.5L6.68,14.73L5.27,13.32M18.73,13.32L17.32,14.73L19.09,16.5L20.5,15.09L18.73,13.32M11,16V19H13V16H11Z",
   spot: "M9,16.5L9.91,15.59L15.13,20.8L14.21,21.71L9,16.5M15.5,10L16.41,9.09L21.63,14.3L20.71,15.21L15.5,10M6.72,2.72L10.15,6.15L6.15,10.15L2.72,6.72C1.94,5.94 1.94,4.67 2.72,3.89L3.89,2.72C4.67,1.94 5.94,1.94 6.72,2.72M14.57,7.5L15.28,8.21L8.21,15.28L7.5,14.57L6.64,11.07L11.07,6.64L14.57,7.5Z",
   aussen: "M16 5L15 2H13L12 5L6 8H8L8.6 11H4V7H2V17H4V13H9L10 18L12 20L13 22H15L16 20L18 18L20 8H22M16.16 17H11.84L10 8H18Z",
+  weg: "M15 22H13C11.9 22 11 21.1 11 20V15H17V20C17 21.1 16.1 22 15 22M7 14H21L15 9.71V6C15 4.39 13.94 2 11 2S7 4.39 7 6C7 6.45 6.81 7 6 7H5V3H3V12H5V9H6C8.2 9 9 7.21 9 6C9 5.67 9.1 4 11 4C12.83 4 13 5.54 13 6V9.71L7 14Z",
   kette: "M22.56 11.39C22.36 10.59 21.82 9.85 21.05 9.44L20.63 7.74C21.11 7.58 21.57 7.41 22 7.23V5C20 6.07 16.53 7.03 12 7.03S4 6.07 2 5V7.23C2.43 7.41 2.89 7.58 3.37 7.74L2.95 9.44C2.18 9.85 1.64 10.59 1.44 11.39C.905 13.57 .385 17.31 2.92 17.93C4 18.2 6 17.89 7.27 12.82C7.46 12 7.33 11.12 6.84 10.39L7.26 8.67C8.14 8.81 9.05 8.9 10 8.96V10.74C9.35 11.33 9 12.17 9 13C9 15.24 9.39 19 12 19C13.12 19 15 18.22 15 13C15 12.17 14.65 11.33 14 10.74V8.96C14.95 8.9 15.86 8.81 16.74 8.67L17.16 10.39C16.67 11.12 16.54 12 16.73 12.82C18 17.89 20 18.2 21.08 17.93C23.61 17.31 23.09 13.57 22.56 11.39M5.81 12.47C5.81 12.47 4.74 16.84 3.28 16.5C1.82 16.12 2.9 11.75 2.9 11.75S3.26 10.29 4.71 10.65 5.81 12.47 5.81 12.47M12 17.5C10.5 17.5 10.5 13 10.5 13S10.5 11.5 12 11.5 13.5 13 13.5 13 13.5 17.5 12 17.5M20.72 16.5C19.27 16.84 18.19 12.47 18.19 12.47S17.83 11 19.29 10.65 21.1 11.75 21.1 11.75 22.18 16.12 20.72 16.5Z",
+  gruppe: "M15 14V16A1 1 0 0 1 14 17H10A1 1 0 0 1 9 16V14A5 5 0 1 1 15 14M14 18H10V19A1 1 0 0 0 11 20H13A1 1 0 0 0 14 19M7 19V18H5V19A1 1 0 0 0 6 20H7.17A2.93 2.93 0 0 1 7 19M5 10A6.79 6.79 0 0 1 5.68 7A4 4 0 0 0 4 14.45V16A1 1 0 0 0 5 17H7V14.88A6.92 6.92 0 0 1 5 10M17 18V19A2.93 2.93 0 0 1 16.83 20H18A1 1 0 0 0 19 19V18M18.32 7A6.79 6.79 0 0 1 19 10A6.92 6.92 0 0 1 17 14.88V17H19A1 1 0 0 0 20 16V14.45A4 4 0 0 0 18.32 7Z",
+  schalter: "M8 6V18H16V6H8M14 10H10V8H14V10M19.4 1.6C19 1.2 18.5 1 18 1H6C5.5 1 5 1.2 4.6 1.6C4.2 2 4 2.5 4 3V21C4 21.5 4.2 22 4.6 22.4C5 22.8 5.5 23 6 23H18C18.5 23 19 22.8 19.4 22.4C19.8 22 20 21.5 20 21V3C20 2.5 19.8 2 19.4 1.6M18 21H6V3H18V21Z",
+  steckdose: "M7.5,10.5A1.5,1.5 0 0,1 9,12A1.5,1.5 0 0,1 7.5,13.5C6.66,13.5 6,12.83 6,12A1.5,1.5 0 0,1 7.5,10.5M16.5,10.5A1.5,1.5 0 0,1 18,12A1.5,1.5 0 0,1 16.5,13.5A1.5,1.5 0 0,1 15,12A1.5,1.5 0 0,1 16.5,10.5M4.22,2H19.78C21,2 22,3 22,4.22V19.78A2.22,2.22 0 0,1 19.78,22H4.22C3,22 2,21 2,19.78V4.22A2.22,2.22 0 0,1 4.22,2M12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4Z",
+  tor: "M9 6V11H7V7H5V11H3V9H1V21H3V19H5V21H7V19H9V21H11V19H13V21H15V19H17V21H19V19H21V21H23V9H21V11H19V7H17V11H15V6H13V11H11V6H9M3 13H5V17H3V13M7 13H9V17H7V13M11 13H13V17H11V13M15 13H17V17H15V13M19 13H21V17H19V13Z",
+  scheune: "M12,3L3,8.2V21H9L11.9,18L15,21H21V8.2L12,3M7.9,20V14L10.9,17L7.9,20M8.9,13H14.9L11.9,16L8.9,13M15.9,20L12.9,17L15.9,14V20M15,11H8.8V9H15V11Z",
   stift: "M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z",
   haken: "M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z",
   x: "M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z",
   plus: "M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z",
   muell: "M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z",
   alleaus: "M20.84 22.73L18.09 20C18.06 20 18.03 20 18 20H16.83C16.94 19.68 17 19.34 17 19V18.89L14.75 16.64C14.57 16.86 14.31 17 14 17H10C9.45 17 9 16.55 9 16V14C7.4 12.8 6.74 10.84 7.12 9L5.5 7.4C5.18 8.23 5 9.11 5 10C5 11.83 5.72 13.58 7 14.88V17H5C4.45 17 4 16.55 4 16V14.45C2.86 13.79 2.12 12.62 2 11.31C1.85 9.27 3.25 7.5 5.2 7.09L1.11 3L2.39 1.73L22.11 21.46L20.84 22.73M15 6C13.22 4.67 10.86 4.72 9.13 5.93L16.08 12.88C17.63 10.67 17.17 7.63 15 6M19.79 16.59C19.91 16.42 20 16.22 20 16V14.45C21.91 13.34 22.57 10.9 21.46 9C20.8 7.85 19.63 7.11 18.32 7C18.77 7.94 19 8.96 19 10C19 11.57 18.47 13.09 17.5 14.31L19.79 16.59M10 19C10 19.55 10.45 20 11 20H13C13.55 20 14 19.55 14 19V18H10V19M7 18H5V19C5 19.55 5.45 20 6 20H7.17C7.06 19.68 7 19.34 7 19V18Z",
+  lupeplus: "M15.5,14L20.5,19L19,20.5L14,15.5V14.71L13.73,14.43C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.43,13.73L14.71,14H15.5M9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14M12,10H10V12H9V10H7V9H9V7H10V9H12V10Z",
+  lupeminus: "M15.5,14H14.71L14.43,13.73C15.41,12.59 16,11.11 16,9.5A6.5,6.5 0 0,0 9.5,3A6.5,6.5 0 0,0 3,9.5A6.5,6.5 0 0,0 9.5,16C11.11,16 12.59,15.41 13.73,14.43L14,14.71V15.5L19,20.5L20.5,19L15.5,14M9.5,14C7,14 5,12 5,9.5C5,7 7,5 9.5,5C12,5 14,7 14,9.5C14,12 12,14 9.5,14M7,9H12V10H7V9Z",
+  alles: "M17 4H20C21.1 4 22 4.9 22 6V8H20V6H17V4M4 8V6H7V4H4C2.9 4 2 4.9 2 6V8H4M20 16V18H17V20H20C21.1 20 22 19.1 22 18V16H20M7 18H4V16H2V18C2 19.1 2.9 20 4 20H7V18M16 10V14H8V10H16M18 8H6V16H18V8Z",
+  haus: "M12 5.69L17 10.19V18H15V12H9V18H7V10.19L12 5.69M12 3L2 12H5V20H11V14H13V20H19V12H22",
+  foto: "M19,19H5V5H19M19,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M13.96,12.29L11.21,15.83L9.25,13.47L6.5,17H17.5L13.96,12.29Z",
 };
 const SYMBOLE = [
   ["decke", "Decke"], ["mehrfach", "Mehrfach"], ["steh", "Stehlampe"], ["tisch", "Tischlampe"], ["lampe", "Lampe"],
-  ["wand", "Wand"], ["spot", "Spot"], ["led", "LED-Streifen"], ["birne", "Birne"], ["aussen", "Außen"], ["kette", "Lichterkette"],
+  ["wand", "Wand"], ["wandflach", "Wand flach"], ["spot", "Spot"], ["led", "LED / Gesims"], ["birne", "Birne"],
+  ["aussen", "Außen"], ["weg", "Weg"], ["kette", "Lichterkette"], ["gruppe", "Gruppe"], ["schalter", "Schalter"],
+  ["steckdose", "Steckdose"], ["tor", "Tor"], ["scheune", "Scheune"],
 ];
+const ARTEN = [
+  ["innen", "Innenraum", "var(--boden)"], ["nass", "Bad / Fliesen", "var(--fliese)"], ["gebaeude", "Gebäude", "var(--gebaeude)"],
+  ["terrasse", "Terrasse", "var(--holz)"], ["rasen", "Rasen", "var(--rasen)"], ["hof", "Hof / Pflaster", "var(--hof)"],
+  ["kies", "Kies / Weg", "var(--kies)"],
+];
+const EBENE = { rasen: 0, kies: 0, hof: 0, terrasse: 1, gebaeude: 2, innen: 3, nass: 3 };
 const DATEN_URL = "/local/grundriss_daten.json";
 const FOTO_URL = "/local/grundriss.jpg";
-const RASTER = 0.5;          // Wände rasten auf halbe Einheiten ein
-const LAMPE_R = 0.75;        // Radius der Lampen-Kreise (Einheiten)
+const RASTER = 0.5;
+const LAMPE_R = 0.6;
 const NS = "http://www.w3.org/2000/svg";
 
 const svg = document.getElementById("plan");
-let daten = null;            // {raeume:[...], lampen:[...], foto:{...}}
-let gesichert = null;        // Kopie beim Start des Bearbeitens
-let bearbeiten = false;
-let auswahl = null;          // {art:"raum"|"lampe", id}
-let fotoAn = false;
-let ansichtsBox = null;      // beim Bearbeiten fest, damit nichts springt
-let zug = null;              // laufendes Ziehen
+let daten = null, gesichert = null, bearbeiten = false, auswahl = null, fotoAn = false;
+let ansicht = null;            // aktueller Ausschnitt {x,y,w,h} (Seitenverhältnis = Bildschirm)
+const finger = new Map();      // aktive Zeiger (für Zwei-Finger-Zoom)
+let zug = null;                // laufende Aktion
+let bestaetigt = {};           // Tor: erster Tipp
 
 // ---------- Home Assistant ----------
-function hass() {
-  try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; }
-}
-function lichter(h) {
-  return Object.keys(h.states).filter(id => id.startsWith("light.") &&
-    !(h.entities && h.entities[id] && (h.entities[id].hidden || h.entities[id].entity_category)));
+function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
+function sichtbar(h, id) { const e = h.entities && h.entities[id]; return !(e && (e.hidden || e.entity_category)); }
+function lichter(h) { return Object.keys(h.states).filter(id => id.startsWith("light.") && sichtbar(h, id)); }
+function kandidaten(h) {
+  return Object.keys(h.states).filter(id => (id.startsWith("light.") || id.startsWith("switch.")) && sichtbar(h, id));
 }
 function bereichVon(h, id) {
   const e = h.entities && h.entities[id];
@@ -143,10 +174,14 @@ function bereichVon(h, id) {
   const d = e.device_id && h.devices && h.devices[e.device_id];
   return d ? d.area_id : null;
 }
-function bereichName(h, area) {
-  return (area && h.areas && h.areas[area] && h.areas[area].name) || "Ohne Raum";
-}
+function bereichName(h, a) { return (a && h.areas && h.areas[a] && h.areas[a].name) || "Ohne Raum"; }
 function istAn(h, id) { return h.states[id] && h.states[id].state === "on"; }
+function schalten(h, ids, an) {
+  const liste = [].concat(ids).filter(id => h.states[id]);
+  if (!liste.length) return;
+  if (an === undefined) h.callService("homeassistant", "toggle", { entity_id: liste });
+  else h.callService("homeassistant", an ? "turn_on" : "turn_off", { entity_id: liste });
+}
 
 // ---------- Hilfen ----------
 const rund = v => Math.round(v / RASTER) * RASTER;
@@ -158,30 +193,47 @@ function el(tag, attrs, eltern) {
   return n;
 }
 function icon(name) { return `<svg viewBox="0 0 24 24"><path d="${ICON[name]}"/></svg>`; }
-function symbolRaten(name) {
-  const n = (name || "").toLowerCase();
+function esc(t) { return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;"); }
+function symbolRaten(text) {
+  const n = (text || "").toLowerCase();
+  if (/switch\./.test(n)) {
+    if (/tor\b|tor[ _]/.test(n)) return "tor";
+    if (/steckdose|plug/.test(n)) return "steckdose";
+    if (/weg/.test(n)) return "weg";
+    if (/scheune|werkstatt|stall/.test(n)) return "scheune";
+    return "schalter";
+  }
+  if (/steckdose|plug/.test(n)) return "steckdose";
   if (/steh/.test(n)) return "steh";
   if (/tisch|nacht|schreib/.test(n)) return "tisch";
-  if (/led|streifen|strip/.test(n)) return "led";
+  if (/gesims|led|streifen|strip/.test(n)) return "led";
   if (/spot/.test(n)) return "spot";
   if (/wand/.test(n)) return "wand";
   if (/kette/.test(n)) return "kette";
-  if (/au(ß|ss)en|weg|garten|hof|terrasse|eingang|garage/.test(n)) return "aussen";
+  if (/weg/.test(n)) return "weg";
+  if (/au(ß|ss)en|garten|hof|terrasse|eingang|garage|haust/.test(n)) return "aussen";
+  if (/switch\./.test(n)) return "schalter";
   return "decke";
 }
+function artVon(name) { return /bad|wc|dusch/i.test(name || "") ? "nass" : /terrasse/i.test(name || "") ? "terrasse" : "innen"; }
 function meldung(text) {
   const m = document.getElementById("meldung");
   m.textContent = text; m.style.display = "block";
   clearTimeout(meldung.t); meldung.t = setTimeout(() => m.style.display = "none", 2500);
 }
+function geordnet() {
+  return daten.raeume.map((r, i) => [r, i]).sort((a, b) => (EBENE[a[0].typ] ?? 3) - (EBENE[b[0].typ] ?? 3) || a[1] - b[1]).map(x => x[0]);
+}
 function raumAn(x, y) {
-  // oberster (zuletzt gezeichneter) Raum an dieser Stelle
-  for (let i = daten.raeume.length - 1; i >= 0; i--) {
-    const r = daten.raeume[i];
+  // oberste Fläche an dieser Stelle, Gebäude-Umrisse nur, wenn kein Raum darin liegt
+  const liste = geordnet();
+  for (let i = liste.length - 1; i >= 0; i--) {
+    const r = liste[i];
     if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return r;
   }
   return null;
 }
+function lampenIn(r) { return daten.lampen.filter(l => !l.versteckt && raumAn(l.x, l.y) === r); }
 function lampenName(h, l) {
   if (l.name) return l.name;
   const s = h.states[l.entity];
@@ -191,272 +243,362 @@ function lampenName(h, l) {
   return n;
 }
 
-// ---------- Anfangs-Grundriss aus den Home-Assistant-Räumen ----------
+// ---------- Anfangs-Grundriss / Ergänzen ----------
 function startGrundriss(h) {
   const gruppen = {};
   for (const id of lichter(h)) { const k = bereichVon(h, id) || "_ohne"; if (!gruppen[k]) gruppen[k] = []; gruppen[k].push(id); }
-  const ids = Object.keys(gruppen).sort((a, b) => bereichName(h, a === "_ohne" ? null : a)
-    .localeCompare(bereichName(h, b === "_ohne" ? null : b), "de"));
-  const d = { version: 1, raeume: [], lampen: [] };
+  const ids = Object.keys(gruppen).sort((a, b) => bereichName(h, a === "_ohne" ? null : a).localeCompare(bereichName(h, b === "_ohne" ? null : b), "de"));
+  const d = { version: 2, raeume: [], lampen: [] };
   let x = 0, y = 0, zeilenH = 0;
-  const BREITE = 48;
   for (const a of ids) {
     const n = gruppen[a].length, spalten = Math.min(3, n), zeilen = Math.ceil(n / 3);
     const w = Math.max(8, spalten * 3.3 + 0.6), hh = Math.max(6, zeilen * 3 + 2.4);
-    if (x + w > BREITE) { x = 0; y += zeilenH; zeilenH = 0; }
-    const raum = { id: neueId(), name: bereichName(h, a === "_ohne" ? null : a), bereich: a === "_ohne" ? null : a, x, y, w, h: hh };
-    d.raeume.push(raum);
-    gruppen[a].forEach((id, i) => d.lampen.push({
-      entity: id, x: x + 1.9 + (i % 3) * 3.3, y: y + 3.2 + Math.floor(i / 3) * 3,
-      icon: symbolRaten((h.states[id].attributes.friendly_name || "") + " " + id),
-    }));
+    if (x + w > 48) { x = 0; y += zeilenH; zeilenH = 0; }
+    const name = bereichName(h, a === "_ohne" ? null : a);
+    d.raeume.push({ id: neueId(), name, typ: artVon(name), bereich: a === "_ohne" ? null : a, x, y, w, h: hh });
+    gruppen[a].forEach((id, i) => d.lampen.push({ entity: id, x: x + 1.9 + (i % 3) * 3.3, y: y + 3.2 + Math.floor(i / 3) * 3,
+      icon: symbolRaten((h.states[id].attributes.friendly_name || "") + " " + id) }));
     x += w; zeilenH = Math.max(zeilenH, hh);
   }
   return d;
 }
-// neue Lampen (seit dem letzten Speichern hinzugekommen) in ihren Raum setzen
+function geraetEinsetzen(h, id, r) {
+  const drin = daten.lampen.filter(l => l.x >= r.x && l.x <= r.x + r.w && l.y >= r.y && l.y <= r.y + r.h).length;
+  daten.lampen.push({ entity: id, x: Math.min(r.x + r.w - 1, r.x + 1.9 + (drin % 3) * 3.3),
+    y: Math.min(r.y + r.h - 1, r.y + 3.2 + Math.floor(drin / 3) * 3),
+    icon: symbolRaten((h.states[id].attributes.friendly_name || "") + " " + id) });
+}
 function neueLampenErgaenzen(h) {
   const bekannt = new Set(daten.lampen.map(l => l.entity));
   for (const id of lichter(h)) {
     if (bekannt.has(id)) continue;
     const a = bereichVon(h, id);
-    let r = daten.raeume.find(r => r.bereich && r.bereich === a) ||
-            daten.raeume.find(r => r.name === bereichName(h, a));
+    let r = daten.raeume.find(r => r.bereich && r.bereich === a) || daten.raeume.find(r => r.name === bereichName(h, a));
     if (!r) {
-      const box = inhaltsBox();
-      r = { id: neueId(), name: bereichName(h, a), bereich: a, x: box.x, y: box.y + box.h + 1, w: 8, h: 6 };
+      const b = inhaltsBox();
+      r = { id: neueId(), name: bereichName(h, a), typ: "innen", bereich: a, x: b.x, y: b.y + b.h + 1, w: 8, h: 6 };
       daten.raeume.push(r);
     }
-    const drin = daten.lampen.filter(l => l.x >= r.x && l.x <= r.x + r.w && l.y >= r.y && l.y <= r.y + r.h).length;
-    daten.lampen.push({ entity: id, x: Math.min(r.x + r.w - 1, r.x + 1.9 + (drin % 3) * 3.3),
-      y: Math.min(r.y + r.h - 1, r.y + 3.2 + Math.floor(drin / 3) * 3),
-      icon: symbolRaten((h.states[id].attributes.friendly_name || "") + " " + id) });
+    geraetEinsetzen(h, id, r);
   }
+  for (const r of daten.raeume) if (!r.typ) r.typ = artVon(r.name);
 }
 
-// ---------- Zeichnen ----------
+// ---------- Ausschnitt / Zoom ----------
 function inhaltsBox() {
   let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
   for (const r of daten.raeume) { x1 = Math.min(x1, r.x); y1 = Math.min(y1, r.y); x2 = Math.max(x2, r.x + r.w); y2 = Math.max(y2, r.y + r.h); }
-  for (const l of daten.lampen) { x1 = Math.min(x1, l.x - 1); y1 = Math.min(y1, l.y - 1); x2 = Math.max(x2, l.x + 1); y2 = Math.max(y2, l.y + 1.6); }
+  for (const l of daten.lampen) { x1 = Math.min(x1, l.x - 1); y1 = Math.min(y1, l.y - 1); x2 = Math.max(x2, l.x + 1); y2 = Math.max(y2, l.y + 1.4); }
   if (!isFinite(x1)) return { x: 0, y: 0, w: 40, h: 24 };
   return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
 }
-function berechneAnsicht() {
-  const b = inhaltsBox();
-  const rand = bearbeiten ? 4 : 1;
-  // oben Platz für die Knopfleiste lassen
-  return { x: b.x - rand, y: b.y - rand - 3, w: b.w + 2 * rand, h: b.h + 2 * rand + 3 };
+function seitenverhaeltnis() { const r = svg.getBoundingClientRect(); return (r.width || 16) / (r.height || 9); }
+function allesZeigen() {
+  const b = inhaltsBox(), a = seitenverhaeltnis();
+  let w = b.w + 3, h = b.h + 6;  // oben Platz für die Knopfleiste
+  if (w / h > a) h = w / a; else w = h * a;
+  ansicht = { x: b.x + b.w / 2 - w / 2, y: b.y + b.h / 2 - h / 2 - 1.2, w, h };
+}
+function zoomen(faktor, cx, cy) {
+  const rect = svg.getBoundingClientRect();
+  const wx = ansicht.x + (cx - rect.left) / rect.width * ansicht.w, wy = ansicht.y + (cy - rect.top) / rect.height * ansicht.h;
+  const w = Math.min(400, Math.max(4, ansicht.w * faktor)), f = w / ansicht.w;
+  ansicht = { x: wx - (wx - ansicht.x) * f, y: wy - (wy - ansicht.y) * f, w, h: ansicht.h * f };
+  zeichnen();
+}
+function weltPunkt(ev) {
+  const rect = svg.getBoundingClientRect();
+  return { x: ansicht.x + (ev.clientX - rect.left) / rect.width * ansicht.w, y: ansicht.y + (ev.clientY - rect.top) / rect.height * ansicht.h };
+}
+
+// ---------- Zeichnen ----------
+function muster(defs) {
+  defs.innerHTML = `
+    <pattern id="muster-rasen" width="0.6" height="0.6" patternUnits="userSpaceOnUse">
+      <rect width="0.6" height="0.6" fill="var(--rasen)"/><circle cx="0.15" cy="0.2" r="0.05" fill="var(--rasen2)"/>
+      <circle cx="0.45" cy="0.48" r="0.05" fill="var(--rasen2)"/></pattern>
+    <pattern id="muster-hof" width="0.8" height="0.4" patternUnits="userSpaceOnUse">
+      <rect width="0.8" height="0.4" fill="var(--hof)"/><path d="M0 0H0.8M0.4 0V0.2M0 0.2H0.8M0.2 0.2V0.4M0.6 0.2V0.4" stroke="var(--hof2)" stroke-width="0.03"/></pattern>
+    <pattern id="muster-kies" width="0.5" height="0.5" patternUnits="userSpaceOnUse">
+      <rect width="0.5" height="0.5" fill="var(--kies)"/><circle cx="0.1" cy="0.12" r="0.04" fill="var(--kies2)"/>
+      <circle cx="0.35" cy="0.3" r="0.05" fill="var(--kies2)"/><circle cx="0.2" cy="0.42" r="0.03" fill="var(--kies2)"/></pattern>
+    <pattern id="muster-holz" width="1" height="0.35" patternUnits="userSpaceOnUse">
+      <rect width="1" height="0.35" fill="var(--holz)"/><path d="M0 0.34H1" stroke="var(--holz2)" stroke-width="0.03"/></pattern>
+    <pattern id="muster-fliese" width="0.6" height="0.6" patternUnits="userSpaceOnUse">
+      <rect width="0.6" height="0.6" fill="var(--fliese)"/><path d="M0 0H0.6M0 0V0.6" stroke="var(--aus-rand)" stroke-width="0.02" opacity="0.6"/></pattern>
+    <radialGradient id="lichtschein"><stop offset="0" stop-color="#FFD000" stop-opacity="0.55"/>
+      <stop offset="0.5" stop-color="#FFD000" stop-opacity="0.18"/><stop offset="1" stop-color="#FFD000" stop-opacity="0"/></radialGradient>
+    <filter id="schatten" x="-5%" y="-5%" width="110%" height="115%"><feDropShadow dx="0" dy="0.15" stdDeviation="0.25" flood-opacity="0.25"/></filter>`;
 }
 function zeichnen() {
   const h = hass();
   if (!h || !daten) return;
+  if (!ansicht) allesZeigen();
   document.documentElement.classList.toggle("dunkel", !!(h.themes && h.themes.darkMode));
-  const v = ansichtsBox || berechneAnsicht();
-  svg.setAttribute("viewBox", `${v.x} ${v.y} ${v.w} ${v.h}`);
+  svg.setAttribute("viewBox", `${ansicht.x} ${ansicht.y} ${ansicht.w} ${ansicht.h}`);
+  svg.setAttribute("preserveAspectRatio", "none");
   svg.classList.toggle("bearbeiten", bearbeiten);
   svg.innerHTML = "";
+  muster(el("defs", {}, svg));
 
-  if (bearbeiten && fotoAn && daten.foto) {
-    el("image", { href: FOTO_URL, x: daten.foto.x, y: daten.foto.y, width: daten.foto.w, opacity: 0.35,
-      preserveAspectRatio: "xMinYMin meet" }, svg);
+  if (bearbeiten && fotoAn) {
+    if (!daten.foto) { const b = inhaltsBox(); daten.foto = { x: b.x, y: b.y, w: b.w, h: b.h }; }
+    el("image", { href: FOTO_URL, x: daten.foto.x, y: daten.foto.y, width: daten.foto.w, height: daten.foto.h || daten.foto.w * 0.6,
+      opacity: 0.4, preserveAspectRatio: "xMidYMid meet" }, svg);
   }
-  const anRaeume = new Set();
-  for (const l of daten.lampen) if (!l.versteckt && istAn(h, l.entity)) { const r = raumAn(l.x, l.y); if (r) anRaeume.add(r.id); }
-
-  for (const r of daten.raeume) {
-    const g = el("g", { class: "raum" + (anRaeume.has(r.id) ? " an" : "") +
-      (auswahl && auswahl.art === "raum" && auswahl.id === r.id ? " gewaehlt" : ""), "data-raum": r.id }, svg);
-    el("rect", { class: "flaeche", x: r.x, y: r.y, width: r.w, height: r.h, rx: 0.35 }, g);
-    const t = el("text", { x: r.x + 0.55, y: r.y + 1.2 }, g);
+  // Flächen und Räume (Außenflächen unten, Gebäude darüber, Räume oben)
+  for (const r of geordnet()) {
+    const g = el("g", { class: `raum typ-${r.typ || "innen"}` + (auswahl && auswahl.art === "raum" && auswahl.id === r.id ? " gewaehlt" : ""),
+      "data-raum": r.id }, svg);
+    el("rect", { class: "flaeche", x: r.x, y: r.y, width: r.w, height: r.h, rx: r.typ === "gebaeude" ? 0.1 : 0.05 }, g);
+    const t = el("text", { x: r.x + 0.45, y: r.y + (r.typ === "gebaeude" ? r.h + 1.05 : 0.95), class: "schalter", "data-raumschalter": r.id }, g);
     t.textContent = r.name;
+    // lange Namen in schmalen Räumen kleiner schreiben, damit sie hineinpassen
+    const gross = r.typ === "gebaeude" ? 0.9 : 0.62;
+    const passend = (r.w - 0.7) / Math.max(1, r.name.length * (r.typ === "gebaeude" ? 0.75 : 0.6));
+    if (passend < gross) t.style.fontSize = Math.max(0.3, passend) + "px";
     if (bearbeiten) {
-      const d = 0.45; // Anfasser-Breite der Wände
+      const d = 0.5;
       el("rect", { class: "wand", "data-wand": "o", x: r.x, y: r.y - d / 2, width: r.w, height: d }, g);
       el("rect", { class: "wand", "data-wand": "u", x: r.x, y: r.y + r.h - d / 2, width: r.w, height: d }, g);
       el("rect", { class: "wand", "data-wand": "l", x: r.x - d / 2, y: r.y, width: d, height: r.h }, g);
       el("rect", { class: "wand", "data-wand": "r", x: r.x + r.w - d / 2, y: r.y, width: d, height: r.h }, g);
     }
   }
+  // Lichtschein eingeschalteter Lampen
+  const schein = el("g", { "pointer-events": "none" }, svg);
   let an = 0;
+  for (const l of daten.lampen) {
+    if (l.versteckt || !istAn(h, l.entity)) continue;
+    an++;
+    if (l.entity.startsWith("light.") || l.icon !== "tor") el("circle", { cx: l.x, cy: l.y, r: 3.2, fill: "url(#lichtschein)" }, schein);
+  }
+  // Lampen und Schalter
   daten.lampen.forEach((l, i) => {
     if (l.versteckt && !bearbeiten) return;
-    const vorhanden = !!h.states[l.entity];
-    const ein = vorhanden && istAn(h, l.entity);
-    if (ein && !l.versteckt) an++;
-    const g = el("g", { class: "lampe" + (ein ? " an" : " aus-geschaltet") + (l.versteckt ? " versteckt" : "") +
-      (vorhanden ? "" : " nicht-da") + (auswahl && auswahl.art === "lampe" && auswahl.id === i ? " gewaehlt" : ""),
-      "data-lampe": i, transform: `translate(${l.x} ${l.y})` }, svg);
+    const vorhanden = !!h.states[l.entity], ein = vorhanden && istAn(h, l.entity);
+    const g = el("g", { class: "lampe" + (ein ? " an" : "") + (l.versteckt ? " versteckt" : "") + (vorhanden ? "" : " nicht-da") +
+      (auswahl && auswahl.art === "lampe" && auswahl.id === i ? " gewaehlt" : ""), "data-lampe": i, transform: `translate(${l.x} ${l.y})` }, svg);
     el("circle", { r: LAMPE_R }, g);
-    el("path", { d: ICON[l.icon] || ICON.decke, transform: "translate(-0.5 -0.5) scale(0.0417)" }, g);
-    const t = el("text", { y: LAMPE_R + 0.7 }, g);
+    el("path", { d: ICON[l.icon] || ICON.decke, transform: "translate(-0.42 -0.42) scale(0.035)" }, g);
     const name = lampenName(h, l);
-    t.textContent = name.length > 16 ? name.slice(0, 15) + "…" : name;
+    el("text", { y: LAMPE_R + 0.55 }, g).textContent = name.length > 18 ? name.slice(0, 17) + "…" : name;
   });
   document.getElementById("info").textContent = bearbeiten
-    ? "Bearbeiten: Wände ziehen, Räume verschieben, Lampen hinziehen, antippen für Namen und Symbol"
-    : (an === 0 ? "Alle Lichter aus" : an === 1 ? "1 Licht an" : an + " Lichter an");
+    ? "Bearbeiten: Kanten ziehen = Wände · Mitte ziehen = verschieben · antippen = Name, Art, Symbol"
+    : (an === 0 ? "Alles aus" : an === 1 ? "1 an" : an + " an") + " · Raumname antippen = ganzer Raum";
 }
 
 // ---------- Bedienung ----------
-function weltPunkt(ev) {
-  const p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY;
-  return p.matrixTransform(svg.getScreenCTM().inverse());
-}
+svg.addEventListener("wheel", ev => { ev.preventDefault(); zoomen(ev.deltaY > 0 ? 1.15 : 1 / 1.15, ev.clientX, ev.clientY); }, { passive: false });
 svg.addEventListener("pointerdown", ev => {
-  const h = hass(); if (!h) return;
-  const lampeEl = ev.target.closest("[data-lampe]");
-  const wandEl = ev.target.closest("[data-wand]");
-  const raumEl = ev.target.closest("[data-raum]");
-  const p = weltPunkt(ev);
-  if (!bearbeiten) {
-    if (lampeEl) {
-      const l = daten.lampen[+lampeEl.dataset.lampe];
-      if (h.states[l.entity]) h.callService("light", "toggle", { entity_id: l.entity });
-    }
+  if (!hass() || !daten) return;
+  svg.setPointerCapture(ev.pointerId);
+  finger.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+  if (finger.size === 2) {         // Zwei Finger: zoomen
+    const [a, b] = [...finger.values()];
+    zug = { art: "zwei", d0: Math.hypot(a.x - b.x, a.y - b.y), m0: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, a0: { ...ansicht } };
     return;
   }
-  svg.setPointerCapture(ev.pointerId);
-  if (lampeEl) {
+  if (finger.size > 2) return;
+  const p = weltPunkt(ev);
+  const lampeEl = ev.target.closest("[data-lampe]"), wandEl = ev.target.closest("[data-wand]");
+  const raumEl = ev.target.closest("[data-raum]"), schalterEl = ev.target.closest("[data-raumschalter]");
+  const basis = { start: p, sx: ev.clientX, sy: ev.clientY, a0: { ...ansicht }, bewegt: false };
+  if (!bearbeiten) {
+    zug = { ...basis, art: "schieben", tipp: lampeEl ? { lampe: +lampeEl.dataset.lampe } : schalterEl ? { raum: schalterEl.dataset.raumschalter } : null };
+  } else if (lampeEl) {
     const i = +lampeEl.dataset.lampe, l = daten.lampen[i];
-    zug = { art: "lampe", i, dx: p.x - l.x, dy: p.y - l.y, bewegt: false, start: p };
+    zug = { ...basis, art: "lampe", i, dx: p.x - l.x, dy: p.y - l.y };
   } else if (wandEl && raumEl) {
     const r = daten.raeume.find(r => r.id === raumEl.dataset.raum);
     const seite = wandEl.dataset.wand, gegen = { o: "u", u: "o", l: "r", r: "l" }[seite];
     const kante = (q, s) => s === "o" ? q.y : s === "u" ? q.y + q.h : s === "l" ? q.x : q.x + q.w;
-    const ueberlappt = q => (seite === "o" || seite === "u")
-      ? q.x < r.x + r.w && q.x + q.w > r.x : q.y < r.y + r.h && q.y + q.h > r.y;
-    // Räume, die an derselben Wand anliegen, bewegen sich mit (gemeinsame Wand)
-    const nachbarn = daten.raeume.filter(q => q !== r && ueberlappt(q) && Math.abs(kante(q, gegen) - kante(r, seite)) < 0.01)
-      .map(q => ({ q, seite: gegen }));
-    zug = { art: "wand", teile: [{ q: r, seite }, ...nachbarn], bewegt: false, start: p };
+    const ueberlappt = q => (seite === "o" || seite === "u") ? q.x < r.x + r.w && q.x + q.w > r.x : q.y < r.y + r.h && q.y + q.h > r.y;
+    const nachbarn = daten.raeume.filter(q => q !== r && EBENE[q.typ] === EBENE[r.typ] && ueberlappt(q) &&
+      Math.abs(kante(q, gegen) - kante(r, seite)) < 0.01).map(q => ({ q, seite: gegen }));
+    zug = { ...basis, art: "wand", r, teile: [{ q: r, seite }, ...nachbarn] };
     wandEl.classList.add("aktiv");
   } else if (raumEl) {
     const r = daten.raeume.find(r => r.id === raumEl.dataset.raum);
-    // Lampen im Raum wandern mit
-    const mit = daten.lampen.filter(l => raumAn(l.x, l.y) === r).map(l => ({ l, x: l.x, y: l.y }));
-    zug = { art: "raum", r, ox: r.x, oy: r.y, mit, bewegt: false, start: p };
+    const mitRaeume = r.typ === "gebaeude" ? daten.raeume.filter(q => q !== r && q.x >= r.x && q.y >= r.y && q.x + q.w <= r.x + r.w && q.y + q.h <= r.y + r.h) : [];
+    const mitLampen = daten.lampen.filter(l => l.x >= r.x && l.x <= r.x + r.w && l.y >= r.y && l.y <= r.y + r.h);
+    zug = { ...basis, art: "raum", r, alt: [r, ...mitRaeume].map(q => ({ q, x: q.x, y: q.y })), lampenAlt: mitLampen.map(l => ({ l, x: l.x, y: l.y })) };
   } else {
-    zug = null; auswahl = null; panelZeigen(); zeichnen();
+    zug = { ...basis, art: "schieben", tipp: { leer: true } };
   }
 });
 svg.addEventListener("pointermove", ev => {
-  if (!zug) return;
-  const p = weltPunkt(ev);
-  if (!zug.bewegt && Math.hypot(p.x - zug.start.x, p.y - zug.start.y) < 0.3) return;
+  if (!finger.has(ev.pointerId) || !zug) return;
+  finger.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+  const rect = svg.getBoundingClientRect();
+  if (zug.art === "zwei") {
+    if (finger.size < 2) return;
+    const [a, b] = [...finger.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y) || 1, m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const f = Math.min(400 / zug.a0.w, Math.max(4 / zug.a0.w, zug.d0 / d));
+    const wx = zug.a0.x + (zug.m0.x - rect.left) / rect.width * zug.a0.w, wy = zug.a0.y + (zug.m0.y - rect.top) / rect.height * zug.a0.h;
+    const w = zug.a0.w * f, hh = zug.a0.h * f;
+    ansicht = { x: wx - (m.x - rect.left) / rect.width * w, y: wy - (m.y - rect.top) / rect.height * hh, w, h: hh };
+    zeichnen(); return;
+  }
+  if (!zug.bewegt && Math.hypot(ev.clientX - zug.sx, ev.clientY - zug.sy) < 8) return;
   zug.bewegt = true;
-  if (zug.art === "lampe") {
+  const p = weltPunkt(ev);
+  if (zug.art === "schieben") {
+    ansicht = { ...zug.a0, x: zug.a0.x - (ev.clientX - zug.sx) / rect.width * zug.a0.w, y: zug.a0.y - (ev.clientY - zug.sy) / rect.height * zug.a0.h };
+  } else if (zug.art === "lampe") {
     const l = daten.lampen[zug.i];
     l.x = Math.round((p.x - zug.dx) * 4) / 4; l.y = Math.round((p.y - zug.dy) * 4) / 4;
   } else if (zug.art === "raum") {
     const dx = rund(p.x - zug.start.x), dy = rund(p.y - zug.start.y);
-    zug.r.x = zug.ox + dx; zug.r.y = zug.oy + dy;
-    for (const m of zug.mit) { m.l.x = m.x + dx; m.l.y = m.y + dy; }
+    for (const a of zug.alt) { a.q.x = a.x + dx; a.q.y = a.y + dy; }
+    for (const a of zug.lampenAlt) { a.l.x = a.x + dx; a.l.y = a.y + dy; }
   } else if (zug.art === "wand") {
-    const MIN = 2;
+    const MIN = 1;
     for (const { q: r, seite } of zug.teile) {
-      if (seite === "o") { const unten = r.y + r.h; r.y = Math.min(rund(p.y), unten - MIN); r.h = unten - r.y; }
-      if (seite === "u") { r.h = Math.max(MIN, rund(p.y) - r.y); }
-      if (seite === "l") { const rechts = r.x + r.w; r.x = Math.min(rund(p.x), rechts - MIN); r.w = rechts - r.x; }
-      if (seite === "r") { r.w = Math.max(MIN, rund(p.x) - r.x); }
+      if (seite === "o") { const u = r.y + r.h; r.y = Math.min(rund(p.y), u - MIN); r.h = u - r.y; }
+      if (seite === "u") r.h = Math.max(MIN, rund(p.y) - r.y);
+      if (seite === "l") { const re = r.x + r.w; r.x = Math.min(rund(p.x), re - MIN); r.w = re - r.x; }
+      if (seite === "r") r.w = Math.max(MIN, rund(p.x) - r.x);
     }
   }
   zeichnen();
 });
-svg.addEventListener("pointerup", () => {
+function loslassen(ev) {
+  finger.delete(ev.pointerId);
   if (!zug) return;
+  if (zug.art === "zwei") { if (finger.size === 0) zug = null; return; }
   if (!zug.bewegt) {
-    if (zug.art === "lampe") auswahl = { art: "lampe", id: zug.i };
-    else if (zug.r) auswahl = { art: "raum", id: zug.r.id };
-    else if (zug.teile) auswahl = { art: "raum", id: zug.teile[0].q.id };
-    panelZeigen();
+    const h = hass();
+    if (!bearbeiten && zug.tipp) {
+      if (zug.tipp.lampe !== undefined) {
+        const l = daten.lampen[zug.tipp.lampe];
+        // Tor nicht aus Versehen öffnen: zweimal tippen
+        if (l.icon === "tor" && !(bestaetigt.id === l.entity && Date.now() - bestaetigt.zeit < 4000)) {
+          bestaetigt = { id: l.entity, zeit: Date.now() }; meldung("Zum Öffnen/Schließen nochmal tippen");
+        } else { bestaetigt = {}; schalten(h, l.entity); }
+      }
+      if (zug.tipp.raum) {
+        const ids = lampenIn(daten.raeume.find(r => r.id === zug.tipp.raum)).map(l => l.entity);
+        if (ids.length) schalten(h, ids, !ids.some(id => istAn(h, id)));
+      }
+    } else if (bearbeiten) {
+      if (zug.art === "lampe") auswahl = { art: "lampe", id: zug.i };
+      else if (zug.r) auswahl = { art: "raum", id: zug.r.id };
+      else auswahl = null;
+      panelZeigen();
+    }
   }
   zug = null; zeichnen();
-});
+}
+svg.addEventListener("pointerup", loslassen);
+svg.addEventListener("pointercancel", loslassen);
 
 // ---------- Einstellungsfeld unten ----------
 function panelZeigen() {
-  const p = document.getElementById("panel");
+  const p = document.getElementById("panel"), h = hass();
   if (!bearbeiten || !auswahl) { p.classList.remove("offen"); p.innerHTML = ""; return; }
-  const h = hass();
   if (auswahl.art === "raum") {
     const r = daten.raeume.find(r => r.id === auswahl.id);
     if (!r) { auswahl = null; return panelZeigen(); }
-    p.innerHTML = `<h3>Raum</h3><input id="p-name" value="">
-      <div class="zeile"><button id="p-loeschen" class="rot">${icon("muell")} Raum löschen</button>
+    p.innerHTML = `<h3>Fläche / Raum</h3><input id="p-name">
+      <div class="symbole arten">${ARTEN.map(([k, t, farbe]) =>
+        `<button data-art="${k}" class="${(r.typ || "innen") === k ? "gewaehlt" : ""}"><i style="background:${farbe}"></i>${t}</button>`).join("")}</div>
+      <div class="zeile"><button id="p-loeschen" class="rot">${icon("muell")} Löschen</button>
       <button id="p-fertig" class="voll">${icon("haken")} Fertig</button></div>
-      <div class="hinweis">Wände: die Kanten des Raums ziehen · Raum verschieben: in die Mitte fassen und ziehen</div>`;
+      <div class="hinweis">Kanten ziehen = Wände versetzen (angrenzende Räume wandern mit) · Mitte ziehen = verschieben.
+      „Gebäude“ = Außenmauer mit Namen (z. B. Haupthaus, Scheune) – darin liegende Räume wandern beim Verschieben mit.</div>`;
     const inp = p.querySelector("#p-name"); inp.value = r.name;
     inp.oninput = () => { r.name = inp.value; zeichnen(); };
-    p.querySelector("#p-loeschen").onclick = () => {
-      daten.raeume = daten.raeume.filter(x => x !== r); auswahl = null; panelZeigen(); zeichnen();
-    };
-  } else {
+    p.querySelectorAll("[data-art]").forEach(b => b.onclick = () => { r.typ = b.dataset.art; panelZeigen(); zeichnen(); });
+    p.querySelector("#p-loeschen").onclick = () => { daten.raeume = daten.raeume.filter(x => x !== r); auswahl = null; panelZeigen(); zeichnen(); };
+  } else if (auswahl.art === "lampe") {
     const l = daten.lampen[auswahl.id];
     const original = (h.states[l.entity] && h.states[l.entity].attributes.friendly_name) || l.entity;
-    p.innerHTML = `<h3>Lampe · <span style="font-weight:400;color:var(--grau)">${original.replace(/</g, "&lt;")}</span></h3>
-      <input id="p-name" placeholder="Anzeigename (leer = automatisch)">
-      <div class="symbole">${SYMBOLE.map(([k, t]) =>
-        `<button data-symbol="${k}" class="${l.icon === k ? "gewaehlt" : ""}">${icon(k)}${t}</button>`).join("")}</div>
+    p.innerHTML = `<h3>${l.entity.startsWith("switch.") ? "Schalter" : "Lampe"} · <span style="font-weight:400;color:var(--grau)">${esc(original)}</span></h3>
+      <input id="p-name" placeholder="Anzeigename, z. B. Esstisch (leer = automatisch)">
+      <div class="symbole">${SYMBOLE.map(([k, t]) => `<button data-symbol="${k}" class="${l.icon === k ? "gewaehlt" : ""}">${icon(k)}${t}</button>`).join("")}</div>
       <div class="zeile"><button id="p-test">${icon("birne")} Ein/Aus testen</button>
       <button id="p-versteckt" class="rot">${l.versteckt ? "Wieder anzeigen" : "Ausblenden"}</button>
+      ${l.entity.startsWith("switch.") ? `<button id="p-weg" class="rot">${icon("muell")} Entfernen</button>` : ""}
       <button id="p-fertig" class="voll">${icon("haken")} Fertig</button></div>`;
     const inp = p.querySelector("#p-name"); inp.value = l.name || "";
     inp.oninput = () => { l.name = inp.value.trim() || undefined; zeichnen(); };
     p.querySelectorAll("[data-symbol]").forEach(b => b.onclick = () => { l.icon = b.dataset.symbol; panelZeigen(); zeichnen(); });
-    p.querySelector("#p-test").onclick = () => h.callService("light", "toggle", { entity_id: l.entity });
+    p.querySelector("#p-test").onclick = () => schalten(h, l.entity);
     p.querySelector("#p-versteckt").onclick = () => { l.versteckt = !l.versteckt || undefined; panelZeigen(); zeichnen(); };
+    const weg = p.querySelector("#p-weg");
+    if (weg) weg.onclick = () => { daten.lampen.splice(auswahl.id, 1); auswahl = null; panelZeigen(); zeichnen(); };
+  } else if (auswahl.art === "neu") {
+    const drauf = new Set(daten.lampen.map(l => l.entity));
+    const liste = kandidaten(h).filter(id => !drauf.has(id))
+      .map(id => [id, h.states[id].attributes.friendly_name || id]).sort((a, b) => a[1].localeCompare(b[1], "de"));
+    p.innerHTML = `<h3>Gerät hinzufügen</h3><input id="p-suche" placeholder="Suchen, z. B. Shelly, Weg, Scheune">
+      <div class="liste" id="p-liste"></div>
+      <div class="zeile"><button id="p-fertig" class="voll">${icon("haken")} Fertig</button></div>`;
+    const zeigen = filter => {
+      const f = filter.toLowerCase();
+      p.querySelector("#p-liste").innerHTML = liste.filter(([id, n]) => !f || (n + " " + id).toLowerCase().includes(f)).slice(0, 40)
+        .map(([id, n]) => `<button data-neu="${id}">${icon(id.startsWith("switch.") ? "schalter" : "birne")} ${esc(n)} <small>${id}</small></button>`).join("")
+        || `<div class="hinweis">Nichts gefunden.</div>`;
+      p.querySelectorAll("[data-neu]").forEach(b => b.onclick = () => {
+        const id = b.dataset.neu;
+        daten.lampen.push({ entity: id, x: ansicht.x + ansicht.w / 2, y: ansicht.y + ansicht.h / 2,
+          icon: symbolRaten((h.states[id].attributes.friendly_name || "") + " " + id) });
+        auswahl = { art: "lampe", id: daten.lampen.length - 1 }; panelZeigen(); zeichnen();
+        meldung("Hinzugefügt – jetzt an die richtige Stelle ziehen");
+      });
+    };
+    const suche = p.querySelector("#p-suche"); suche.oninput = () => zeigen(suche.value); zeigen("");
   }
   p.querySelector("#p-fertig").onclick = () => { auswahl = null; panelZeigen(); zeichnen(); };
   p.classList.add("offen");
 }
 
 // ---------- Knöpfe ----------
+const K = id => document.getElementById(id);
 function knoepfe() {
-  document.getElementById("knoepfe-ansicht").style.display = bearbeiten ? "none" : "";
-  document.getElementById("knoepfe-bearbeiten").style.display = bearbeiten ? "" : "none";
-  document.getElementById("foto").innerHTML = `${icon("stift")} Foto-Vorlage ${fotoAn ? "aus" : "an"}`;
+  K("knoepfe-ansicht").style.display = bearbeiten ? "none" : "";
+  K("knoepfe-bearbeiten").style.display = bearbeiten ? "" : "none";
+  K("foto").innerHTML = `${icon("foto")} Foto-Vorlage ${fotoAn ? "aus" : "an"}`;
 }
-document.getElementById("alle-aus").innerHTML = `${icon("alleaus")} Alle aus`;
-document.getElementById("bearbeiten").innerHTML = `${icon("stift")} Bearbeiten`;
-document.getElementById("raum-neu").innerHTML = `${icon("plus")} Raum`;
-document.getElementById("abbrechen").innerHTML = `${icon("x")} Abbrechen`;
-document.getElementById("speichern").innerHTML = `${icon("haken")} Speichern`;
+K("alle-aus").innerHTML = `${icon("alleaus")} Alle aus`;
+K("bearbeiten").innerHTML = `${icon("stift")} Bearbeiten`;
+K("raum-neu").innerHTML = `${icon("plus")} Fläche`;
+K("geraet-neu").innerHTML = `${icon("plus")} Gerät`;
+K("abbrechen").innerHTML = `${icon("x")} Abbrechen`;
+K("speichern").innerHTML = `${icon("haken")} Speichern`;
+K("zoom-rein").innerHTML = icon("lupeplus");
+K("zoom-raus").innerHTML = icon("lupeminus");
+K("zoom-alles").innerHTML = icon("alles");
+const mitte = () => { const r = svg.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
+K("zoom-rein").onclick = () => zoomen(1 / 1.4, ...mitte());
+K("zoom-raus").onclick = () => zoomen(1.4, ...mitte());
+K("zoom-alles").onclick = () => { allesZeigen(); zeichnen(); };
 
-document.getElementById("alle-aus").onclick = () => {
+K("alle-aus").onclick = () => {
   const h = hass(); if (!h) return;
-  const an = daten.lampen.filter(l => !l.versteckt && istAn(h, l.entity)).map(l => l.entity);
-  if (an.length) h.callService("light", "turn_off", { entity_id: an });
+  schalten(h, daten.lampen.filter(l => !l.versteckt && l.entity.startsWith("light.") && istAn(h, l.entity)).map(l => l.entity), false);
 };
-document.getElementById("bearbeiten").onclick = () => {
-  gesichert = JSON.stringify(daten); bearbeiten = true; ansichtsBox = berechneAnsicht(); knoepfe(); zeichnen();
-};
-document.getElementById("raum-neu").onclick = () => {
-  const v = ansichtsBox;
-  const r = { id: neueId(), name: "Neuer Raum", bereich: null, x: rund(v.x + v.w / 2 - 4), y: rund(v.y + v.h / 2 - 3), w: 8, h: 6 };
+K("bearbeiten").onclick = () => { gesichert = JSON.stringify(daten); bearbeiten = true; knoepfe(); zeichnen(); };
+K("raum-neu").onclick = () => {
+  const r = { id: neueId(), name: "Neuer Raum", typ: "innen", bereich: null,
+    x: rund(ansicht.x + ansicht.w / 2 - 3), y: rund(ansicht.y + ansicht.h / 2 - 2), w: 6, h: 4 };
   daten.raeume.push(r); auswahl = { art: "raum", id: r.id }; panelZeigen(); zeichnen();
 };
-document.getElementById("foto").onclick = () => {
-  fotoAn = !fotoAn;
-  if (fotoAn && !daten.foto) { const b = inhaltsBox(); daten.foto = { x: b.x, y: b.y, w: b.w }; }
-  knoepfe(); zeichnen();
-};
-document.getElementById("abbrechen").onclick = () => {
-  daten = JSON.parse(gesichert); verlassen();
-};
-document.getElementById("speichern").onclick = async () => {
+K("geraet-neu").onclick = () => { auswahl = { art: "neu" }; panelZeigen(); };
+K("foto").onclick = () => { fotoAn = !fotoAn; knoepfe(); zeichnen(); };
+K("abbrechen").onclick = () => { daten = JSON.parse(gesichert); verlassen(); };
+K("speichern").onclick = async () => {
   const h = hass(); if (!h) return;
   try {
+    daten.version = 2;
     await h.callService("script", "grundriss_speichern", { daten: JSON.stringify(daten) });
-    meldung("Gespeichert ✓");
-    verlassen();
-  } catch (e) {
-    meldung("Speichern fehlgeschlagen: " + (e && e.message || e));
-  }
+    meldung("Gespeichert ✓"); verlassen();
+  } catch (e) { meldung("Speichern fehlgeschlagen: " + (e && e.message || e)); }
 };
-function verlassen() {
-  bearbeiten = false; auswahl = null; ansichtsBox = null; fotoAn = false; panelZeigen(); knoepfe(); zeichnen();
-}
+function verlassen() { bearbeiten = false; auswahl = null; fotoAn = false; panelZeigen(); knoepfe(); zeichnen(); }
 
 // ---------- Start ----------
 async function laden() {
@@ -468,16 +610,15 @@ async function laden() {
   } catch (e) { /* noch nichts gespeichert */ }
   if (!daten || !Array.isArray(daten.raeume) || !Array.isArray(daten.lampen)) daten = startGrundriss(h);
   neueLampenErgaenzen(h);
-  knoepfe(); zeichnen();
-  // Zustände regelmäßig nachziehen (nur neu zeichnen, wenn sich ein Licht geändert hat)
+  knoepfe(); allesZeigen(); zeichnen();
   let letzter = "";
   setInterval(() => {
     const hh = hass(); if (!hh || zug) return;
-    const jetzt = lichter(hh).map(id => id + hh.states[id].state).join() + (hh.themes && hh.themes.darkMode);
+    const jetzt = daten.lampen.map(l => l.entity + (hh.states[l.entity] || {}).state).join() + (hh.themes && hh.themes.darkMode);
     if (jetzt !== letzter) { letzter = jetzt; zeichnen(); }
   }, 700);
 }
-window.addEventListener("resize", () => zeichnen());
+window.addEventListener("resize", () => { if (daten) { allesZeigen(); zeichnen(); } });
 laden();
 </script>
 </body>
