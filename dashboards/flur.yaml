@@ -2237,7 +2237,7 @@ views:
   type: panel
   cards:
   - type: iframe
-    url: /local/grundriss.html?v=9
+    url: /local/grundriss.html?v=10
     aspect_ratio: 53.3%
 - title: Es klingelt
   path: klingel
