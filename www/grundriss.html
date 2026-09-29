@@ -60,6 +60,11 @@
   .liste button small { color: var(--grau); font-weight: 400; margin-left: auto; }
   .zeile { display: flex; gap: 10px; flex-wrap: wrap; }
   .hinweis { color: var(--grau); font-size: 14px; margin-top: 8px; }
+  .kamera { position: absolute; inset: 0; background: rgba(0,0,0,0.55); display: none; flex-direction: column;
+    align-items: center; justify-content: center; gap: 12px; padding: 20px; box-sizing: border-box; }
+  .kamera.offen { display: flex; }
+  .kamera-kopf { width: min(1400px, 100%); display: flex; align-items: center; gap: 10px; color: #fff; font-size: 22px; }
+  .kamera img { width: min(1400px, 100%); max-height: calc(100% - 80px); object-fit: contain; border-radius: 14px; background: #000; }
   .meldung { position: absolute; left: 50%; top: 70px; transform: translateX(-50%); background: var(--text); color: var(--bg);
     padding: 10px 18px; border-radius: 12px; font-size: 16px; display: none; }
   /* Plan */
@@ -103,8 +108,10 @@
 <div class="zoom"><button id="zoom-rein"></button><button id="zoom-raus"></button><button id="zoom-alles"></button></div>
 <div class="panel" id="panel"></div>
 <div class="meldung" id="meldung"></div>
+<div class="kamera" id="kamera"></div>
 <script>
 const ICON = {
+  kamera: "M6.03 12.03L8.03 15.5L5.5 18.68L2 12.62L6.03 12.03M17 18V15.29C17.88 14.9 18.5 14.03 18.5 13C18.5 12.43 18.3 11.9 17.97 11.5L19.94 10.35C20.95 9.76 21.3 8.47 20.71 7.46L19.33 5.06C18.74 4.05 17.45 3.7 16.44 4.28L8.31 9C7.36 9.53 7.03 10.75 7.58 11.71L9.08 14.31C9.63 15.26 10.86 15.59 11.81 15.04L13.69 13.96C13.94 14.55 14.41 15.03 15 15.29V18C15 19.1 15.9 20 17 20H22V18H17Z",
   decke: "M8,9H11V4H13V9H16L20,17H4L8,9M14,18A2,2 0 0,1 12,20A2,2 0 0,1 10,18H14Z",
   mehrfach: "M10 11H13V6H15V11H18L22 19H6L10 11M16 20C16 21.11 15.11 22 14 22S12 21.11 12 20H16M8.21 10.11L8.76 9H11V2H9V7H6L2 15H5.76L8.21 10.11Z",
   steh: "M15,2L17,9H7L9,2M11,10H13V20H16V22H8V20H11V10Z",
@@ -139,7 +146,7 @@ const SYMBOLE = [
   ["decke", "Decke"], ["mehrfach", "Mehrfach"], ["steh", "Stehlampe"], ["tisch", "Tischlampe"], ["lampe", "Lampe"],
   ["wand", "Wand"], ["wandflach", "Wand flach"], ["spot", "Spot"], ["led", "LED / Gesims"], ["birne", "Birne"],
   ["aussen", "Außen"], ["weg", "Weg"], ["kette", "Lichterkette"], ["gruppe", "Gruppe"], ["schalter", "Schalter"],
-  ["steckdose", "Steckdose"], ["tor", "Tor"], ["scheune", "Scheune"],
+  ["steckdose", "Steckdose"], ["tor", "Tor"], ["scheune", "Scheune"], ["kamera", "Kamera"],
 ];
 const ARTEN = [
   ["innen", "Innenraum", "var(--boden)"], ["nass", "Bad / Fliesen", "var(--fliese)"], ["gebaeude", "Gebäude", "var(--gebaeude)"],
@@ -165,7 +172,7 @@ function hass() { try { return window.parent.document.querySelector("home-assist
 function sichtbar(h, id) { const e = h.entities && h.entities[id]; return !(e && (e.hidden || e.entity_category)); }
 function lichter(h) { return Object.keys(h.states).filter(id => id.startsWith("light.") && sichtbar(h, id)); }
 function kandidaten(h) {
-  return Object.keys(h.states).filter(id => (id.startsWith("light.") || id.startsWith("switch.")) && sichtbar(h, id));
+  return Object.keys(h.states).filter(id => /^(light|switch|camera)\./.test(id) && sichtbar(h, id));
 }
 function bereichVon(h, id) {
   const e = h.entities && h.entities[id];
@@ -196,6 +203,7 @@ function icon(name) { return `<svg viewBox="0 0 24 24"><path d="${ICON[name]}"/>
 function esc(t) { return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;"); }
 function symbolRaten(text) {
   const n = (text || "").toLowerCase();
+  if (/camera\./.test(n)) return "kamera";
   if (/switch\./.test(n)) {
     if (/tor\b|tor[ _]/.test(n)) return "tor";
     if (/steckdose|plug/.test(n)) return "steckdose";
@@ -474,6 +482,7 @@ function loslassen(ev) {
     if (!bearbeiten && zug.tipp) {
       if (zug.tipp.lampe !== undefined) {
         const l = daten.lampen[zug.tipp.lampe];
+        if (l.entity.startsWith("camera.")) { kameraZeigen(h, l); zug = null; return; }
         // Tor nicht aus Versehen öffnen: zweimal tippen
         if (l.icon === "tor" && !(bestaetigt.id === l.entity && Date.now() - bestaetigt.zeit < 4000)) {
           bestaetigt = { id: l.entity, zeit: Date.now() }; meldung("Zum Öffnen/Schließen nochmal tippen");
@@ -494,6 +503,43 @@ function loslassen(ev) {
 }
 svg.addEventListener("pointerup", loslassen);
 svg.addEventListener("pointercancel", loslassen);
+
+// ---------- Kamera-Fenster ----------
+// Auf dem Monitor: Live-Bild über go2rtc (nur dort erreichbar). Sonst (Laptop/Handy):
+// Standbild von Home Assistant, alle 2 Sekunden erneuert.
+const GROSSANSICHT = { draussen_hot_tor_kamera: "kamera-hof-tor", draussen_giebel_vorne: "kamera-giebel-vorne",
+  draussen_giebel_hinten: "kamera-giebel-hinten", draussen_hof_hinten: "kamera-hof-hinten" };
+let kameraTimer = null;
+function kameraZeigen(h, l) {
+  const name = l.entity.slice(7), titel = lampenName(h, l);
+  const f = document.getElementById("kamera");
+  f.innerHTML = `<div class="kamera-kopf"><b>${esc(titel)}</b><span class="luecke"></span>
+    ${GROSSANSICHT[name] ? `<button id="k-gross">${icon("alles")} Großansicht &amp; drehen</button>` : ""}
+    <button id="k-zu" class="voll">${icon("x")} Schließen</button></div><img id="k-bild" alt="">`;
+  const img = f.querySelector("#k-bild");
+  const standbild = () => {
+    const s = hass().states[l.entity];
+    if (s && s.attributes.entity_picture) img.src = s.attributes.entity_picture + "&t=" + Date.now();
+  };
+  img.onerror = () => { if (!kameraTimer) { standbild(); kameraTimer = setInterval(standbild, 2000); } };
+  img.src = /^camera\.draussen_/.test(l.entity) || name === "hoftor_klingel"
+    ? `http://localhost:1984/api/stream.mjpeg?src=${name}` : "about:blank#";
+  if (!img.src.startsWith("http://localhost")) img.onerror();
+  f.querySelector("#k-zu").onclick = kameraSchliessen;
+  const g = f.querySelector("#k-gross");
+  if (g) g.onclick = () => {
+    kameraSchliessen();
+    const w = window.parent;
+    w.history.pushState(null, "", "/flur-display/" + GROSSANSICHT[name]);
+    w.dispatchEvent(new CustomEvent("location-changed"));
+  };
+  f.classList.add("offen");
+}
+function kameraSchliessen() {
+  const f = document.getElementById("kamera");
+  clearInterval(kameraTimer); kameraTimer = null;
+  f.classList.remove("offen"); f.innerHTML = "";   // Bild entfernen = Live-Übertragung beenden
+}
 
 // ---------- Einstellungsfeld unten ----------
 function panelZeigen() {
@@ -516,17 +562,17 @@ function panelZeigen() {
   } else if (auswahl.art === "lampe") {
     const l = daten.lampen[auswahl.id];
     const original = (h.states[l.entity] && h.states[l.entity].attributes.friendly_name) || l.entity;
-    p.innerHTML = `<h3>${l.entity.startsWith("switch.") ? "Schalter" : "Lampe"} · <span style="font-weight:400;color:var(--grau)">${esc(original)}</span></h3>
+    p.innerHTML = `<h3>${l.entity.startsWith("switch.") ? "Schalter" : l.entity.startsWith("camera.") ? "Kamera" : "Lampe"} · <span style="font-weight:400;color:var(--grau)">${esc(original)}</span></h3>
       <input id="p-name" placeholder="Anzeigename, z. B. Esstisch (leer = automatisch)">
       <div class="symbole">${SYMBOLE.map(([k, t]) => `<button data-symbol="${k}" class="${l.icon === k ? "gewaehlt" : ""}">${icon(k)}${t}</button>`).join("")}</div>
       <div class="zeile"><button id="p-test">${icon("birne")} Ein/Aus testen</button>
       <button id="p-versteckt" class="rot">${l.versteckt ? "Wieder anzeigen" : "Ausblenden"}</button>
-      ${l.entity.startsWith("switch.") ? `<button id="p-weg" class="rot">${icon("muell")} Entfernen</button>` : ""}
+      ${!l.entity.startsWith("light.") ? `<button id="p-weg" class="rot">${icon("muell")} Entfernen</button>` : ""}
       <button id="p-fertig" class="voll">${icon("haken")} Fertig</button></div>`;
     const inp = p.querySelector("#p-name"); inp.value = l.name || "";
     inp.oninput = () => { l.name = inp.value.trim() || undefined; zeichnen(); };
     p.querySelectorAll("[data-symbol]").forEach(b => b.onclick = () => { l.icon = b.dataset.symbol; panelZeigen(); zeichnen(); });
-    p.querySelector("#p-test").onclick = () => schalten(h, l.entity);
+    p.querySelector("#p-test").onclick = () => l.entity.startsWith("camera.") ? kameraZeigen(h, l) : schalten(h, l.entity);
     p.querySelector("#p-versteckt").onclick = () => { l.versteckt = !l.versteckt || undefined; panelZeigen(); zeichnen(); };
     const weg = p.querySelector("#p-weg");
     if (weg) weg.onclick = () => { daten.lampen.splice(auswahl.id, 1); auswahl = null; panelZeigen(); zeichnen(); };
@@ -540,7 +586,7 @@ function panelZeigen() {
     const zeigen = filter => {
       const f = filter.toLowerCase();
       p.querySelector("#p-liste").innerHTML = liste.filter(([id, n]) => !f || (n + " " + id).toLowerCase().includes(f)).slice(0, 40)
-        .map(([id, n]) => `<button data-neu="${id}">${icon(id.startsWith("switch.") ? "schalter" : "birne")} ${esc(n)} <small>${id}</small></button>`).join("")
+        .map(([id, n]) => `<button data-neu="${id}">${icon(id.startsWith("switch.") ? "schalter" : id.startsWith("camera.") ? "kamera" : "birne")} ${esc(n)} <small>${id}</small></button>`).join("")
         || `<div class="hinweis">Nichts gefunden.</div>`;
       p.querySelectorAll("[data-neu]").forEach(b => b.onclick = () => {
         const id = b.dataset.neu;
