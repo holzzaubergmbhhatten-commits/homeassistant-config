@@ -105,6 +105,9 @@
   .gelaendename { fill: var(--mauer); font-size: 1.1px; font-weight: 700; text-anchor: middle; dominant-baseline: middle; opacity: 0.8; }
   .gelaendename.klein { font-size: 0.75px; }
   .gelaendename.nachbarname { opacity: 0.45; font-weight: 600; }
+  .punkt { fill: #fff; stroke: var(--akzent); stroke-width: 0.12; }
+  .punkt.aktiv { fill: var(--akzent); }
+  .gel.gewaehlt { opacity: 0.85; }
   .wegbeleuchtung { fill: none; stroke: #FFCC00; stroke-width: 0.3; stroke-dasharray: 0.6 0.9; stroke-linecap: round; }
   .flaeche.typ-innen { fill: var(--boden); stroke: var(--mauer); stroke-width: 0.15; }
   .flaeche.typ-nass { fill: var(--fliese); stroke: var(--mauer); stroke-width: 0.15; }
@@ -143,7 +146,7 @@
   <span class="luecke"></span>
   <span id="knoepfe-ansicht"><button id="alle-aus"></button> <button id="bearbeiten"></button></span>
   <span id="knoepfe-bearbeiten" style="display:none">
-    <button id="raum-neu"></button> <button id="geraet-neu"></button> <button id="foto"></button> <button id="gelaende"></button>
+    <button id="raum-neu"></button> <button id="geraet-neu"></button> <button id="foto"></button> <button id="gelaende"></button> <button id="gelaende-neu"></button>
     <button id="abbrechen" class="rot"></button> <button id="speichern" class="voll"></button>
   </span>
 </div>
@@ -431,6 +434,125 @@ function ergaenzen(h) {
   for (const id of lichter(h)) if (!bekannt.has(id)) lampeEinsetzen(h, id);
 }
 
+// ================= Gelände als bearbeitbare Liste =================
+// Jedes Element: { id, typ, p: [[x,y],...] } bzw. Baum/Birke { x, y, r }, Teich { x, y, rx, ry }
+const GEL_TYPEN = {
+  hof: { name: "Hof / Schotter", art: "flaeche", ebene: 0, glatt: true },
+  fahrweg: { name: "Fahrweg", art: "linie", ebene: 1, breite: 3.2, glatt: true },
+  kiesweg: { name: "Kiesweg", art: "linie", ebene: 1, breite: 1.8, glatt: true },
+  teich: { name: "Teich", art: "ellipse", ebene: 2 },
+  hecke: { name: "Hecke", art: "linie", ebene: 3, breite: 1.1, glatt: true },
+  baum: { name: "Baum", art: "punkt", ebene: 4 },
+  birke: { name: "Birke", art: "punkt", ebene: 4 },
+  rondell: { name: "Rondell", art: "punkt", ebene: 4 },
+  nachbar: { name: "Nachbargebäude", art: "flaeche", ebene: 5 },
+  terrasse: { name: "Terrasse", art: "flaeche", ebene: 5 },
+  gebaeude: { name: "Gebäude", art: "flaeche", ebene: 6 },
+  sitzecke: { name: "Sitzecke", art: "flaeche", ebene: 7 },
+  stellplatz: { name: "Stellplatz", art: "flaeche", ebene: 7 },
+  zaun: { name: "Zaun", art: "linie", ebene: 8 },
+  tor: { name: "Tor", art: "linie", ebene: 9 },
+};
+function gelaendeAusVorlage() {
+  const G = GELAENDE, l = [];
+  const neu = (typ, e) => l.push({ id: neueId(), typ, ...e });
+  for (const p of G.hof) neu("hof", { p });
+  for (const p of G.fahrwege) neu("fahrweg", { p });
+  for (const p of G.kieswege) neu("kiesweg", { p });
+  neu("teich", { x: G.teich.mitte[0], y: G.teich.mitte[1], rx: G.teich.rx, ry: G.teich.ry });
+  for (const p of G.hecken) neu("hecke", { p });
+  for (const [x, y, r] of G.baeume) neu("baum", { x, y, r });
+  for (const [x, y] of G.birken) neu("birke", { x, y, r: 1.3 });
+  neu("rondell", { x: G.rondell.mitte[0], y: G.rondell.mitte[1], r: 0.9, name: "Rondell · Säuleneiche" });
+  for (const n of G.nachbar) neu("nachbar", { p: n.p, name: "Nachbar" });
+  neu("terrasse", { p: G.terrasse, name: "Terrasse · Holzdeck mit Glasdach" });
+  for (const b of G.gebaeude) neu("gebaeude", { p: b.p, name: (b.nr && b.nr < 5 ? ["", "I ", "II ", "III "][b.nr] : "") + b.name, nr: b.nr, glas: b.glas || undefined });
+  for (const s of G.sitzecken) neu("sitzecke", { p: s.p, name: s.name });
+  for (const s of G.stellplaetze) neu("stellplatz", { p: s.p, name: s.name });
+  neu("zaun", { p: G.zaun });
+  neu("tor", { p: G.tor.pfosten, name: "Hoftor · Eingang" });
+  return l;
+}
+// weiche Kurve durch alle Punkte (Catmull-Rom → Bézier)
+function kurve(p, zu) {
+  if (p.length < 3) return "M" + p.map(q => q.join(" ")).join(" L") + (zu ? " Z" : "");
+  const n = p.length, P = i => zu ? p[(i + n) % n] : p[Math.max(0, Math.min(n - 1, i))];
+  let d = `M${p[0][0]} ${p[0][1]}`;
+  for (let i = 0; i < (zu ? n : n - 1); i++) {
+    const a = P(i - 1), b = P(i), c = P(i + 1), e = P(i + 2);
+    d += ` C${b[0] + (c[0] - a[0]) / 6} ${b[1] + (c[1] - a[1]) / 6} ${c[0] - (e[0] - b[0]) / 6} ${c[1] - (e[1] - b[1]) / 6} ${c[0]} ${c[1]}`;
+  }
+  return d + (zu ? " Z" : "");
+}
+function gelMitte(e) {
+  if (!e.p) return [e.x, e.y];
+  return [e.p.reduce((s, q) => s + q[0], 0) / e.p.length, e.p.reduce((s, q) => s + q[1], 0) / e.p.length];
+}
+function zeichneLandschaft(g, von, bis) {
+  const liste = daten.gelaende.filter(e => GEL_TYPEN[e.typ] && GEL_TYPEN[e.typ].ebene >= von && GEL_TYPEN[e.typ].ebene <= bis)
+    .sort((a, b) => GEL_TYPEN[a.typ].ebene - GEL_TYPEN[b.typ].ebene);
+  for (const e of liste) {
+    const T = GEL_TYPEN[e.typ], sel = auswahl && auswahl.art === "gel" && auswahl.id === e.id;
+    const gr = el("g", { "data-gel": e.id, class: "gel gel-" + e.typ + (sel ? " gewaehlt" : "") }, g);
+    if (e.typ === "hof") el("path", { class: "hofflaeche", d: kurve(e.p, true) }, gr);
+    else if (T.art === "linie" && e.typ !== "tor" && e.typ !== "zaun") el("path", { class: e.typ === "hecke" ? "hecke" : e.typ, d: kurve(e.p, false) }, gr);
+    else if (e.typ === "zaun") el("polyline", { class: "zaun", points: punkte(e.p) }, gr);
+    else if (e.typ === "teich") el("ellipse", { class: "teich", cx: e.x, cy: e.y, rx: e.rx, ry: e.ry }, gr);
+    else if (e.typ === "baum") {
+      el("circle", { class: "baum", cx: e.x, cy: e.y, r: e.r }, gr);
+      el("circle", { class: "baum-licht", cx: e.x - e.r * 0.25, cy: e.y - e.r * 0.25, r: e.r * 0.55 }, gr);
+    } else if (e.typ === "birke") {
+      el("circle", { class: "birke", cx: e.x, cy: e.y, r: e.r || 1.3 }, gr);
+      el("circle", { class: "birke-stamm", cx: e.x, cy: e.y, r: 0.18 }, gr);
+    } else if (e.typ === "rondell") {
+      el("circle", { class: "rondell", cx: e.x, cy: e.y, r: e.r || 0.9 }, gr);
+      el("circle", { class: "baum", cx: e.x, cy: e.y, r: (e.r || 0.9) * 0.66 }, gr);
+      if (e.name) el("text", { class: "gelaendename klein", x: e.x, y: e.y + (e.r || 0.9) + 0.8 }, gr).textContent = e.name;
+    } else if (e.typ === "tor") {
+      const [a, b] = e.p, m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      el("line", { class: "torfluegel", x1: a[0], y1: a[1], x2: m[0], y2: m[1] }, gr);
+      el("line", { class: "torfluegel", x1: b[0], y1: b[1], x2: m[0], y2: m[1] }, gr);
+      for (const [x, y] of [a, b]) el("rect", { class: "torpfosten", x: x - 0.25, y: y - 0.25, width: 0.5, height: 0.5 }, gr);
+      if (e.name) el("text", { class: "gelaendename", x: m[0] - 3.5, y: m[1] }, gr).textContent = e.name;
+    } else if (T.art === "flaeche") {
+      const kl = { nachbar: "nachbar", terrasse: "terrasse", gebaeude: e.glas ? "nebengebaeude glas" : "nebengebaeude", sitzecke: "sitzecke", stellplatz: "stellplatz" }[e.typ];
+      el("polygon", { class: kl, points: punkte(e.p) }, gr);
+      if (e.name) {
+        const [x, y] = gelMitte(e);
+        const klein = ["sitzecke", "stellplatz", "terrasse"].includes(e.typ);
+        const t = el("text", { class: "gelaendename" + (klein ? " klein" : "") + (e.typ === "nachbar" ? " nachbarname" : ""), x, y: e.typ === "sitzecke" ? y - 2 : y }, gr);
+        t.textContent = e.name;
+        if (e.typ === "stellplatz" || e.typ === "terrasse") {   // Schrift entlang der langen Seite
+          const [a, b, c] = e.p, l1 = Math.hypot(b[0] - a[0], b[1] - a[1]), l2 = Math.hypot(c[0] - b[0], c[1] - b[1]);
+          const [u, v] = l1 > l2 ? [a, b] : [b, c];
+          let w = Math.atan2(v[1] - u[1], v[0] - u[0]) * 180 / Math.PI; if (w > 90) w -= 180; if (w < -90) w += 180;
+          t.setAttribute("transform", `rotate(${w} ${x} ${y})`);
+        }
+      }
+    }
+  }
+}
+// Anfasser für die Eckpunkte des gewählten Elements – ganz oben, damit nichts sie verdeckt
+function zeichneAnfasser(g) {
+  if (!bearbeiten || !auswahl || auswahl.art !== "gel") return;
+  const e = daten.gelaende.find(e => e.id === auswahl.id);
+  if (!e) return;
+  const gr = el("g", { "data-gel": e.id }, g), r = Math.max(0.35, ansicht.w / 160);
+  (e.p || [[e.x, e.y]]).forEach(([x, y], i) => el("circle", { class: "punkt" + (auswahl.punkt === i ? " aktiv" : ""), cx: x, cy: y, r, "data-punkt": i }, gr));
+}
+function neuesGelaende(typ) {
+  const cx = rund(ansicht.x + ansicht.w / 2), cy = rund(ansicht.y + ansicht.h / 2), s = Math.max(2, rund(ansicht.w / 20));
+  const e = { id: neueId(), typ };
+  const T = GEL_TYPEN[typ];
+  if (T.art === "punkt") Object.assign(e, { x: cx, y: cy, r: typ === "baum" ? 2 : typ === "birke" ? 1.3 : 0.9 });
+  else if (typ === "teich") Object.assign(e, { x: cx, y: cy, rx: 3, ry: 2 });
+  else if (T.art === "linie") e.p = typ === "tor" ? [[cx - 2, cy], [cx + 2, cy]] : [[cx - s, cy], [cx, cy - s / 3], [cx + s, cy]];
+  else e.p = [[cx - s, cy - s * 0.6], [cx + s, cy - s * 0.6], [cx + s, cy + s * 0.6], [cx - s, cy + s * 0.6]];
+  if (["gebaeude", "sitzecke", "stellplatz"].includes(typ)) e.name = T.name;
+  daten.gelaende.push(e);
+  auswahl = { art: "gel", id: e.id }; panelZeigen(); zeichnen();
+}
+
 // ================= Ausschnitt / Zoom (nur viewBox ändern = flüssig) =================
 function inhaltsBoxHaus() { return { x: -0.5, y: -0.5, w: HAUS.w + 1, h: HAUS.h + 1.5 }; }
 function inhaltsBox() {
@@ -440,7 +562,7 @@ function inhaltsBox() {
   return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
 }
 function grundstueckBox() {
-  const alle = [...GELAENDE.gebaeude.flatMap(b => b.p), ...GELAENDE.stellplaetze.flatMap(s => s.p), ...GELAENDE.tor.pfosten, GELAENDE.teich.mitte];
+  const alle = daten.gelaende.filter(e => ["gebaeude", "stellplatz", "tor", "teich", "zaun"].includes(e.typ)).flatMap(e => e.p || [[e.x, e.y]]);
   const i = inhaltsBox();
   const x1 = Math.min(i.x, ...alle.map(p => p[0])), y1 = Math.min(i.y, ...alle.map(p => p[1]));
   const x2 = Math.max(i.x + i.w, ...alle.map(p => p[0])), y2 = Math.max(i.y + i.h, ...alle.map(p => p[1]));
@@ -474,61 +596,13 @@ function weltPunkt(ev) {
 const punkte = p => p.map(q => q.join(",")).join(" ");
 function mitteVon(p) { return [p.reduce((s, q) => s + q[0], 0) / p.length, p.reduce((s, q) => s + q[1], 0) / p.length]; }
 function zeichneGelaende(g) {
-  const G = GELAENDE;
   el("rect", { class: "wiese", x: -150, y: -150, width: 400, height: 350 }, g);
-  for (const h of G.hof) el("polygon", { class: "hofflaeche", points: punkte(h) }, g);
-  for (const w of G.fahrwege) el("polyline", { class: "fahrweg", points: punkte(w) }, g);
-  for (const w of G.kieswege) el("polyline", { class: "kiesweg", points: punkte(w) }, g);
+  zeichneLandschaft(g, 0, 2);
   // Kiesstreifen ums Haus und zur Scheune (1,20 m Abstand)
   el("rect", { class: "kiesflaeche", x: -1, y: -1, width: HAUS.w + 2, height: HAUS.h + 2, rx: 0.3 }, g);
-  const sch = G.gebaeude.find(b => b.nr === 1).p;
-  el("polygon", { class: "kiesflaeche", points: punkte([[sch[0][0] - 1, HAUS.h], [sch[1][0] + 1, sch[1][1] - 1], sch[1], sch[0]]) }, g);
-  el("ellipse", { class: "teich", cx: G.teich.mitte[0], cy: G.teich.mitte[1], rx: G.teich.rx, ry: G.teich.ry }, g);
-  for (const h of G.hecken) el("polyline", { class: "hecke", points: punkte(h) }, g);
-  for (const [x, y, r] of G.baeume) {
-    el("circle", { class: "baum", cx: x, cy: y, r }, g);
-    el("circle", { class: "baum-licht", cx: x - r * 0.25, cy: y - r * 0.25, r: r * 0.55 }, g);
-  }
-  for (const [x, y] of G.birken) {        // Birkenallee: helle, schmale Kronen
-    el("circle", { class: "birke", cx: x, cy: y, r: 1.3 }, g);
-    el("circle", { class: "birke-stamm", cx: x, cy: y, r: 0.18 }, g);
-  }
-  // Rondell mit Säuleneiche
-  const [rx, ry] = G.rondell.mitte;
-  el("circle", { class: "rondell", cx: rx, cy: ry, r: 0.9 }, g);
-  el("circle", { class: "baum", cx: rx, cy: ry, r: 0.6 }, g);
-  el("text", { class: "gelaendename klein", x: rx, y: ry + 1.7 }, g).textContent = "Rondell · Säuleneiche";
-  for (const n of G.nachbar) {
-    el("polygon", { class: "nachbar", points: punkte(n.p) }, g);
-    const [x, y] = mitteVon(n.p);
-    el("text", { class: "gelaendename nachbarname", x, y }, g).textContent = "Nachbar";
-  }
-  el("polygon", { class: "terrasse", points: punkte(G.terrasse) }, g);
-  { const [x, y] = mitteVon(G.terrasse);
-    el("text", { class: "gelaendename klein", x, y, transform: `rotate(84 ${x} ${y})` }, g).textContent = "Terrasse · Holzdeck mit Glasdach"; }
-  for (const b of G.gebaeude) {
-    el("polygon", { class: b.glas ? "nebengebaeude glas" : "nebengebaeude", points: punkte(b.p) }, g);
-    const [x, y] = mitteVon(b.p);
-    el("text", { class: "gelaendename", x, y: b.nr === 1 ? y + 4.3 : y }, g).textContent = (b.nr && b.nr < 5 ? ["", "I ", "II ", "III "][b.nr] : "") + b.name;
-  }
-  for (const s of G.sitzecken) {
-    el("polygon", { class: "sitzecke", points: punkte(s.p) }, g);
-    if (s.name) { const [x, y] = mitteVon(s.p); el("text", { class: "gelaendename klein", x, y: y - 2 }, g).textContent = s.name; }
-  }
-  for (const s of G.stellplaetze) {
-    el("polygon", { class: "stellplatz", points: punkte(s.p) }, g);
-    const [x, y] = mitteVon(s.p);
-    el("text", { class: "gelaendename klein", x, y, transform: `rotate(-68 ${x} ${y})` }, g).textContent = s.name;
-  }
-  el("polyline", { class: "zaun", points: punkte(G.zaun) }, g);
-  { const [x, y] = mitteVon(G.zaun); el("text", { class: "gelaendename klein", x, y: y - 1 }, g).textContent = "Zaun"; }
-  el("polyline", { class: "wegbeleuchtung", points: punkte(G.wegbeleuchtung) }, g);
-  // Hoftor: zwei Pfosten, zweiflügeliges Tor
-  const [a, b] = G.tor.pfosten, m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-  for (const [x, y] of [a, b]) el("rect", { class: "torpfosten", x: x - 0.25, y: y - 0.25, width: 0.5, height: 0.5 }, g);
-  el("line", { class: "torfluegel", x1: a[0], y1: a[1], x2: m[0] - 0.1, y2: m[1] - 0.1 }, g);
-  el("line", { class: "torfluegel", x1: b[0], y1: b[1], x2: m[0] + 0.1, y2: m[1] + 0.1 }, g);
-  el("text", { class: "gelaendename", x: m[0] - 3.5, y: m[1] }, g).textContent = "Hoftor · Eingang";
+  const sch = daten.gelaende.find(e => e.typ === "gebaeude" && e.nr === 1);
+  if (sch) el("polygon", { class: "kiesflaeche", points: punkte([[sch.p[0][0] - 1, HAUS.h], [sch.p[1][0] + 1, sch.p[1][1] - 1], sch.p[1], sch.p[0]]) }, g);
+  zeichneLandschaft(g, 3, 9);
 }
 function zeichneFlaeche(f, g) {
   const sel = auswahl && auswahl.art === "fl" && auswahl.id === f.id;
@@ -648,6 +722,7 @@ function zeichnen() {
     const name = lampenName(h, l);
     el("text", { y: LAMPE_R + 0.3 }, gr).textContent = name.length > 20 ? name.slice(0, 19) + "…" : name;
   });
+  zeichneAnfasser(g);
   g.id = "inhalt"; document.getElementById("inhalt").replaceWith(g);
   document.getElementById("info").textContent = bearbeiten
     ? "Bearbeiten: Lampen ziehen · antippen = Name/Symbol · Flächen: Kanten = Größe, Mitte = verschieben"
@@ -672,11 +747,15 @@ function runter(ev) {
   const lampeEl = ev.target.closest("[data-lampe]"), wandEl = ev.target.closest("[data-wand]");
   const flEl = ev.target.closest("[data-flaeche]"), planEl = ev.target.closest("[data-plan]");
   const treppeEl = bearbeiten && ev.target.closest("[data-treppe]");
+  const punktEl = bearbeiten && ev.target.closest("[data-punkt]"), gelEl = bearbeiten && ev.target.closest("[data-gel]");
   const schalterEl = ev.target.closest("[data-raumschalter]");
   const basis = { start: p, sx: ev.clientX, sy: ev.clientY, a0: { ...ansicht }, bewegt: false };
   if (!bearbeiten) {
     if (lampeEl) lampeEl.classList.add("gedrueckt");
     zug = { ...basis, art: "schieben", tipp: lampeEl ? { lampe: +lampeEl.dataset.lampe } : schalterEl ? { raum: schalterEl.dataset.raumschalter } : null };
+  } else if (punktEl && gelEl) {
+    const e = daten.gelaende.find(e => e.id === gelEl.dataset.gel);
+    zug = { ...basis, art: "punkt", e, i: +punktEl.dataset.punkt };
   } else if (lampeEl) {
     const i = +lampeEl.dataset.lampe, l = daten.lampen[i];
     zug = { ...basis, art: "lampe", i, dx: p.x - l.x, dy: p.y - l.y };
@@ -701,6 +780,9 @@ function runter(ev) {
     const mit = f.typ === "gebaeude" ? daten.flaechen.filter(q => q !== f && q.x >= f.x - t && q.y >= f.y - t && q.x + q.w <= f.x + f.w + t && q.y + q.h <= f.y + f.h + t) : [];
     zug = { ...basis, art: "flaeche", f, alt: [f, ...mit].map(q => ({ q, x: q.x, y: q.y })),
       lampenAlt: daten.lampen.filter(l => drin(l.x, l.y, r)).map(l => ({ l, x: l.x, y: l.y })) };
+  } else if (gelEl) {
+    const e = daten.gelaende.find(e => e.id === gelEl.dataset.gel);
+    zug = { ...basis, art: "gel", e, alt: e.p ? e.p.map(q => [...q]) : [[e.x, e.y]] };
   } else if (planEl) {
     zug = { ...basis, art: "schieben", planRaum: planEl.dataset.plan };
   } else {
@@ -734,6 +816,17 @@ function weiter(ev) {
     const g = svg.querySelector(`[data-lampe="${zug.i}"]`);
     if (g) g.setAttribute("transform", `translate(${l.x} ${l.y})`);   // nur verschieben, nicht alles neu zeichnen
     return;
+  }
+  if (zug.art === "punkt") {
+    const x = Math.round(p.x * 10) / 10, y = Math.round(p.y * 10) / 10;
+    if (zug.e.p) zug.e.p[zug.i] = [x, y]; else { zug.e.x = x; zug.e.y = y; }
+    zeichnenBald(); return;
+  }
+  if (zug.art === "gel") {
+    const dx = Math.round((p.x - zug.start.x) * 10) / 10, dy = Math.round((p.y - zug.start.y) * 10) / 10;
+    if (zug.e.p) zug.e.p = zug.alt.map(([x, y]) => [Math.round((x + dx) * 100) / 100, Math.round((y + dy) * 100) / 100]);
+    else { zug.e.x = zug.alt[0][0] + dx; zug.e.y = zug.alt[0][1] + dy; }
+    zeichnenBald(); return;
   }
   if (zug.art === "flaeche") {
     const dx = rund(p.x - zug.start.x), dy = rund(p.y - zug.start.y);
@@ -774,7 +867,9 @@ function hoch(ev) {
     }
     return;
   }
-  if (z.treppe) auswahl = { art: "treppe" };
+  if (z.art === "punkt") auswahl = { art: "gel", id: z.e.id, punkt: z.i };
+  else if (z.art === "gel") auswahl = { art: "gel", id: z.e.id };
+  else if (z.treppe) auswahl = { art: "treppe" };
   else if (z.art === "lampe") auswahl = { art: "lampe", id: z.i };
   else if (z.f) auswahl = { art: "fl", id: z.f.id };
   else if (z.planRaum) auswahl = { art: "plan", id: z.planRaum };
@@ -845,6 +940,48 @@ function panelZeigen() {
     p.querySelector("#p-test").onclick = () => {
       const ids = lampenIm("plan:" + pr.id).map(l => l.entity); schalten(h, ids, !ids.some(id => istAn(h, id)));
     };
+  } else if (auswahl.art === "gel") {
+    const e = daten.gelaende.find(e => e.id === auswahl.id);
+    if (!e) { auswahl = null; return panelZeigen(); }
+    const T = GEL_TYPEN[e.typ], mitPunkten = !!e.p, minP = T.art === "flaeche" ? 3 : 2;
+    const hatName = e.name !== undefined || ["gebaeude", "sitzecke", "stellplatz", "nachbar", "terrasse", "tor", "rondell"].includes(e.typ);
+    p.innerHTML = `<h3>${T.name}</h3>${hatName ? `<input id="g-name" placeholder="Beschriftung (leer = keine)">` : ""}
+      <div class="zeile" style="margin-bottom:12px">
+      ${mitPunkten ? `<button id="g-plus">${icon("plus")} Punkt einfügen</button><button id="g-minus" class="rot">Punkt entfernen</button>` : ""}
+      ${e.r !== undefined || e.rx !== undefined ? `<button id="g-klein">− kleiner</button><button id="g-gross">+ größer</button>` : ""}
+      <button id="g-kopie">Kopieren</button></div>
+      <div class="zeile"><button id="g-weg" class="rot">${icon("muell")} Löschen</button>
+      <button id="p-fertig" class="voll">${icon("haken")} Fertig</button></div>
+      <div class="hinweis">${mitPunkten ? "Weiße Punkte ziehen = Form ändern · Punkt antippen, dann „Punkt einfügen“ setzt dahinter einen neuen · " : ""}Element in der Mitte anfassen = verschieben.</div>`;
+    const inp = p.querySelector("#g-name");
+    if (inp) { inp.value = e.name || ""; inp.oninput = () => { e.name = inp.value || undefined; zeichnen(); }; }
+    const k = id => p.querySelector(id);
+    if (mitPunkten) {
+      k("#g-plus").onclick = () => {
+        const i = auswahl.punkt !== undefined ? auswahl.punkt : e.p.length - 2, j = (i + 1) % e.p.length;
+        const a = e.p[i], b = e.p[j] || e.p[i];
+        e.p.splice(i + 1, 0, [Math.round((a[0] + b[0]) * 50) / 100 + (b === a ? 1 : 0), Math.round((a[1] + b[1]) * 50) / 100]);
+        auswahl.punkt = i + 1; panelZeigen(); zeichnen();
+      };
+      k("#g-minus").onclick = () => {
+        if (e.p.length <= minP) return meldung("Weniger Punkte geht nicht");
+        e.p.splice(auswahl.punkt !== undefined ? auswahl.punkt : e.p.length - 1, 1); auswahl.punkt = undefined; panelZeigen(); zeichnen();
+      };
+    }
+    const skal = f => { if (e.r !== undefined) e.r = Math.max(0.3, Math.round(e.r * f * 10) / 10); if (e.rx !== undefined) { e.rx *= f; e.ry *= f; } zeichnen(); };
+    if (k("#g-klein")) { k("#g-klein").onclick = () => skal(0.85); k("#g-gross").onclick = () => skal(1.18); }
+    k("#g-kopie").onclick = () => {
+      const c = JSON.parse(JSON.stringify(e)); c.id = neueId();
+      if (c.p) c.p = c.p.map(([x, y]) => [x + 2, y + 2]); else { c.x += 2; c.y += 2; }
+      daten.gelaende.push(c); auswahl = { art: "gel", id: c.id }; panelZeigen(); zeichnen();
+    };
+    k("#g-weg").onclick = () => { daten.gelaende = daten.gelaende.filter(x => x !== e); auswahl = null; panelZeigen(); zeichnen(); };
+  } else if (auswahl.art === "neugel") {
+    p.innerHTML = `<h3>Gelände hinzufügen</h3><div class="symbole">${Object.entries(GEL_TYPEN).map(([k, T]) =>
+      `<button data-neugel="${k}">${T.name}</button>`).join("")}</div>
+      <div class="zeile"><button id="p-fertig" class="voll">${icon("haken")} Fertig</button></div>
+      <div class="hinweis">Das neue Element erscheint in der Bildmitte – dann hinziehen und die weißen Punkte zurechtziehen.</div>`;
+    p.querySelectorAll("[data-neugel]").forEach(b => b.onclick = () => neuesGelaende(b.dataset.neugel));
   } else if (auswahl.art === "treppe") {
     const t = daten.treppe;
     const pfeile = [["hoch", "↑ hoch"], ["runter", "↓ runter"], ["links", "← links"], ["rechts", "→ rechts"]];
@@ -951,8 +1088,12 @@ K("geraet-neu").onclick = () => { auswahl = { art: "neu" }; panelZeigen(); };
 K("gelaende").innerHTML = `${icon("scheune")} Grundstück einpassen`;
 // Eigene Scheune (mit Räumen und Lampen) in das Scheunen-Gebäude des Luftbilds setzen, alte Groß-Flächen entfernen
 K("gelaende").onclick = () => grundstueckEinpassen();
+K("gelaende-neu").innerHTML = `${icon("plus")} Gelände`;
+K("gelaende-neu").onclick = () => { auswahl = { art: "neugel" }; panelZeigen(); };
 function grundstueckEinpassen() {
-  const ziel = GELAENDE.gebaeude.find(b => b.nr === 1).p;
+  const zielEl = daten.gelaende.find(e => e.typ === "gebaeude" && e.nr === 1);
+  if (!zielEl) return;
+  const ziel = zielEl.p;
   const zx1 = Math.min(...ziel.map(p => p[0])), zy1 = Math.min(...ziel.map(p => p[1]));
   const zx2 = Math.max(...ziel.map(p => p[0])), zy2 = Math.max(...ziel.map(p => p[1]));
   const s = daten.flaechen.find(f => f.typ === "gebaeude" && /scheune/i.test(f.name));
@@ -993,6 +1134,7 @@ async function laden() {
   else daten = neuerStand();
   daten.namen = daten.namen || {}; daten.flaechen = daten.flaechen || []; daten.lampen = daten.lampen || [];
   if (!daten.treppe) daten.treppe = { ...TREPPE };
+  if (!Array.isArray(daten.gelaende)) daten.gelaende = gelaendeAusVorlage();
   ergaenzen(h);
   knoepfe(); zeichnen(); allesZeigen();
   if (!daten.gelaendeEingepasst) grundstueckEinpassen();
