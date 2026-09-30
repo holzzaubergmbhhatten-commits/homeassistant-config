@@ -284,6 +284,67 @@ script:
           message: "{{ text }}"
           language: de
 
+  jarvis_durchsage:
+    alias: Jarvis Durchsage
+    description: >-
+      Macht eine Durchsage über die HomePods/Lautsprecher im Haus ("Sag im ganzen Haus: Essen ist fertig",
+      "Durchsage in der Küche: …"). Nutze IMMER dieses Werkzeug für Durchsagen und Ansagen, nicht die
+      eingebaute Broadcast-Funktion (dafür gibt es keine Satelliten). Laufende Musik wird kurz leiser und läuft danach weiter.
+    icon: mdi:bullhorn
+    mode: queued
+    fields:
+      text:
+        name: Text
+        description: Was angesagt werden soll.
+        required: true
+        selector:
+          text:
+      raeume:
+        name: Räume
+        description: >-
+          Lautsprecher-Namen mit Komma getrennt, z. B. "Küche, Schlafzimmer". Leer oder "alle" = alle Lautsprecher.
+          Vorhandene: Küche, Terrasse, Badezimmer, Schlafzimmer, Muckis Zimmer.
+        selector:
+          text:
+    sequence:
+      - variables:
+          alle: "{{ integration_entities('music_assistant') | select('match', 'media_player\\.') | list }}"
+          wunsch: >-
+            {{ (raeume | default('', true) | string).lower().replace(' und ', ',').split(',')
+               | map('trim') | reject('in', ['', 'alle', 'überall', 'ganzes haus', 'haus']) | list }}
+          ziel: >-
+            {% if not wunsch %}{{ alle }}{% else %}
+              {% set ns = namespace(l=[]) %}
+              {% for e in alle %}{% set n = (state_attr(e, 'friendly_name') or '') | lower %}
+                {% if wunsch | select('in', n) | list or (wunsch | select('eq', n) | list) %}{% set ns.l = ns.l + [e] %}{% endif %}
+              {% endfor %}{{ ns.l }}
+            {% endif %}
+          stimme: >-
+            {% set t = states.tts | map(attribute='entity_id') | list %}
+            {{ (t | select('search', 'elevenlabs') | list + t | select('search', 'cloud') | list + t) | first | default('', true) }}
+      - if: "{{ ziel | count == 0 or stimme == '' }}"
+        then:
+          - variables:
+              fehler:
+                ergebnis: kein passender Lautsprecher gefunden
+                vorhandene: "{{ alle | map('state_attr', 'friendly_name') | list }}"
+          - stop: nichts gefunden
+            response_variable: fehler
+      - action: tts.speak
+        continue_on_error: true
+        target:
+          entity_id: "{{ stimme }}"
+        data:
+          media_player_entity_id: "{{ ziel }}"
+          message: "{{ text }}"
+          language: de
+      - variables:
+          ok:
+            ergebnis: Durchsage gemacht
+            lautsprecher: "{{ ziel | map('state_attr', 'friendly_name') | list }}"
+      - stop: fertig
+        response_variable: ok
+
   jarvis_belegung:
     alias: Jarvis Belegung Ferienwohnung und Stellplätze
     description: >-
