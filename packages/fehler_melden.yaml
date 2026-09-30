@@ -12,17 +12,22 @@ automation:
     event_data:
       level: ERROR
   conditions:
+  # Alles, was wir selbst gebaut oder eingebunden haben (Jarvis, Kameras, Schloss, Musik, Stimme …)
   - condition: template
-    value_template: '{{ trigger.event.data.name is search(''ai_task|anthropic|script|automation|calendar|telegram|template|rest_command'',
-      ignorecase=True) }}'
+    value_template: >-
+      {{ trigger.event.data.name is search('ai_task|anthropic|script|automation|calendar|telegram|template|rest_command|shell_command|conversation|assist_pipeline|tts|stt|elevenlabs|cloud|music_assistant|media_player|shelly|matter|lock|camera|generic|onvif|todo|local_calendar|wyoming', ignorecase=True)
+         and not (trigger.event.data.message | join(' ')) is search('unauthorized|not in allowed', ignorecase=True) }}
   actions:
   - action: telegram_bot.send_message
     continue_on_error: true
     data:
-      message: '{% set t %}⚠️ Fehler in Home Assistant ({{ trigger.event.data.name }}): {{ (trigger.event.data.message
-        | join('' ''))[:700] }}{% endset %}{{ t | replace(''&'',''&amp;'') | replace(''<'',''&lt;'') | replace(''>'',''&gt;'')
-        }}'
       parse_mode: html
+      message: |-
+        {% set esc = (trigger.event.data.message | join(' '))[:900] | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') -%}
+        ⚠️ <b>Problem in Home Assistant</b> ({{ now().strftime('%d.%m. %H:%M') }})
+        Bereich: {{ trigger.event.data.name | replace('<','&lt;') }}{{ ' · ' ~ (trigger.event.data.source | first | string | replace('<','&lt;')) if trigger.event.data.source is defined and trigger.event.data.source else '' }}
+        <pre>{{ esc }}</pre>
+        👉 Zum Beheben diese Nachricht an Claude weiterleiten.
   - delay: 00:01:00
 - id: telegram_unbekannter_chat
   alias: 'Telegram: unbekannte Chat-ID melden'
@@ -47,3 +52,66 @@ automation:
         endset %}{{ t | replace(''&'',''&amp;'') | replace(''<'',''&lt;'') | replace(''>'',''&gt;'') }}'
       parse_mode: html
   - delay: 00:01:00
+
+# Hinweise, die Home Assistant selbst anzeigt (Glocke unten links), z. B. ungültige Konfiguration nach
+# einem Update, Kamera-Selbsttest, Grundriss-Speichern – auch aufs Handy.
+- id: hinweis_an_telegram
+  alias: Hinweise (Glocke) an Telegram melden
+  mode: queued
+  max: 5
+  triggers:
+  - trigger: persistent_notification
+    update_type:
+    - added
+  actions:
+  - action: telegram_bot.send_message
+    continue_on_error: true
+    data:
+      parse_mode: html
+      message: |-
+        {% set n = trigger.notification -%}
+        🔔 <b>{{ (n.title or 'Hinweis von Home Assistant') | replace('&','&amp;') | replace('<','&lt;') }}</b>
+        <pre>{{ (n.message | string)[:900] | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}</pre>
+        👉 Falls das ein Problem ist: an Claude weiterleiten.
+
+# Wichtige Geräte länger als 10 Minuten nicht erreichbar (Schloss, Hoftor-Shelly, Kameras, HomePods)
+- id: geraet_offline_an_telegram
+  alias: Wichtiges Gerät offline an Telegram melden
+  mode: parallel
+  max: 20
+  triggers:
+  - trigger: event
+    event_type: state_changed
+  conditions:
+  - condition: template
+    value_template: >-
+      {% set e = trigger.event.data.entity_id %}
+      {{ trigger.event.data.new_state is not none and trigger.event.data.old_state is not none
+         and trigger.event.data.new_state.state == 'unavailable'
+         and trigger.event.data.old_state.state not in ['unavailable', 'unknown']
+         and (e.startswith('lock.') or e.startswith('camera.draussen') or e.startswith('switch.shelly')
+              or e in integration_entities('music_assistant')) }}
+  actions:
+  - delay: 00:10:00
+  - condition: template
+    value_template: "{{ is_state(trigger.event.data.entity_id, 'unavailable') }}"
+  - action: telegram_bot.send_message
+    continue_on_error: true
+    data:
+      message: >-
+        📴 Seit 10 Minuten nicht erreichbar: {{ state_attr(trigger.event.data.entity_id, 'friendly_name') or trigger.event.data.entity_id }}
+        ({{ trigger.event.data.entity_id }}). Strom/WLAN prüfen – oder an Claude weiterleiten.
+
+# Nach jedem Neustart (z. B. wenn Claude neue Einstellungen eingespielt hat) kurz Bescheid geben
+- id: neustart_an_telegram
+  alias: Neustart an Telegram melden
+  triggers:
+  - trigger: homeassistant
+    event: start
+  actions:
+  - delay: 00:01:00
+  - action: telegram_bot.send_message
+    continue_on_error: true
+    data:
+      message: >-
+        🔄 Home Assistant ist neu gestartet ({{ now().strftime('%H:%M') }} Uhr) – neue Einstellungen sind aktiv.

@@ -345,6 +345,44 @@ script:
       - stop: fertig
         response_variable: ok
 
+  jarvis_telegram_nachricht:
+    alias: Jarvis Nachricht per Telegram
+    description: >-
+      Schickt Marco eine Nachricht per Telegram aufs Handy. Nutze das, wenn jemand sagt "schick mir das per
+      Telegram / aufs Handy", und AUCH VON DIR AUS, wenn etwas nicht geklappt hat (z. B. ein Werkzeug meldet einen
+      Fehler oder ein Gerät reagiert nicht): Dann schick eine kurze, sachliche Problembeschreibung mit dem, was
+      gewünscht war, was passiert ist und der Fehlermeldung, damit Marco sie an Claude weiterleiten kann.
+    icon: mdi:send
+    mode: queued
+    fields:
+      text:
+        name: Text
+        required: true
+        selector:
+          text:
+            multiline: true
+      ist_problem:
+        name: Ist ein Problem
+        description: true, wenn es eine Problem-/Fehlerbeschreibung ist.
+        selector:
+          boolean:
+    sequence:
+      - variables:
+          ziel: "{{ states('sensor.jarvis_telegram_ziel')[1:] if states('sensor.jarvis_telegram_ziel').startswith('x') else '' }}"
+          nachricht: >-
+            {{ ('🛠 Problem-Bericht von Jarvis (' ~ now().strftime('%d.%m. %H:%M') ~ '):\n' ~ text ~ '\n\n👉 Zum Beheben an Claude weiterleiten.')
+               if ist_problem | default(false) else ('🤖 Jarvis: ' ~ text) }}
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data: >-
+          {% set x = {'message': nachricht} %}
+          {% if ziel %}{% set x = dict(x, chat_id=ziel | int) %}{% endif %}{{ x }}
+      - variables:
+          ok:
+            ergebnis: per Telegram geschickt
+      - stop: fertig
+        response_variable: ok
+
   jarvis_belegung:
     alias: Jarvis Belegung Ferienwohnung und Stellplätze
     description: >-

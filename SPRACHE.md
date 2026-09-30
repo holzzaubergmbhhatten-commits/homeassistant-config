@@ -26,7 +26,7 @@ Einstellungen → Sprachassistenten → Reiter **Entitäten freigeben**:
 - `todo.einkaufsliste` ✅
 - Skript „Termin eintragen“ ✅ (kommt automatisch aus `packages/termine.yaml`)
 - Jarvis-Werkzeuge aus `packages/jarvis.yaml` ✅ – gelten für Sprache UND Telegram-Bot:
-  „Jarvis Tagesüberblick“, „Jarvis Durchsage“ (HomePods), „Jarvis Morgen-Ansage im Schlafzimmer“, „Jarvis Haustür abschließen“ (kann nur ab-, nie aufschließen), „Jarvis Kamerabild schicken“, „Jarvis Belegung Ferienwohnung und Stellplätze“ (nur Zeiträume,
+  „Jarvis Tagesüberblick“, „Jarvis Nachricht per Telegram“, „Jarvis Durchsage“ (HomePods), „Jarvis Morgen-Ansage im Schlafzimmer“, „Jarvis Haustür abschließen“ (kann nur ab-, nie aufschließen), „Jarvis Kamerabild schicken“, „Jarvis Belegung Ferienwohnung und Stellplätze“ (nur Zeiträume,
   keine Gästenamen), „Jarvis Nachricht auf den Flur-Monitor“, „Jarvis Erinnerung“
 - `todo.aufgaben` ✅
 - Hoftor: bewusst **nicht** freigeben, solange niemand per Sprache das Tor öffnen soll
