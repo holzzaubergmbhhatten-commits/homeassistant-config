@@ -310,7 +310,8 @@ script:
         name: Räume
         description: >-
           Lautsprecher-Namen mit Komma getrennt, z. B. "Küche, Schlafzimmer". Leer oder "alle" = alle Lautsprecher.
-          Vorhandene: Küche, Terrasse, Badezimmer, Schlafzimmer, Muckis Zimmer.
+          Nimm genau den Namen, den der Nutzer sagt (z. B. "Badezimmer" = nur der HomePod im Bad, nicht auch andere
+          Bad-Lautsprecher). Vorhandene: Küche, Terrasse, Badezimmer, Schlafzimmer, Muckis Zimmer.
         selector:
           text:
     sequence:
@@ -321,10 +322,16 @@ script:
                | map('trim') | reject('in', ['', 'alle', 'überall', 'ganzes haus', 'haus']) | list }}
           ziel: >-
             {% if not wunsch %}{{ alle }}{% else %}
+              {#- pro Wunsch: erst genau gleicher Name ("Badezimmer" ≠ "Badezimmer 2"), nur sonst Teil des Namens #}
               {% set ns = namespace(l=[]) %}
-              {% for e in alle %}{% set n = (state_attr(e, 'friendly_name') or '') | lower %}
-                {% if wunsch | select('in', n) | list or (wunsch | select('eq', n) | list) %}{% set ns.l = ns.l + [e] %}{% endif %}
-              {% endfor %}{{ ns.l }}
+              {% for w in wunsch %}
+                {% set genau = namespace(l=[]) %}
+                {% for e in alle %}{% if (state_attr(e, 'friendly_name') or '') | lower == w %}{% set genau.l = genau.l + [e] %}{% endif %}{% endfor %}
+                {% if genau.l %}{% set ns.l = ns.l + genau.l %}
+                {% else %}
+                  {% for e in alle %}{% if w in (state_attr(e, 'friendly_name') or '') | lower %}{% set ns.l = ns.l + [e] %}{% endif %}{% endfor %}
+                {% endif %}
+              {% endfor %}{{ ns.l | unique | list }}
             {% endif %}
           stimme: >-
             {% set t = states.tts | map(attribute='entity_id') | list %}
