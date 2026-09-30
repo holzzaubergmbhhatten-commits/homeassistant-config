@@ -299,6 +299,13 @@ script:
         required: true
         selector:
           text:
+      lautstaerke:
+        name: Lautstärke in Prozent
+        description: Lautstärke für die Ansage (Standard 60). Nur angeben, wenn ausdrücklich gewünscht.
+        selector:
+          number:
+            min: 10
+            max: 100
       raeume:
         name: Räume
         description: >-
@@ -330,6 +337,24 @@ script:
                 vorhandene: "{{ alle | map('state_attr', 'friendly_name') | list }}"
           - stop: nichts gefunden
             response_variable: fehler
+      # Lautstärke für die Ansage anheben (mindestens 60 %), danach wieder wie vorher
+      - variables:
+          laut: "{{ ((lautstaerke | default(60, true) | int(60)) / 100) | round(2) }}"
+          vorher: >-
+            {% set ns = namespace(d={}) %}
+            {% for e in ziel %}{% set ns.d = dict(ns.d, **{e: state_attr(e, 'volume_level')}) %}{% endfor %}
+            {{ ns.d }}
+      - repeat:
+          for_each: "{{ ziel }}"
+          sequence:
+            - if: "{{ (vorher[repeat.item] | float(0)) < laut }}"
+              then:
+                - action: media_player.volume_set
+                  continue_on_error: true
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    volume_level: "{{ laut }}"
       - action: tts.speak
         continue_on_error: true
         target:
@@ -338,6 +363,20 @@ script:
           media_player_entity_id: "{{ ziel }}"
           message: "{{ text }}"
           language: de
+      # grob abwarten, bis die Ansage gesprochen ist (ca. 12 Zeichen pro Sekunde + Puffer)
+      - delay:
+          seconds: "{{ ((text | length) / 12 + 4) | int }}"
+      - repeat:
+          for_each: "{{ ziel }}"
+          sequence:
+            - if: "{{ vorher[repeat.item] is number and (vorher[repeat.item] | float(0)) < laut }}"
+              then:
+                - action: media_player.volume_set
+                  continue_on_error: true
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    volume_level: "{{ vorher[repeat.item] }}"
       - variables:
           ok:
             ergebnis: Durchsage gemacht
