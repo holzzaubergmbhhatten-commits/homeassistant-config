@@ -197,6 +197,39 @@ script:
       - stop: fertig
         response_variable: antwort
 
+  jarvis_haustuer_abschliessen:
+    alias: Jarvis Haustür abschließen
+    description: >-
+      Schließt alle Türschlösser ab (z. B. Nuki Haustür) und sagt, welche vorher offen waren. Kann NUR
+      abschließen, niemals aufschließen – Aufschließen per Sprache ist aus Sicherheitsgründen nicht möglich.
+      Nutze das bei "Schließ die Haustür ab", "Ist die Tür zu?" (dann nur abschließen, wenn ausdrücklich gewünscht:
+      bei der Frage reicht das Feld nur_pruefen).
+    icon: mdi:lock
+    mode: queued
+    fields:
+      nur_pruefen:
+        name: Nur prüfen
+        description: true = nur sagen, ob abgeschlossen ist, nichts verändern.
+        selector:
+          boolean:
+    sequence:
+      - variables:
+          schloesser: "{{ states.lock | map(attribute='entity_id') | list }}"
+          offen: "{{ states.lock | selectattr('state', 'in', ['unlocked', 'open', 'jammed']) | map(attribute='entity_id') | list }}"
+      - if: "{{ not (nur_pruefen | default(false)) and offen | count > 0 }}"
+        then:
+          - action: lock.lock
+            continue_on_error: true
+            target:
+              entity_id: "{{ offen }}"
+      - variables:
+          antwort:
+            schloesser: "{{ schloesser | map('state_attr', 'friendly_name') | list }}"
+            waren_offen: "{{ offen | map('state_attr', 'friendly_name') | list }}"
+            aktion: "{{ 'nur geprüft' if nur_pruefen | default(false) else ('wird abgeschlossen' if offen else 'war schon alles abgeschlossen') }}"
+      - stop: fertig
+        response_variable: antwort
+
   jarvis_belegung:
     alias: Jarvis Belegung Ferienwohnung und Stellplätze
     description: >-
@@ -534,3 +567,64 @@ automation:
           message: >-
             {% if trigger.event.data.data == '/licht_aus' %}✅ Ausgeschaltet: {{ an | map(attribute='name') | join(', ') if an else 'war schon alles aus' }}
             {% else %}👍 Licht bleibt an{% endif %}
+
+  # 22:30 – Türschlösser (z. B. Nuki Haustür): nur wenn eins nicht abgeschlossen ist
+  - id: jarvis_abend_schloss
+    alias: "Jarvis: Abend-Check Haustür"
+    triggers:
+      - trigger: time
+        at: "22:30:00"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.abend_check_pause
+        state: "off"
+    actions:
+      - variables:
+          offen: >-
+            {{ states.lock | selectattr('state', 'in', ['unlocked', 'open', 'jammed']) | map(attribute='name') | list }}
+      - condition: template
+        value_template: "{{ offen | count > 0 }}"
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';')
+               | reject('in', ['', 'unknown', 'unavailable']) | list }}
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                chat_id: "{{ repeat.item | int }}"
+                message: "🔓 Nicht abgeschlossen: {{ offen | join(', ') }}"
+                inline_keyboard:
+                  - "🔒 Abschließen:/abschliessen, Offen lassen:/schloss_lassen"
+
+  - id: jarvis_abend_schloss_knopf
+    alias: "Jarvis: Abend-Check Haustür Knopf"
+    mode: queued
+    triggers:
+      - trigger: event
+        event_type: telegram_callback
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.event.data.data in ['/abschliessen', '/schloss_lassen'] }}"
+    actions:
+      - variables:
+          offen: "{{ states.lock | selectattr('state', 'in', ['unlocked', 'open']) | list }}"
+      - if: "{{ trigger.event.data.data == '/abschliessen' and offen | count > 0 }}"
+        then:
+          - action: lock.lock
+            continue_on_error: true
+            target:
+              entity_id: "{{ offen | map(attribute='entity_id') | list }}"
+      - action: telegram_bot.answer_callback_query
+        continue_on_error: true
+        data:
+          callback_query_id: "{{ trigger.event.data.id }}"
+          message: "{{ 'Wird abgeschlossen' if trigger.event.data.data == '/abschliessen' else 'OK' }}"
+      - action: telegram_bot.edit_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ trigger.event.data.chat_id }}"
+          message_id: "{{ trigger.event.data.message.message_id }}"
+          message: >-
+            {% if trigger.event.data.data == '/abschliessen' %}🔒 Abgeschlossen: {{ offen | map(attribute='name') | join(', ') if offen else 'war schon zu' }}
+            {% else %}👍 Bleibt offen{% endif %}
