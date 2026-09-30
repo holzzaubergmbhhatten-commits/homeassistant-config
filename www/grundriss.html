@@ -27,7 +27,7 @@
   }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
     font-family: -apple-system, "SF Pro Text", Roboto, "Helvetica Neue", system-ui, sans-serif;
-    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+    -webkit-user-select: none; -webkit-touch-callout: none; user-select: none; -webkit-tap-highlight-color: transparent; }
   #plan { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
   .leiste { position: absolute; top: 14px; left: 16px; right: 16px; display: flex; align-items: center; gap: 10px; pointer-events: none; }
   .leiste > * { pointer-events: auto; }
@@ -742,7 +742,7 @@ function zeichnen() {
   g.id = "inhalt"; document.getElementById("inhalt").replaceWith(g);
   document.getElementById("info").textContent = bearbeiten
     ? "Bearbeiten: Lampen ziehen · antippen = Name/Symbol · Flächen: Kanten = Größe, Mitte = verschieben"
-    : (an === 0 ? "Alles aus" : an === 1 ? "1 an" : an + " an") + " · Raumname antippen = ganzer Raum";
+    : (an === 0 ? "Alles aus" : an === 1 ? "1 an" : an + " an") + " · Raumname antippen = ganzer Raum · Lampe lange drücken = dimmen/Farbe";
 }
 
 // ================= Bedienung =================
@@ -765,7 +765,7 @@ function runter(ev) {
   const treppeEl = bearbeiten && ev.target.closest("[data-treppe]");
   const punktEl = bearbeiten && ev.target.closest("[data-punkt]"), gelEl = bearbeiten && ev.target.closest("[data-gel]");
   const schalterEl = ev.target.closest("[data-raumschalter]");
-  const basis = { start: p, sx: ev.clientX, sy: ev.clientY, a0: { ...ansicht }, bewegt: false };
+  const basis = { start: p, sx: ev.clientX, sy: ev.clientY, a0: { ...ansicht }, bewegt: false, t0: Date.now() };
   if (!bearbeiten) {
     if (lampeEl) lampeEl.classList.add("gedrueckt");
     zug = { ...basis, art: "schieben", tipp: lampeEl ? { lampe: +lampeEl.dataset.lampe } : schalterEl ? { raum: schalterEl.dataset.raumschalter } : null };
@@ -872,6 +872,8 @@ function hoch(ev) {
     if (z.tipp && z.tipp.lampe !== undefined) {
       const l = daten.lampen[z.tipp.lampe];
       if (l.entity.startsWith("camera.")) return kameraZeigen(h, l);
+      // Lange drücken (ab 0,5 s) = Helligkeit/Farbe: Home-Assistant-Fenster der Lampe öffnen
+      if (Date.now() - z.t0 > 500 && l.entity.startsWith("light.")) return detailsZeigen(l.entity);
       if ((l.icon === "tor" || l.entity.startsWith("lock.")) && !(bestaetigt.id === l.entity && Date.now() - bestaetigt.zeit < 4000)) {
         bestaetigt = { id: l.entity, zeit: Date.now() };
         return meldung(l.entity.startsWith("lock.") ? (istAn(h, l.entity) ? "Zum Abschließen nochmal tippen" : "Zum Aufschließen nochmal tippen") : "Zum Öffnen/Schließen nochmal tippen");
@@ -1150,6 +1152,12 @@ K("speichern").onclick = async () => {
     else meldung("⚠️ Nicht gespeichert – bitte nochmal auf Speichern tippen (Änderungen bleiben erhalten)");
   } catch (e) { meldung("⚠️ Speichern fehlgeschlagen: " + (e && e.message || e)); }
 };
+function detailsZeigen(id) {
+  try {
+    const ha = window.parent.document.querySelector("home-assistant");
+    ha.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId: id }, bubbles: true, composed: true }));
+  } catch (e) { meldung("Lampen-Einstellungen konnten nicht geöffnet werden"); }
+}
 function verlassen() { bearbeiten = false; auswahl = null; fotoAn = false; panelZeigen(); knoepfe(); zeichnen(); }
 
 // ================= Start =================
