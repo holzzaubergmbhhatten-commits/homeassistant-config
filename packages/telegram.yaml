@@ -132,6 +132,9 @@ automation:
           "eintraege". Soll nur etwas von der Aufgabenliste gelöscht werden, bleibt "eintraege" leer.
         - "aufgabe_erledigt": eine oder mehrere offene Aufgaben sind erledigt/abhaken. In "eintraege" die Namen
           GENAU so wie in der Liste der offenen Aufgaben unten, mehrere mit ; getrennt.
+        - "erinnerung": jemand möchte zu einer bestimmten Uhrzeit per Nachricht erinnert werden ("erinnere mich
+          morgen um 17 Uhr an den Anhänger", "in einer Stunde an die Wäsche erinnern"). Dann titel (woran),
+          datum (JJJJ-MM-TT) und uhrzeit (HH:MM). Ohne Uhrzeit ist es eine "aufgabe".
         - "einkauf": etwas soll auf die Einkaufsliste (Lebensmittel, Drogerie, "wir brauchen Milch").
           Die Artikel in "eintraege", mehrere mit ; getrennt.
         - "keine": alles andere (Fragen, Licht, Musik, Sonstiges).
@@ -154,7 +157,7 @@ automation:
         Nachricht: {{ text }}
       structure:
         aktion:
-          description: 'neu, aendern, loeschen, aufgabe, aufgabe_erledigt, einkauf oder keine'
+          description: 'neu, aendern, loeschen, aufgabe, aufgabe_erledigt, erinnerung, einkauf oder keine'
           required: true
           selector:
             text: null
@@ -210,6 +213,8 @@ automation:
         {% set a = (d.aktion | default('keine', true) | string | lower | trim) -%}
         {%- if a == 'neu' and (d.datum | default('') | string) is match('^\d{4}-\d{2}-\d{2}$') %}neu
         {%- elif a in ['aendern', 'ändern', 'loeschen', 'löschen'] and (d.alt_datum | default('') | string) is match('^\d{4}-\d{2}-\d{2}$') %}{{ a | replace('ä','ae') | replace('ö','oe') }}
+        {%- elif a == 'erinnerung' and (d.datum | default('') | string) is match('^\d{4}-\d{2}-\d{2}$')
+            and (d.uhrzeit | default('') | string) is match('^\d{1,2}:\d{2}') %}erinnerung
         {%- elif a in ['aufgabe', 'aufgabe_erledigt', 'einkauf'] and ((d.eintraege | default('', true) | string | trim) != ''
             or (a == 'aufgabe' and (d.entfernen | default('', true) | string | trim) != '')) %}{{ a }}
         {%- else %}keine{% endif %}
@@ -288,6 +293,25 @@ automation:
             {% set t %}{{ meldung or '⚠️ Der Termin konnte nicht bearbeitet werden (Zusatzprogramm hat nicht geantwortet).' }}{% endset %}{{ t
             | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}
           parse_mode: html
+    # Erinnerung zu einer Uhrzeit (packages/jarvis.yaml) – kommt per Telegram an diesen Chat
+    - conditions: "{{ aktion == 'erinnerung' }}"
+      sequence:
+      - variables:
+          uhr: "{{ d.uhrzeit | string | trim }}"
+          wann: "{{ d.datum }} {{ '%02d' | format(uhr.split(':')[0] | int) }}:{{ uhr.split(':')[1][:2] }}"
+          titel: "{{ d.titel | default('Erinnerung', true) }}"
+      - action: script.jarvis_erinnerung
+        continue_on_error: true
+        data:
+          text: '{{ titel }}'
+          zeitpunkt: '{{ wann }}'
+      - action: telegram_bot.send_message
+        data:
+          chat_id: '{{ chat }}'
+          parse_mode: html
+          message: >-
+            {% set t %}⏰ Ich erinnere dich am {{ strptime(d.datum, '%Y-%m-%d').strftime('%d.%m.') }} um {{ wann[11:16] }} Uhr: {{ titel }}{% endset %}{{ t
+            | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}
     # Aufgaben / Einkauf direkt eintragen (zuverlässiger als über den Gesprächsagenten)
     - conditions: "{{ aktion in ['aufgabe', 'aufgabe_erledigt', 'einkauf'] }}"
       sequence:

@@ -1,0 +1,448 @@
+# Jarvis – gemeinsame Werkzeuge für den Sprachassistenten (Handy / Voice PE) UND den Telegram-Bot.
+# Beide benutzen denselben Claude-Gesprächsagenten. Alles, was hier als Skript steht, kann Claude
+# aufrufen, sobald das Skript unter Einstellungen → Sprachassistenten → Entitäten freigeben
+# für Assist freigegeben ist. So gibt es jede Funktion nur einmal.
+# Datenschutz: Buchungen nur als Zeiträume, ohne Gästenamen (keine Kundendaten an die KI).
+# Telegram-Empfänger kommen aus input_text.telegram_empfaenger (keine Chat-IDs im Repository).
+
+input_text:
+  flur_nachricht:
+    name: Nachricht auf dem Flur-Monitor
+    icon: mdi:message-text
+    max: 255
+
+input_boolean:
+  # Einschalten = pausieren (neue Schalter starten ausgeschaltet, also ist alles zuerst aktiv)
+  morgen_uebersicht_pause:
+    name: Morgen-Übersicht pausieren
+    icon: mdi:weather-sunset-up
+  abend_check_pause:
+    name: Abend-Check Licht pausieren
+    icon: mdi:lightbulb-night
+
+timer:
+  flur_nachricht:
+    name: Nachricht auf dem Monitor – Restzeit
+    restore: true
+
+template:
+  - sensor:
+      # Wer hat zuletzt (vor weniger als 3 Minuten) dem Bot geschrieben? Sonst der erste Empfänger.
+      # Damit landen Fotos/Erinnerungen bei der Person, die gefragt hat.
+      - name: Jarvis Telegram Ziel
+        unique_id: jarvis_telegram_ziel
+        icon: mdi:send
+        state: >-
+          {% set v = states('input_text.telegram_vorherige') | string %}
+          {% set s = states.input_text.telegram_vorherige %}
+          {% set frisch = s is not none and (now() - s.last_changed).total_seconds() < 180 %}
+          {% set erster = (states('input_text.telegram_empfaenger') | string).split(';')
+             | reject('in', ['', 'unknown', 'unavailable']) | first | default('') %}
+          {{ ('x' ~ v.split('~', 1)[0]) if frisch and '~' in v else ('x' ~ erster if erster else 'keiner') }}
+
+script:
+  jarvis_kamerabild:
+    alias: Jarvis Kamerabild schicken
+    description: >-
+      Macht ein aktuelles Foto mit einer oder allen Außenkameras und schickt es per Telegram aufs Handy.
+      Nutze das, wenn jemand sehen möchte, was draußen los ist ("Zeig mir den Hof", "Wer ist am Tor?",
+      "Schick mir alle Kamerabilder"). Antworte danach kurz, dass das Bild geschickt wurde.
+    icon: mdi:cctv
+    mode: queued
+    fields:
+      kamera:
+        name: Kamera
+        description: >-
+          Welche Kamera, z. B. "Tor", "Hof hinten", "Giebel vorne", "Giebel hinten" – oder "alle".
+        selector:
+          text:
+    sequence:
+      - variables:
+          wunsch: "{{ kamera | default('alle', true) | string | lower | trim }}"
+          verfuegbar: >-
+            {{ states.camera | rejectattr('state', 'in', ['unavailable', 'unknown'])
+               | rejectattr('entity_id', 'search', 'aufnahme') | map(attribute='entity_id') | list }}
+          auswahl: >-
+            {% if wunsch in ['', 'alle', 'all', 'alle kameras'] %}{{ verfuegbar }}
+            {% else %}
+              {% set woerter = wunsch.replace('-', ' ').replace('_', ' ').split()
+                 | reject('in', ['kamera', 'die', 'der', 'das', 'am', 'vom', 'von', 'im', 'an', 'beim', 'zum']) | list %}
+              {% set ns = namespace(l=[]) %}
+              {% for e in verfuegbar %}
+                {% set n = (e ~ ' ' ~ state_attr(e, 'friendly_name')) | lower | replace('_', ' ') %}
+                {% if woerter and (woerter | select('in', n) | list | count) == (woerter | count) %}
+                  {% set ns.l = ns.l + [e] %}
+                {% endif %}
+              {% endfor %}
+              {{ ns.l }}
+            {% endif %}
+          ziel: "{{ states('sensor.jarvis_telegram_ziel')[1:] if states('sensor.jarvis_telegram_ziel').startswith('x') else '' }}"
+      - if: "{{ auswahl | count == 0 }}"
+        then:
+          - variables:
+              fehler:
+                ergebnis: keine passende Kamera gefunden
+                vorhandene_kameras: "{{ verfuegbar | map('state_attr', 'friendly_name') | list }}"
+          - stop: keine Kamera
+            response_variable: fehler
+      - repeat:
+          for_each: "{{ auswahl }}"
+          sequence:
+            - variables:
+                datei: "/media/jarvis_{{ repeat.item.split('.', 1)[1] }}.jpg"
+            - action: camera.snapshot
+              continue_on_error: true
+              target:
+                entity_id: "{{ repeat.item }}"
+              data:
+                filename: "{{ datei }}"
+            - action: telegram_bot.send_photo
+              continue_on_error: true
+              data: >-
+                {% set x = {'file': datei, 'caption': '📷 ' ~ state_attr(repeat.item, 'friendly_name')
+                   ~ ' · ' ~ now().strftime('%H:%M') ~ ' Uhr'} %}
+                {% if ziel %}{% set x = dict(x, chat_id=ziel | int) %}{% endif %}{{ x }}
+      - variables:
+          ok:
+            ergebnis: per Telegram geschickt
+            kameras: "{{ auswahl | map('state_attr', 'friendly_name') | list }}"
+      - stop: fertig
+        response_variable: ok
+
+  jarvis_belegung:
+    alias: Jarvis Belegung Ferienwohnung und Stellplätze
+    description: >-
+      Liefert, wann die Ferienwohnung belegt ist und wie viele Stellplätze an welchen Tagen gebucht sind
+      (nur Zeiträume, keine Gästenamen). Nutze das bei Fragen wie "Wer kommt diese Woche in die
+      Ferienwohnung?", "Ist die Ferienwohnung am Wochenende frei?", "Sind Stellplätze belegt?".
+    icon: mdi:home-clock
+    mode: parallel
+    fields:
+      tage:
+        name: Zeitraum in Tagen
+        description: Wie viele Tage ab heute (Standard 30).
+        selector:
+          number:
+            min: 1
+            max: 120
+    sequence:
+      - variables:
+          bis: "{{ (now() + timedelta(days=(tage | default(30, true) | int(30)))).strftime('%Y-%m-%d') }}"
+          alle: "{{ state_attr('sensor.termine_vorschau', 'buchungen') or [] }}"
+          antwort:
+            heute: "{{ now().strftime('%Y-%m-%d') }}"
+            ferienwohnung: >-
+              {% set ns = namespace(l=[]) %}
+              {% for b in alle if b.kalender != 'stellplatz.verwaltung' and 'stellpl' not in b.kalender and b.start[:10] <= bis %}
+                {% set ns.l = ns.l + [{'anreise': b.start[:10], 'abreise': b.ende[:10]}] %}
+              {% endfor %}
+              {{ ns.l | unique(attribute='anreise') | list }}
+            stellplaetze: >-
+              {% set ns = namespace(l=[]) %}
+              {% for b in alle if (b.kalender == 'stellplatz.verwaltung' or 'stellpl' in b.kalender) and b.start[:10] <= bis %}
+                {% set anzahl = (b.titel | regex_findall_index('(\\d+) Pl', 0) if b.titel is search('\\d+ Pl') else 1) | int(1) %}
+                {% set ns.l = ns.l + [{'von': b.start[:10], 'bis': b.ende[:10], 'plaetze': anzahl}] %}
+              {% endfor %}
+              {{ ns.l }}
+      - stop: fertig
+        response_variable: antwort
+
+  jarvis_monitor_nachricht:
+    alias: Jarvis Nachricht auf den Flur-Monitor
+    description: >-
+      Zeigt eine kurze Nachricht groß auf dem Touchmonitor im Flur an ("Schreib auf den Monitor: Essen um
+      19 Uhr"). Mit leerem Text wird die Nachricht wieder entfernt.
+    icon: mdi:message-text
+    mode: queued
+    fields:
+      text:
+        name: Text
+        description: Die Nachricht (kurz, höchstens ca. 200 Zeichen).
+        selector:
+          text:
+      minuten:
+        name: Anzeigedauer in Minuten
+        description: Wie lange die Nachricht stehen bleibt (Standard 120).
+        selector:
+          number:
+            min: 1
+            max: 1440
+    sequence:
+      - variables:
+          t: "{{ (text | default('', true) | string | trim)[:250] }}"
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.flur_nachricht
+        data:
+          value: "{{ t }}"
+      - if: "{{ t == '' }}"
+        then:
+          - action: timer.cancel
+            target:
+              entity_id: timer.flur_nachricht
+        else:
+          - action: timer.start
+            target:
+              entity_id: timer.flur_nachricht
+            data:
+              duration: "{{ (minuten | default(120, true) | int(120)) * 60 }}"
+          - action: script.monitor_an
+            continue_on_error: true
+            data:
+              timeout: "{{ 300 if is_state('binary_sensor.monitor_nachtmodus', 'on') else 0 }}"
+
+  jarvis_erinnerung:
+    alias: Jarvis Erinnerung
+    description: >-
+      Erinnert zu einer bestimmten Uhrzeit per Telegram an etwas ("Erinner mich morgen um 17 Uhr an den
+      Anhänger"). Die Erinnerung steht bis dahin auch auf der Aufgabenliste. Relative Angaben wie
+      "in einer Stunde" oder "morgen früh" rechnest du vorher in Datum und Uhrzeit um.
+    icon: mdi:alarm
+    mode: queued
+    fields:
+      text:
+        name: Woran erinnern
+        required: true
+        selector:
+          text:
+      zeitpunkt:
+        name: Zeitpunkt
+        description: Datum und Uhrzeit im Format JJJJ-MM-TT HH:MM.
+        required: true
+        selector:
+          datetime:
+    sequence:
+      - variables:
+          liste: >-
+            {{ states.todo | selectattr('name', 'search', '(?i)^aufgaben')
+               | map(attribute='entity_id') | first | default('todo.einkaufsliste', true) }}
+          wann: "{{ (zeitpunkt | string)[:16] | replace('T', ' ') }}"
+          ziel: "{{ states('sensor.jarvis_telegram_ziel')[1:] if states('sensor.jarvis_telegram_ziel').startswith('x') else '' }}"
+      - action: todo.add_item
+        target:
+          entity_id: "{{ liste }}"
+        data:
+          item: "⏰ {{ text }}"
+          due_datetime: "{{ wann }}:00"
+          description: "{{ 'telegram:' ~ ziel if ziel else '' }}"
+      - variables:
+          antwort:
+            ergebnis: Erinnerung gespeichert
+            wann: "{{ wann }}"
+      - stop: fertig
+        response_variable: antwort
+
+automation:
+  - id: flur_nachricht_ablaufen
+    alias: "Jarvis: Monitor-Nachricht nach Ablauf entfernen"
+    triggers:
+      - trigger: event
+        event_type: timer.finished
+        event_data:
+          entity_id: timer.flur_nachricht
+    actions:
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.flur_nachricht
+        data:
+          value: ""
+
+  # Fällige Erinnerungen (Aufgaben mit ⏰ und Uhrzeit) per Telegram schicken und abhaken.
+  # Läuft jede Minute – verpasste Erinnerungen (z. B. während eines Neustarts) kommen nachträglich.
+  - id: jarvis_erinnerung_faellig
+    alias: "Jarvis: Erinnerungen verschicken"
+    mode: single
+    triggers:
+      - trigger: time_pattern
+        minutes: "/1"
+    variables:
+      liste: >-
+        {{ states.todo | selectattr('name', 'search', '(?i)^aufgaben')
+           | map(attribute='entity_id') | first | default('', true) }}
+    conditions:
+      - condition: template
+        value_template: "{{ liste != '' and states(liste) | int(0) > 0 }}"
+    actions:
+      - action: todo.get_items
+        target:
+          entity_id: "{{ liste }}"
+        data:
+          status: needs_action
+        response_variable: offen
+      - variables:
+          faellig: >-
+            {{ offen[liste]['items']
+               | selectattr('summary', 'match', '⏰')
+               | selectattr('due', 'defined') | selectattr('due', 'search', 'T')
+               | selectattr('due', 'le', now().isoformat()) | list }}
+      - repeat:
+          for_each: "{{ faellig }}"
+          sequence:
+            - variables:
+                an: >-
+                  {% set d = repeat.item.description | default('', true) | string %}
+                  {% set alle = (states('input_text.telegram_empfaenger') | string).split(';')
+                     | reject('in', ['', 'unknown', 'unavailable']) | list %}
+                  {{ ('x' ~ d.split(':', 1)[1]) if d.startswith('telegram:') and d | length > 9
+                     else ('x' ~ alle[0] if alle else '') }}
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data: >-
+                {% set x = {'message': '⏰ Erinnerung: ' ~ (repeat.item.summary | replace('⏰', '') | trim)} %}
+                {% if an | length > 1 %}{% set x = dict(x, chat_id=an[1:] | int) %}{% endif %}{{ x }}
+            - action: todo.update_item
+              continue_on_error: true
+              target:
+                entity_id: "{{ liste }}"
+              data:
+                item: "{{ repeat.item.uid }}"
+                status: completed
+
+  # 07:00 – kurze Übersicht für den Tag
+  - id: jarvis_morgen_uebersicht
+    alias: "Jarvis: Morgen-Übersicht per Telegram"
+    triggers:
+      - trigger: time
+        at: "07:00:00"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.morgen_uebersicht_pause
+        state: "off"
+    actions:
+      - action: weather.get_forecasts
+        continue_on_error: true
+        target:
+          entity_id: weather.touchmonitor_home
+        data:
+          type: daily
+        response_variable: wetter
+      - variables:
+          aufgaben_entity: >-
+            {{ states.todo | selectattr('name', 'search', '(?i)^aufgaben')
+               | map(attribute='entity_id') | first | default('', true) }}
+      - if: "{{ aufgaben_entity != '' }}"
+        then:
+          - action: todo.get_items
+            continue_on_error: true
+            target:
+              entity_id: "{{ aufgaben_entity }}"
+            data:
+              status: needs_action
+            response_variable: aufgaben
+      - variables:
+          heute: "{{ now().strftime('%Y-%m-%d') }}"
+          text: >-
+            {%- set tage = ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'] %}
+            {%- set monate = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'] %}
+            {%- set w = {'sunny': 'sonnig ☀️', 'clear-night': 'klar', 'partlycloudy': 'teils bewölkt ⛅', 'cloudy': 'bewölkt ☁️',
+                'rainy': 'Regen 🌧', 'pouring': 'Starkregen 🌧', 'fog': 'Nebel 🌫', 'snowy': 'Schnee ❄️', 'snowy-rainy': 'Schneeregen',
+                'windy': 'windig 💨', 'windy-variant': 'windig 💨', 'lightning': 'Gewitter ⛈', 'lightning-rainy': 'Gewitter ⛈', 'hail': 'Hagel'} %}
+            ☀️ <b>Guten Morgen!</b> {{ tage[now().weekday()] }}, {{ now().day }}. {{ monate[now().month - 1] }}
+            {%- set f = (wetter['weather.touchmonitor_home'].forecast | first) if wetter is defined and 'weather.touchmonitor_home' in wetter and wetter['weather.touchmonitor_home'].forecast else none %}
+            {%- if f %}
+            🌡 {{ w.get(f.condition, f.condition) }}, {{ f.templow | default(f.temperature) | round(0) | int }}–{{ f.temperature | round(0) | int }} °C{% if f.precipitation_probability is defined and f.precipitation_probability %} · Regen {{ f.precipitation_probability }} %{% endif %}
+            {%- endif %}
+            {%- set termine = (state_attr('sensor.termine_vorschau', 'familie') or []) | selectattr('start', 'search', '^' ~ heute) | list %}
+
+            📅 <b>Termine heute</b>
+            {%- for t in termine %}
+            • {{ t.start[11:16] ~ ' ' if 'T' in t.start else '' }}{{ t.titel | replace('&','&amp;') | replace('<','&lt;') }}
+            {%- else %}
+            • keine
+            {%- endfor %}
+            {%- set a = aufgaben[aufgaben_entity]['items'] if aufgaben is defined and aufgaben_entity in aufgaben else [] %}
+            {%- if a %}
+
+            ✅ <b>{{ a | count }} Aufgabe{{ 'n' if a | count != 1 }} offen</b>
+            {%- for x in a[:5] %}
+            • {{ x.summary | replace('&','&amp;') | replace('<','&lt;') }}{{ ' ⚠️ fällig' if x.due is defined and x.due[:10] <= heute else '' }}
+            {%- endfor %}{{ '\n• …' if a | count > 5 else '' }}
+            {%- endif %}
+            {%- set b = state_attr('sensor.termine_vorschau', 'buchungen') or [] %}
+            {%- set fw = b | rejectattr('kalender', 'search', 'stellpl') | list %}
+            {%- set an = fw | selectattr('start', 'search', '^' ~ heute) | list | count %}
+            {%- set ab = fw | selectattr('ende', 'search', '^' ~ heute) | list | count %}
+            {%- set belegt = fw | selectattr('start', 'le', heute) | selectattr('ende', 'gt', heute) | list | count %}
+            {%- set sp = b | selectattr('kalender', 'search', 'stellpl') | selectattr('start', 'le', heute) | selectattr('ende', 'ge', heute) | list %}
+
+            🏡 <b>Ferienwohnung:</b> {{ 'Anreise heute' if an else ('Abreise heute' if ab else ('belegt' if belegt else 'frei')) }}{{ ' (und Abreise)' if an and ab else '' }}
+            {%- if sp %}
+            🚐 <b>Stellplätze heute:</b> {{ sp | count }} Buchung{{ 'en' if sp | count != 1 }}
+            {%- endif %}
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';')
+               | reject('in', ['', 'unknown', 'unavailable']) | list }}
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                chat_id: "{{ repeat.item | int }}"
+                parse_mode: html
+                message: "{{ text }}"
+
+  # 22:30 – nur wenn noch Lampen an sind: Nachricht mit Knöpfen
+  - id: jarvis_abend_check
+    alias: "Jarvis: Abend-Check Licht"
+    triggers:
+      - trigger: time
+        at: "22:30:00"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.abend_check_pause
+        state: "off"
+      - condition: template
+        value_template: "{{ states('sensor.lichter_an') | int(0) > 0 }}"
+    actions:
+      - variables:
+          an: >-
+            {{ states.light | selectattr('state', 'eq', 'on')
+               | rejectattr('attributes.entity_id', 'defined') | map(attribute='name') | list }}
+      - condition: template
+        value_template: "{{ an | count > 0 }}"
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';')
+               | reject('in', ['', 'unknown', 'unavailable']) | list }}
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                chat_id: "{{ repeat.item | int }}"
+                message: "💡 Noch an: {{ an | join(', ') }}"
+                inline_keyboard:
+                  - "Alle ausschalten:/licht_aus, Anlassen:/licht_lassen"
+
+  - id: jarvis_abend_check_knopf
+    alias: "Jarvis: Abend-Check Knopf gedrückt"
+    mode: queued
+    triggers:
+      - trigger: event
+        event_type: telegram_callback
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.event.data.data in ['/licht_aus', '/licht_lassen'] }}"
+    actions:
+      - variables:
+          an: >-
+            {{ states.light | selectattr('state', 'eq', 'on')
+               | rejectattr('attributes.entity_id', 'defined') | list }}
+      - if: "{{ trigger.event.data.data == '/licht_aus' and an | count > 0 }}"
+        then:
+          - action: light.turn_off
+            continue_on_error: true
+            target:
+              entity_id: "{{ an | map(attribute='entity_id') | list }}"
+      - action: telegram_bot.answer_callback_query
+        continue_on_error: true
+        data:
+          callback_query_id: "{{ trigger.event.data.id }}"
+          message: "{{ 'Ausgeschaltet' if trigger.event.data.data == '/licht_aus' else 'OK' }}"
+      - action: telegram_bot.edit_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ trigger.event.data.chat_id }}"
+          message_id: "{{ trigger.event.data.message.message_id }}"
+          message: >-
+            {% if trigger.event.data.data == '/licht_aus' %}✅ Ausgeschaltet: {{ an | map(attribute='name') | join(', ') if an else 'war schon alles aus' }}
+            {% else %}👍 Licht bleibt an{% endif %}

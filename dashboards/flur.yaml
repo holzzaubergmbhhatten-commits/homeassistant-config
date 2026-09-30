@@ -43,6 +43,22 @@ views:
   sections:
   - type: grid
     cards:
+    # Nachricht von Jarvis / Telegram ("Schreib auf den Monitor: …"), verschwindet von selbst
+    - type: conditional
+      grid_options:
+        columns: full
+      conditions:
+      - condition: state
+        entity: input_text.flur_nachricht
+        state_not: ''
+      - condition: state
+        entity: input_text.flur_nachricht
+        state_not: unknown
+      card:
+        type: markdown
+        content: |-
+          ## 💬 {{ states('input_text.flur_nachricht') }}
+          <font color="#8E8E93">{{ (states.input_text.flur_nachricht.last_changed | as_local).strftime('%H:%M') }} Uhr</font>
     - type: heading
       heading: Termine
       heading_style: title

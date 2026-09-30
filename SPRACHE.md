@@ -25,6 +25,10 @@ Einstellungen → Sprachassistenten → Reiter **Entitäten freigeben**:
 - `calendar.holidu`, `calendar.privat_mit_buchung`, `calendar.geburtstage` ✅ (zum Vorlesen)
 - `todo.einkaufsliste` ✅
 - Skript „Termin eintragen“ ✅ (kommt automatisch aus `packages/termine.yaml`)
+- Jarvis-Werkzeuge aus `packages/jarvis.yaml` ✅ – gelten für Sprache UND Telegram-Bot:
+  „Jarvis Kamerabild schicken“, „Jarvis Belegung Ferienwohnung und Stellplätze“ (nur Zeiträume,
+  keine Gästenamen), „Jarvis Nachricht auf den Flur-Monitor“, „Jarvis Erinnerung“
+- `todo.aufgaben` ✅
 - Hoftor: bewusst **nicht** freigeben, solange niemand per Sprache das Tor öffnen soll
 
 ## 4. Spracherkennung und Sprachausgabe

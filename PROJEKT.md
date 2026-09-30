@@ -91,3 +91,10 @@ Offen / morgen prüfen:
 
 ## Dateien
 Siehe `README.md`. Backups (.tar) gehören **nicht** hierher (enthalten Passwörter/Tokens).
+
+## Jarvis-Werkzeuge (packages/jarvis.yaml)
+Gemeinsam für Sprachassistent und Telegram-Bot (beide nutzen den Claude-Gesprächsagenten):
+Kamerabild per Telegram, Belegung FW/Stellplätze (ohne Namen), Nachricht auf den Monitor,
+Erinnerungen (⏰-Aufgabe mit Uhrzeit, jede Minute geprüft). Dazu 07:00 Morgen-Übersicht und
+22:30 Abend-Check Licht mit Knöpfen (abschaltbar über input_boolean.*_pause).
+Skripte müssen in Sprachassistenten → Entitäten freigeben für Assist freigegeben werden.
