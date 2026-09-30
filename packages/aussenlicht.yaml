@@ -1,0 +1,62 @@
+# Außenlicht nach Helligkeit (ersetzt die kaputte Apple-Home-Automation "Eingang Lampe").
+# Dunkel (unter 20 Lux) → Eingang Lampe an, wieder hell (über 60 Lux) → aus.
+# Lichtsensor: der Helligkeitssensor mit "haus/außen/draußen/eingang/hof" im Namen, sonst der erste.
+# Ohne Lichtsensor wird der Sonnenstand genommen. Lampe: jede Lampe mit "eingang" im Namen.
+# sensor.aussenlicht_status zeigt, welcher Sensor und welche Lampe gerade benutzt werden.
+
+template:
+  - sensor:
+      - name: Außenlicht Status
+        unique_id: aussenlicht_status
+        icon: mdi:theme-light-dark
+        state: >-
+          {% set s = states.sensor | selectattr('attributes.device_class', 'defined')
+             | selectattr('attributes.device_class', 'eq', 'illuminance')
+             | rejectattr('state', 'in', ['unknown', 'unavailable']) | list %}
+          {% set bevorzugt = s | selectattr('name', 'search', '(?i)haus|au(ß|ss)en|drau(ß|ss)en|eingang|hof') | list %}
+          {% set sensor = (bevorzugt or s) | first | default(none) %}
+          {% if sensor %}{{ sensor.state | float(0) | round(0) | int }}{% else %}{{ 0 if state_attr('sun.sun', 'elevation') | float(0) < -3 else 1000 }}{% endif %}
+        unit_of_measurement: lx
+        attributes:
+          sensor: >-
+            {% set s = states.sensor | selectattr('attributes.device_class', 'defined')
+               | selectattr('attributes.device_class', 'eq', 'illuminance')
+               | rejectattr('state', 'in', ['unknown', 'unavailable']) | list %}
+            {% set bevorzugt = s | selectattr('name', 'search', '(?i)haus|au(ß|ss)en|drau(ß|ss)en|eingang|hof') | list %}
+            {{ ((bevorzugt or s) | first).entity_id if (bevorzugt or s) else 'kein Lichtsensor – Sonnenstand' }}
+          lampen: >-
+            {{ states.light | selectattr('name', 'search', '(?i)eingang')
+               | rejectattr('attributes.entity_id', 'defined') | map(attribute='entity_id') | list }}
+
+automation:
+  - id: aussenlicht_eingang
+    alias: "Außenlicht: Eingang Lampe nach Helligkeit"
+    mode: queued
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.aussenlicht_status
+        below: 20
+        for: "00:02:00"
+        id: dunkel
+      - trigger: numeric_state
+        entity_id: sensor.aussenlicht_status
+        above: 60
+        for: "00:05:00"
+        id: hell
+    variables:
+      lampen: "{{ state_attr('sensor.aussenlicht_status', 'lampen') or [] }}"
+    conditions:
+      - condition: template
+        value_template: "{{ lampen | count > 0 }}"
+    actions:
+      - if: "{{ trigger.id == 'dunkel' }}"
+        then:
+          - action: light.turn_on
+            continue_on_error: true
+            target:
+              entity_id: "{{ lampen }}"
+        else:
+          - action: light.turn_off
+            continue_on_error: true
+            target:
+              entity_id: "{{ lampen }}"
