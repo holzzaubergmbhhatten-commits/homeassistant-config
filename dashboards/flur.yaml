@@ -1928,52 +1928,6 @@ views:
         tap_action:
           action: navigate
           navigation_path: /flur-display/start
-    - type: horizontal-stack
-      cards:
-      - type: button
-        name: Links
-        icon: mdi:arrow-left-bold
-        show_state: false
-        icon_height: 40px
-        tap_action:
-          action: perform-action
-          perform_action: script.kamera_drehen
-          data:
-            kamera: draussen_hot_tor_kamera
-            richtung: links
-      - type: button
-        name: Hoch
-        icon: mdi:arrow-up-bold
-        show_state: false
-        icon_height: 40px
-        tap_action:
-          action: perform-action
-          perform_action: script.kamera_drehen
-          data:
-            kamera: draussen_hot_tor_kamera
-            richtung: hoch
-      - type: button
-        name: Runter
-        icon: mdi:arrow-down-bold
-        show_state: false
-        icon_height: 40px
-        tap_action:
-          action: perform-action
-          perform_action: script.kamera_drehen
-          data:
-            kamera: draussen_hot_tor_kamera
-            richtung: runter
-      - type: button
-        name: Rechts
-        icon: mdi:arrow-right-bold
-        show_state: false
-        icon_height: 40px
-        tap_action:
-          action: perform-action
-          perform_action: script.kamera_drehen
-          data:
-            kamera: draussen_hot_tor_kamera
-            richtung: rechts
     - type: picture
       image: http://localhost:1984/api/stream.mjpeg?src=draussen_hot_tor_kamera_hd
       alt_text: Hof-Tor
