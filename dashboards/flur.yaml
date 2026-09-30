@@ -55,10 +55,22 @@ views:
         entity: input_text.flur_nachricht
         state_not: unknown
       card:
-        type: markdown
-        content: |-
-          ## 💬 {{ states('input_text.flur_nachricht') }}
-          <font color="#8E8E93">{{ (states.input_text.flur_nachricht.last_changed | as_local).strftime('%H:%M') }} Uhr</font>
+        type: vertical-stack
+        cards:
+        - type: markdown
+          content: |-
+            ## 💬 {{ states('input_text.flur_nachricht') }}
+            <font color="#8E8E93">{{ (states.input_text.flur_nachricht.last_changed | as_local).strftime('%H:%M') }} Uhr</font>
+        - type: button
+          name: Nachricht ausblenden
+          icon: mdi:close-circle-outline
+          show_state: false
+          icon_height: 28px
+          tap_action:
+            action: perform-action
+            perform_action: script.jarvis_monitor_nachricht
+            data:
+              text: ''
     - type: heading
       heading: Termine
       heading_style: title
