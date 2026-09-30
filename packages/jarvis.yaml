@@ -109,6 +109,94 @@ script:
       - stop: fertig
         response_variable: ok
 
+  jarvis_tagesueberblick:
+    alias: Jarvis Tagesüberblick
+    description: >-
+      Liefert alles für einen Tag: Termine, offene und fällige Aufgaben, Erinnerungen, Wetter,
+      Ferienwohnung (Anreise/Abreise/belegt/frei) und Stellplätze. Nutze das IMMER bei Fragen wie
+      "Was liegt heute an?", "Was steht morgen an?", "Was habe ich heute für Termine?", "Guten Morgen".
+      Fasse das Ergebnis dann in natürlicher gesprochener Sprache zusammen: erst die Termine mit Uhrzeit,
+      dann die wichtigsten Aufgaben (fällige zuerst, höchstens fünf nennen), dann kurz das Wetter und die
+      Ferienwohnung. Keine Aufzählungszeichen, weil es vorgelesen wird.
+    icon: mdi:calendar-today
+    mode: parallel
+    fields:
+      tag:
+        name: Tag
+        description: Datum im Format JJJJ-MM-TT (Standard heute). Für "morgen" das Datum von morgen.
+        selector:
+          date:
+    sequence:
+      - variables:
+          datum: >-
+            {{ tag if (tag | default('', true) | string) is match('^\d{4}-\d{2}-\d{2}$') else now().strftime('%Y-%m-%d') }}
+          aufgaben_entity: >-
+            {{ states.todo | selectattr('name', 'search', '(?i)^aufgaben')
+               | map(attribute='entity_id') | first | default('', true) }}
+      - action: calendar.get_events
+        continue_on_error: true
+        target:
+          entity_id: calendar.geburtstage
+        data:
+          start_date_time: "{{ datum }} 00:00:00"
+          end_date_time: "{{ datum }} 23:59:59"
+        response_variable: kal
+      - if: "{{ aufgaben_entity != '' }}"
+        then:
+          - action: todo.get_items
+            continue_on_error: true
+            target:
+              entity_id: "{{ aufgaben_entity }}"
+            data:
+              status: needs_action
+            response_variable: aufg
+      - action: weather.get_forecasts
+        continue_on_error: true
+        target:
+          entity_id: weather.touchmonitor_home
+        data:
+          type: daily
+        response_variable: wetter
+      - variables:
+          antwort:
+            datum: "{{ datum }}"
+            wochentag: "{{ ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'][strptime(datum, '%Y-%m-%d').weekday()] }}"
+            termine: >-
+              {% set ev = kal['calendar.geburtstage'].events if kal is defined and 'calendar.geburtstage' in kal else [] %}
+              {% set ns = namespace(l=[]) %}
+              {% for e in ev | sort(attribute='start') %}
+                {% set ns.l = ns.l + [{'uhrzeit': e.start[11:16] if 'T' in e.start else 'ganztägig', 'titel': e.summary}] %}
+              {% endfor %}
+              {{ ns.l }}
+            aufgaben: >-
+              {% set items = aufg[aufgaben_entity]['items'] if aufg is defined and aufgaben_entity in aufg else [] %}
+              {% set ns = namespace(l=[]) %}
+              {% for x in items if not x.summary.startswith('⏰') %}
+                {% set f = (x.due | default('', true) | string)[:10] %}
+                {% set ns.l = ns.l + [{'titel': x.summary, 'faellig': f, 'ueberfaellig_oder_heute': f != '' and f <= datum}] %}
+              {% endfor %}
+              {{ ns.l | sort(attribute='ueberfaellig_oder_heute', reverse=true) }}
+            erinnerungen: >-
+              {% set items = aufg[aufgaben_entity]['items'] if aufg is defined and aufgaben_entity in aufg else [] %}
+              {{ items | selectattr('summary', 'match', '⏰') | selectattr('due', 'defined')
+                 | selectattr('due', 'search', '^' ~ datum) | map(attribute='summary') | list }}
+            wetter: >-
+              {% set fc = wetter['weather.touchmonitor_home'].forecast if wetter is defined and 'weather.touchmonitor_home' in wetter else [] %}
+              {% set f = fc | selectattr('datetime', 'search', '^' ~ datum) | first | default(fc | first if fc and datum == now().strftime('%Y-%m-%d') else none) %}
+              {{ {'zustand': f.condition, 'max_grad': f.temperature, 'min_grad': f.templow | default(none),
+                  'regenwahrscheinlichkeit': f.precipitation_probability | default(none)} if f else 'unbekannt' }}
+            ferienwohnung: >-
+              {% set b = (state_attr('sensor.termine_vorschau', 'buchungen') or []) | rejectattr('kalender', 'search', 'stellpl') | list %}
+              {% set an = b | selectattr('start', 'search', '^' ~ datum) | list | count > 0 %}
+              {% set ab = b | selectattr('ende', 'search', '^' ~ datum) | list | count > 0 %}
+              {% set belegt = b | selectattr('start', 'le', datum) | selectattr('ende', 'gt', datum) | list | count > 0 %}
+              {{ 'Anreise und Abreise' if an and ab else ('Anreise' if an else ('Abreise' if ab else ('belegt' if belegt else 'frei'))) }}
+            stellplatz_buchungen: >-
+              {{ (state_attr('sensor.termine_vorschau', 'buchungen') or []) | selectattr('kalender', 'search', 'stellpl')
+                 | selectattr('start', 'le', datum) | selectattr('ende', 'ge', datum) | list | count }}
+      - stop: fertig
+        response_variable: antwort
+
   jarvis_belegung:
     alias: Jarvis Belegung Ferienwohnung und Stellplätze
     description: >-
