@@ -1116,19 +1116,28 @@ K("foto").onclick = () => { fotoAn = !fotoAn; knoepfe(); zeichnen(); };
 K("abbrechen").onclick = () => { daten = JSON.parse(gesichert); verlassen(); };
 K("speichern").onclick = async () => {
   const h = hass(); if (!h) return;
+  const marke = Date.now();
+  daten.gespeichert = marke;
+  const text = JSON.stringify(daten);
+  try { localStorage.setItem("grundriss_entwurf", text); } catch (e) { /* egal */ }
+  meldung("Speichere …");
   try {
-    await h.callService("script", "grundriss_speichern", { daten: JSON.stringify(daten) });
-    meldung("Gespeichert ✓"); verlassen();
-  } catch (e) { meldung("Speichern fehlgeschlagen: " + (e && e.message || e)); }
+    await h.callService("script", "grundriss_speichern", { daten: text });
+    // nachsehen, ob die Datei wirklich angekommen ist
+    let ok = false;
+    for (let i = 0; i < 6 && !ok; i++) {
+      await new Promise(r => setTimeout(r, 700));
+      try { const r = await fetch(DATEN_URL + "?t=" + Date.now(), { cache: "no-store" }); if (r.ok) ok = (await r.json()).gespeichert === marke; } catch (e) { /* weiter */ }
+    }
+    if (ok) { letzterText = null; meldung("Gespeichert ✓"); verlassen(); }
+    else meldung("⚠️ Nicht gespeichert – bitte nochmal auf Speichern tippen (Änderungen bleiben erhalten)");
+  } catch (e) { meldung("⚠️ Speichern fehlgeschlagen: " + (e && e.message || e)); }
 };
 function verlassen() { bearbeiten = false; auswahl = null; fotoAn = false; panelZeigen(); knoepfe(); zeichnen(); }
 
 // ================= Start =================
-async function laden() {
-  const h = hass();
-  if (!h) { setTimeout(laden, 500); return; }
-  let alt = null;
-  try { const r = await fetch(DATEN_URL + "?t=" + Date.now(), { cache: "no-store" }); if (r.ok) alt = await r.json(); } catch (e) { /* neu */ }
+let letzterText = null;
+function uebernehmen(alt, h) {
   if (alt && alt.version === 3) daten = alt;
   else if (alt && Array.isArray(alt.raeume)) { daten = umstellen(alt); meldung("Deine Einteilung wurde auf den Bauplan übertragen – bitte prüfen und speichern"); }
   else daten = neuerStand();
@@ -1136,14 +1145,38 @@ async function laden() {
   if (!daten.treppe) daten.treppe = { ...TREPPE };
   if (!Array.isArray(daten.gelaende)) daten.gelaende = gelaendeAusVorlage();
   ergaenzen(h);
-  knoepfe(); zeichnen(); allesZeigen();
   if (!daten.gelaendeEingepasst) grundstueckEinpassen();
+}
+async function holen() {
+  try {
+    const r = await fetch(DATEN_URL + "?t=" + Date.now(), { cache: "no-store" });
+    if (r.ok) return await r.text();
+  } catch (e) { /* noch nichts gespeichert */ }
+  return "";
+}
+async function laden() {
+  const h = hass();
+  if (!h) { setTimeout(laden, 500); return; }
+  letzterText = await holen();
+  let alt = null; try { alt = letzterText ? JSON.parse(letzterText) : null; } catch (e) { /* kaputt */ }
+  uebernehmen(alt, h);
+  knoepfe(); zeichnen(); allesZeigen();
   let letzter = "";
   setInterval(() => {
     const hh = hass(); if (!hh || zug) return;
     const jetzt = daten.lampen.map(l => l.entity + (hh.states[l.entity] || {}).state).join() + (hh.themes && hh.themes.darkMode);
     if (jetzt !== letzter) { letzter = jetzt; zeichnen(); }
   }, 700);
+  // Änderungen von einem anderen Gerät (z. B. Laptop) übernehmen – nicht während man selbst bearbeitet
+  setInterval(async () => {
+    if (bearbeiten || zug) return;
+    const text = await holen();
+    if (!text || text === letzterText || bearbeiten) return;
+    let neu = null; try { neu = JSON.parse(text); } catch (e) { return; }
+    letzterText = text;
+    uebernehmen(neu, hass() || h);
+    knoepfe(); zeichnen();
+  }, 15000);
 }
 window.addEventListener("resize", () => { if (daten) allesZeigen(); });
 laden();
