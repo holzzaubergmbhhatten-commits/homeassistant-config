@@ -288,7 +288,7 @@ script:
           text:
       lautstaerke:
         name: Lautstärke in Prozent
-        description: Lautstärke für die Ansage (Standard 40). Nur angeben, wenn ausdrücklich gewünscht.
+        description: Lautstärke für die Ansage (Standard 30). Nur angeben, wenn ausdrücklich gewünscht.
         selector:
           number:
             min: 10
@@ -331,9 +331,9 @@ script:
                 vorhandene: "{{ alle | map('state_attr', 'friendly_name') | list }}"
           - stop: nichts gefunden
             response_variable: fehler
-      # Ansage immer mit derselben Lautstärke (Standard 40 %), danach wieder wie vorher
+      # Ansage immer mit derselben Lautstärke (Standard 30 %), danach wieder wie vorher
       - variables:
-          laut: "{{ ((lautstaerke | default(40, true) | int(40)) / 100) | round(2) }}"
+          laut: "{{ ((lautstaerke | default(30, true) | int(30)) / 100) | round(2) }}"
           vorher: >-
             {% set ns = namespace(d={}) %}
             {% for e in ziel %}{% set ns.d = dict(ns.d, **{e: state_attr(e, 'volume_level')}) %}{% endfor %}
