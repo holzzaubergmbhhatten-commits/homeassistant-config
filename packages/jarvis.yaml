@@ -17,7 +17,7 @@ input_boolean:
     name: Morgen-Übersicht pausieren
     icon: mdi:weather-sunset-up
   morgen_homepod_pause:
-    name: Morgen-Ansage HomePod Schlafzimmer pausieren
+    name: Morgen-Ansage HomePods pausieren
     icon: mdi:speaker-off
   abend_check_pause:
     name: Abend-Check Licht pausieren
@@ -234,40 +234,30 @@ script:
         response_variable: antwort
 
   jarvis_morgen_ansage:
-    alias: Jarvis Morgen-Ansage im Schlafzimmer
-    description: Jarvis sagt den Tagesüberblick auf dem HomePod im Schlafzimmer an (auch zum Testen von Hand).
+    alias: Jarvis Morgen-Ansage
+    description: Jarvis sagt den Tagesüberblick auf den HomePods Badezimmer, Schlafzimmer und Küche an (auch zum Testen von Hand).
     icon: mdi:account-voice
     mode: single
     fields:
       lautsprecher:
         name: Lautsprecher
-        description: Name des Lautsprechers in Music Assistant (Standard Schlafzimmer).
+        description: Namen in Music Assistant, mit Komma getrennt (Standard Badezimmer, Schlafzimmer, Küche).
         selector:
           text:
     sequence:
       - variables:
-          raum: "{{ lautsprecher | default('Schlafzimmer', true) }}"
+          raeume: "{{ lautsprecher | default('Badezimmer, Schlafzimmer, Küche', true) }}"
           agent: >-
             {{ states.conversation | map(attribute='entity_id') | select('search', 'claude|anthropic')
                | first | default('conversation.home_assistant', true) }}
-          # Music Assistant spielt Ansagen über die laufende Musik und stellt sie danach wieder her
-          ziel: >-
-            {% set ma = integration_entities('music_assistant') | select('match', 'media_player\\.')
-               | select('is_state_attr', 'friendly_name', raum) | list %}
-            {{ ma[0] if ma else (states.media_player | selectattr('entity_id', 'search', raum | lower)
-               | map(attribute='entity_id') | first | default('', true)) }}
-          stimme: >-
-            {% set t = states.tts | map(attribute='entity_id') | list %}
-            {{ (t | select('search', 'elevenlabs') | list + t | select('search', 'cloud') | list + t) | first | default('', true) }}
-      - condition: template
-        value_template: "{{ ziel != '' and stimme != '' }}"
       - action: conversation.process
         data:
           agent_id: "{{ agent }}"
           language: de
           text: >-
             Guten Morgen, Jarvis. Es ist {{ now().strftime('%H:%M') }} Uhr. Gib mir den Tagesüberblick für heute
-            als kurze, freundliche Morgenansage zum Vorlesen, höchstens sechs Sätze.
+            als kurze, freundliche Morgenansage zum Vorlesen, höchstens sechs Sätze. Sprich mich mit "Sir" an.
+            Mach selbst KEINE Durchsage, antworte nur mit dem Text.
         response_variable: antwort
       - variables:
           text: >-
@@ -275,14 +265,11 @@ script:
                and antwort.response.speech.plain is defined else '' }}
       - condition: template
         value_template: "{{ text | length > 5 }}"
-      - action: tts.speak
+      - action: script.jarvis_durchsage
         continue_on_error: true
-        target:
-          entity_id: "{{ stimme }}"
         data:
-          media_player_entity_id: "{{ ziel }}"
-          message: "{{ text }}"
-          language: de
+          text: "{{ text }}"
+          raeume: "{{ raeume }}"
 
   jarvis_durchsage:
     alias: Jarvis Durchsage
@@ -301,7 +288,7 @@ script:
           text:
       lautstaerke:
         name: Lautstärke in Prozent
-        description: Lautstärke für die Ansage (Standard 60). Nur angeben, wenn ausdrücklich gewünscht.
+        description: Lautstärke für die Ansage (Standard 40). Nur angeben, wenn ausdrücklich gewünscht.
         selector:
           number:
             min: 10
@@ -344,9 +331,9 @@ script:
                 vorhandene: "{{ alle | map('state_attr', 'friendly_name') | list }}"
           - stop: nichts gefunden
             response_variable: fehler
-      # Lautstärke für die Ansage anheben (mindestens 60 %), danach wieder wie vorher
+      # Ansage immer mit derselben Lautstärke (Standard 40 %), danach wieder wie vorher
       - variables:
-          laut: "{{ ((lautstaerke | default(60, true) | int(60)) / 100) | round(2) }}"
+          laut: "{{ ((lautstaerke | default(40, true) | int(40)) / 100) | round(2) }}"
           vorher: >-
             {% set ns = namespace(d={}) %}
             {% for e in ziel %}{% set ns.d = dict(ns.d, **{e: state_attr(e, 'volume_level')}) %}{% endfor %}
@@ -354,7 +341,7 @@ script:
       - repeat:
           for_each: "{{ ziel }}"
           sequence:
-            - if: "{{ (vorher[repeat.item] | float(0)) < laut }}"
+            - if: "{{ (vorher[repeat.item] | float(-1)) != laut }}"
               then:
                 - action: media_player.volume_set
                   continue_on_error: true
@@ -376,7 +363,7 @@ script:
       - repeat:
           for_each: "{{ ziel }}"
           sequence:
-            - if: "{{ vorher[repeat.item] is number and (vorher[repeat.item] | float(0)) < laut }}"
+            - if: "{{ vorher[repeat.item] is number and (vorher[repeat.item] | float(-1)) != laut }}"
               then:
                 - action: media_player.volume_set
                   continue_on_error: true
@@ -828,12 +815,12 @@ automation:
             {% if trigger.event.data.data == '/abschliessen' %}🔒 Abgeschlossen: {{ offen | map(attribute='name') | join(', ') if offen else 'war schon zu' }}
             {% else %}👍 Bleibt offen{% endif %}
 
-  # 07:00 – Jarvis sagt den Tag im Schlafzimmer an (HomePod über Music Assistant)
+  # 06:30 – Jarvis sagt den Tag auf den HomePods Bad, Schlafzimmer und Küche an (über Music Assistant)
   - id: jarvis_morgen_ansage_schlafzimmer
-    alias: "Jarvis: Morgen-Ansage HomePod Schlafzimmer"
+    alias: "Jarvis: Morgen-Ansage HomePods"
     triggers:
       - trigger: time
-        at: "07:00:00"
+        at: "06:30:00"
     conditions:
       - condition: state
         entity_id: input_boolean.morgen_homepod_pause
@@ -841,4 +828,4 @@ automation:
     actions:
       - action: script.jarvis_morgen_ansage
         data:
-          lautsprecher: Schlafzimmer
+          lautsprecher: Badezimmer, Schlafzimmer, Küche
