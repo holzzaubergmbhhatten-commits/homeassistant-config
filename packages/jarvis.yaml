@@ -16,6 +16,9 @@ input_boolean:
   morgen_uebersicht_pause:
     name: Morgen-Übersicht pausieren
     icon: mdi:weather-sunset-up
+  morgen_homepod_pause:
+    name: Morgen-Ansage HomePod Schlafzimmer pausieren
+    icon: mdi:speaker-off
   abend_check_pause:
     name: Abend-Check Licht pausieren
     icon: mdi:lightbulb-night
@@ -229,6 +232,57 @@ script:
             aktion: "{{ 'nur geprüft' if nur_pruefen | default(false) else ('wird abgeschlossen' if offen else 'war schon alles abgeschlossen') }}"
       - stop: fertig
         response_variable: antwort
+
+  jarvis_morgen_ansage:
+    alias: Jarvis Morgen-Ansage im Schlafzimmer
+    description: Jarvis sagt den Tagesüberblick auf dem HomePod im Schlafzimmer an (auch zum Testen von Hand).
+    icon: mdi:account-voice
+    mode: single
+    fields:
+      lautsprecher:
+        name: Lautsprecher
+        description: Name des Lautsprechers in Music Assistant (Standard Schlafzimmer).
+        selector:
+          text:
+    sequence:
+      - variables:
+          raum: "{{ lautsprecher | default('Schlafzimmer', true) }}"
+          agent: >-
+            {{ states.conversation | map(attribute='entity_id') | select('search', 'claude|anthropic')
+               | first | default('conversation.home_assistant', true) }}
+          # Music Assistant spielt Ansagen über die laufende Musik und stellt sie danach wieder her
+          ziel: >-
+            {% set ma = integration_entities('music_assistant') | select('match', 'media_player\\.')
+               | select('is_state_attr', 'friendly_name', raum) | list %}
+            {{ ma[0] if ma else (states.media_player | selectattr('entity_id', 'search', raum | lower)
+               | map(attribute='entity_id') | first | default('', true)) }}
+          stimme: >-
+            {% set t = states.tts | map(attribute='entity_id') | list %}
+            {{ (t | select('search', 'elevenlabs') | list + t | select('search', 'cloud') | list + t) | first | default('', true) }}
+      - condition: template
+        value_template: "{{ ziel != '' and stimme != '' }}"
+      - action: conversation.process
+        data:
+          agent_id: "{{ agent }}"
+          language: de
+          text: >-
+            Guten Morgen, Jarvis. Es ist {{ now().strftime('%H:%M') }} Uhr. Gib mir den Tagesüberblick für heute
+            als kurze, freundliche Morgenansage zum Vorlesen, höchstens sechs Sätze.
+        response_variable: antwort
+      - variables:
+          text: >-
+            {{ antwort.response.speech.plain.speech if antwort.response is defined
+               and antwort.response.speech.plain is defined else '' }}
+      - condition: template
+        value_template: "{{ text | length > 5 }}"
+      - action: tts.speak
+        continue_on_error: true
+        target:
+          entity_id: "{{ stimme }}"
+        data:
+          media_player_entity_id: "{{ ziel }}"
+          message: "{{ text }}"
+          language: de
 
   jarvis_belegung:
     alias: Jarvis Belegung Ferienwohnung und Stellplätze
@@ -628,3 +682,18 @@ automation:
           message: >-
             {% if trigger.event.data.data == '/abschliessen' %}🔒 Abgeschlossen: {{ offen | map(attribute='name') | join(', ') if offen else 'war schon zu' }}
             {% else %}👍 Bleibt offen{% endif %}
+
+  # 07:00 – Jarvis sagt den Tag im Schlafzimmer an (HomePod über Music Assistant)
+  - id: jarvis_morgen_ansage_schlafzimmer
+    alias: "Jarvis: Morgen-Ansage HomePod Schlafzimmer"
+    triggers:
+      - trigger: time
+        at: "07:00:00"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.morgen_homepod_pause
+        state: "off"
+    actions:
+      - action: script.jarvis_morgen_ansage
+        data:
+          lautsprecher: Schlafzimmer
