@@ -1,5 +1,6 @@
 # Steuerung des Touchmonitors über die App "HAOS Kiosk Display" (REST-API, Port 8080).
 # Zurück zum Dashboard von jeder Seite (auch Amazon): mit 2 Fingern 3x tippen.
+# (Neustart ausgelöst am 01.10. – Monitor und Jarvis-Stimme hingen)
 rest_command:
   kiosk_url_oeffnen:
     url: "http://localhost:8080/launch_url"
