@@ -8,38 +8,6 @@ views:
   icon: mdi:home
   type: sections
   max_columns: 3
-  badges:
-  - type: entity
-    entity: weather.touchmonitor_home
-    show_name: false
-    show_state: true
-    show_icon: true
-    state_content:
-    - state
-    - temperature
-  - type: entity
-    entity: sensor.lichter_an
-    name: Lichter an
-    show_name: true
-    show_state: true
-    show_icon: true
-    color: amber
-    tap_action:
-      action: navigate
-      navigation_path: /flur-display/grundriss
-  - type: entity
-    entity: switch.shelly1g4_a085e3bd629c
-    name: Hoftor
-    show_name: true
-    show_state: true
-    icon: mdi:gate
-  header:
-    card:
-      type: markdown
-      text_only: true
-      content: |-
-        # Zuhause
-        {{ now().strftime('%H:%M') }} · {{ ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'][now().weekday()] }}, {{ now().day }}. {{ ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'][now().month-1] }}
   sections:
   - type: grid
     cards:
@@ -71,8 +39,13 @@ views:
             perform_action: script.jarvis_monitor_nachricht
             data:
               text: ''
-    - type: heading
-      heading: Termine
+    # Uhrzeit und Datum klein statt der großen Kopfzeile (Platz sparen)
+    - type: markdown
+      text_only: true
+      grid_options:
+        columns: full
+      content: >-
+        ### {{ now().strftime('%H:%M') }} <font color="#8E8E93">· {{ ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'][now().weekday()] }}, {{ now().day }}. {{ ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'][now().month-1] }}</font>
       heading_style: title
     - type: weather-forecast
       entity: weather.touchmonitor_home
