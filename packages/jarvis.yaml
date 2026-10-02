@@ -11,6 +11,15 @@ input_text:
     icon: mdi:message-text
     max: 255
 
+# Welche Stimme Durchsagen und Morgen-Ansage benutzen (ElevenLabs kostet Credits)
+input_select:
+  jarvis_ansage_stimme:
+    name: Stimme für Durchsagen
+    icon: mdi:account-voice
+    options:
+      - Home Assistant Cloud
+      - ElevenLabs
+
 input_boolean:
   # Einschalten = pausieren (neue Schalter starten ausgeschaltet, also ist alles zuerst aktiv)
   morgen_uebersicht_pause:
@@ -322,7 +331,8 @@ script:
             {% endif %}
           stimme: >-
             {% set t = states.tts | map(attribute='entity_id') | list %}
-            {{ (t | select('search', 'elevenlabs') | list + t | select('search', 'cloud') | list + t) | first | default('', true) }}
+            {% set wahl = 'elevenlabs' if is_state('input_select.jarvis_ansage_stimme', 'ElevenLabs') else 'cloud' %}
+            {{ (t | select('search', wahl) | list + t | select('search', 'cloud') | list + t) | first | default('', true) }}
       - if: "{{ ziel | count == 0 or stimme == '' }}"
         then:
           - variables:
