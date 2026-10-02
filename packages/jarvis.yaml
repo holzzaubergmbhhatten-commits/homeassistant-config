@@ -19,6 +19,7 @@ input_select:
     options:
       - Home Assistant Cloud
       - ElevenLabs
+      - OpenAI
 
 input_boolean:
   # Einschalten = pausieren (neue Schalter starten ausgeschaltet, also ist alles zuerst aktiv)
@@ -331,7 +332,7 @@ script:
             {% endif %}
           stimme: >-
             {% set t = states.tts | map(attribute='entity_id') | list %}
-            {% set wahl = 'elevenlabs' if is_state('input_select.jarvis_ansage_stimme', 'ElevenLabs') else 'cloud' %}
+            {% set wahl = {'ElevenLabs': 'elevenlabs', 'OpenAI': 'openai'}.get(states('input_select.jarvis_ansage_stimme'), 'cloud') %}
             {{ (t | select('search', wahl) | list + t | select('search', 'cloud') | list + t) | first | default('', true) }}
       - if: "{{ ziel | count == 0 or stimme == '' }}"
         then:
