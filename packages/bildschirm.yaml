@@ -1,7 +1,8 @@
-# Nachtmodus des Touchmonitors (Kiosk-App REST-API):
-# Tagsüber bleibt der Bildschirm an. Nachts geht er nach 1 Minute ohne Berührung aus,
-# ein Antippen weckt ihn wieder. Klingelt es, geht er sofort an (siehe klingel.yaml).
-# Zeiten: Nacht von 22:30 bis 6:30.
+# Ruhezeiten des Touchmonitors (Kiosk-App REST-API):
+# In der Ruhezeit geht der Bildschirm nach 1 Minute ohne Berührung aus, ein Antippen weckt ihn wieder.
+# Sonst bleibt er an. Klingelt es, geht er sofort an (siehe klingel.yaml).
+# Ruhezeiten: jede Nacht 22:30–6:30, zusätzlich Montag bis Freitag 8:00–14:00 (Strom sparen).
+# Am Wochenende tagsüber durchgehend an.
 rest_command:
   kiosk_display_on:
     url: "http://localhost:8080/display_on"
@@ -26,7 +27,7 @@ script:
         description: Sekunden bis zum Ausschalten, 0 = nie
         example: 60
     sequence:
-      - action: script.monitor_an
+      - action: rest_command.kiosk_display_on
         continue_on_error: true
         data:
           timeout: "{{ timeout | default(0) | int }}"
@@ -39,16 +40,18 @@ script:
 
 template:
   - binary_sensor:
+      # Name bleibt "Nachtmodus" (wird an mehreren Stellen benutzt), gilt aber für alle Ruhezeiten
       - name: Monitor Nachtmodus
         unique_id: monitor_nachtmodus
         icon: mdi:weather-night
         state: >-
           {% set t = now().strftime('%H:%M') %}
-          {{ t >= '22:30' or t < '06:30' }}
+          {{ t >= '22:30' or t < '06:30'
+             or (now().weekday() < 5 and '08:00' <= t < '14:00') }}
 
 automation:
   - id: monitor_nachtmodus
-    alias: "Monitor: nachts nach 1 Minute ausschalten, tagsüber an"
+    alias: "Monitor: in Ruhezeiten nach 1 Minute ausschalten, sonst an"
     mode: restart
     triggers:
       - trigger: homeassistant
@@ -57,6 +60,10 @@ automation:
         at: "22:30:00"
       - trigger: time
         at: "06:30:00"
+      - trigger: time
+        at: "08:00:00"
+      - trigger: time
+        at: "14:00:00"
       # Tagsüber regelmäßig nachstellen: die Kiosk-App fällt nach einem Neustart auf
       # ihre eigene Abschaltzeit zurück (Standard 10 Minuten)
       - trigger: time_pattern
