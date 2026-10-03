@@ -261,25 +261,46 @@ script:
             {{ states.conversation | map(attribute='entity_id') | select('search', 'claude|anthropic')
                | first | default('conversation.home_assistant', true) }}
       - action: conversation.process
+        continue_on_error: true
         data:
           agent_id: "{{ agent }}"
           language: de
           text: >-
             Guten Morgen, Jarvis. Es ist {{ now().strftime('%H:%M') }} Uhr. Gib mir den Tagesüberblick für heute
-            als kurze, freundliche Morgenansage zum Vorlesen, höchstens sechs Sätze. Sprich mich mit "Sir" an.
-            Mach selbst KEINE Durchsage, antworte nur mit dem Text.
+            als kurze, freundliche Morgenansage zum Vorlesen, höchstens sechs Sätze: Termine, wichtige Aufgaben,
+            Wetter, Ferienwohnung. Sprich mich mit "Sir" an. Mach selbst KEINE Durchsage, antworte nur mit dem Text.
         response_variable: antwort
+      # Falls Claude nicht antwortet: einfache Ansage ohne KI
       - variables:
-          text: >-
-            {{ antwort.response.speech.plain.speech if antwort.response is defined
+          ki_text: >-
+            {{ antwort.response.speech.plain.speech if antwort is defined and antwort is mapping
+               and antwort.response is defined and antwort.response.speech is defined
                and antwort.response.speech.plain is defined else '' }}
-      - condition: template
-        value_template: "{{ text | length > 5 }}"
+          einfach: >-
+            {%- set tage = ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'] %}
+            {%- set heute = now().strftime('%Y-%m-%d') %}
+            {%- set t = (state_attr('sensor.termine_vorschau', 'familie') or []) | selectattr('start', 'search', '^' ~ heute) | list %}
+            {%- set w = {'sunny': 'sonnig', 'clear-night': 'klar', 'partlycloudy': 'teils bewölkt', 'cloudy': 'bewölkt',
+                'rainy': 'regnerisch', 'pouring': 'mit Starkregen', 'fog': 'neblig', 'snowy': 'verschneit', 'windy': 'windig'} %}
+            Guten Morgen, Sir. Heute ist {{ tage[now().weekday()] }}.
+            {%- if t %} Heute stehen {{ t | count }} Termine an: {% for x in t %}{{ x.titel }}{{ ' um ' ~ x.start[11:16] ~ ' Uhr' if 'T' in x.start else '' }}{{ ', ' if not loop.last else '.' }}{% endfor %}
+            {%- else %} Heute stehen keine Termine an.{% endif %}
+            {%- if states('weather.touchmonitor_home') not in ['unknown', 'unavailable'] %} Das Wetter ist {{ w.get(states('weather.touchmonitor_home'), states('weather.touchmonitor_home')) }} bei {{ state_attr('weather.touchmonitor_home', 'temperature') | round(0) | int }} Grad.{% endif %}
+            Einen schönen Tag.
+          text: "{{ ki_text if ki_text | length > 5 else einfach }}"
       - action: script.jarvis_durchsage
         continue_on_error: true
         data:
           text: "{{ text }}"
           raeume: "{{ raeume }}"
+        response_variable: ergebnis
+      # Kein Lautsprecher erreicht → Text wenigstens per Telegram
+      - if: "{{ not (ergebnis is defined and ergebnis is mapping and ergebnis.ergebnis | default('') == 'Durchsage gemacht') }}"
+        then:
+          - action: telegram_bot.send_message
+            continue_on_error: true
+            data:
+              message: "☀️ Morgen-Ansage (Lautsprecher nicht erreichbar):\n{{ text }}"
 
   jarvis_durchsage:
     alias: Jarvis Durchsage
@@ -346,13 +367,13 @@ script:
       - variables:
           laut: "{{ ((lautstaerke | default(30, true) | int(30)) / 100) | round(2) }}"
           vorher: >-
-            {% set ns = namespace(d={}) %}
-            {% for e in ziel %}{% set ns.d = dict(ns.d, **{e: state_attr(e, 'volume_level')}) %}{% endfor %}
-            {{ ns.d }}
+            {% set ns = namespace(l=[]) %}
+            {% for e in ziel %}{% set ns.l = ns.l + [{'e': e, 'v': state_attr(e, 'volume_level')}] %}{% endfor %}
+            {{ ns.l }}
       - repeat:
           for_each: "{{ ziel }}"
           sequence:
-            - if: "{{ (vorher[repeat.item] | float(-1)) != laut }}"
+            - if: "{{ ((vorher | selectattr('e', 'eq', repeat.item) | first).v | float(-1)) != laut }}"
               then:
                 - action: media_player.volume_set
                   continue_on_error: true
@@ -374,14 +395,16 @@ script:
       - repeat:
           for_each: "{{ ziel }}"
           sequence:
-            - if: "{{ vorher[repeat.item] is number and (vorher[repeat.item] | float(-1)) != laut }}"
+            - variables:
+                alt: "{{ (vorher | selectattr('e', 'eq', repeat.item) | first).v }}"
+            - if: "{{ alt is number and (alt | float(-1)) != laut }}"
               then:
                 - action: media_player.volume_set
                   continue_on_error: true
                   target:
                     entity_id: "{{ repeat.item }}"
                   data:
-                    volume_level: "{{ vorher[repeat.item] }}"
+                    volume_level: "{{ alt }}"
       - variables:
           ok:
             ergebnis: Durchsage gemacht
@@ -826,13 +849,20 @@ automation:
             {% if trigger.event.data.data == '/abschliessen' %}🔒 Abgeschlossen: {{ offen | map(attribute='name') | join(', ') if offen else 'war schon zu' }}
             {% else %}👍 Bleibt offen{% endif %}
 
-  # 06:30 – Jarvis sagt den Tag auf den HomePods Bad, Schlafzimmer und Küche an (über Music Assistant)
+  # Mo–Fr 06:30, Sa/So 08:00 – Jarvis sagt den Tag auf den HomePods Bad, Schlafzimmer und Küche an (über Music Assistant)
   - id: jarvis_morgen_ansage_schlafzimmer
     alias: "Jarvis: Morgen-Ansage HomePods"
+    # Montag–Freitag 6:30, Samstag/Sonntag 8:00
     triggers:
       - trigger: time
         at: "06:30:00"
+        id: werktag
+      - trigger: time
+        at: "08:00:00"
+        id: wochenende
     conditions:
+      - condition: template
+        value_template: "{{ (now().weekday() < 5) == (trigger.id == 'werktag') }}"
       - condition: state
         entity_id: input_boolean.morgen_homepod_pause
         state: "off"
