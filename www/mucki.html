@@ -17,7 +17,7 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: transparent;
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", Roboto, sans-serif;
-    -webkit-user-select: none; -webkit-touch-callout: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+    -webkit-user-select: none; -webkit-touch-callout: none; user-select: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   body { display: grid; grid-template-columns: 50fr 50fr; gap: 1.4vw; padding: 1.2vw; color: var(--text); }
   .karte { background: #fff; border-radius: 1.6vw; padding: 1.3vw 1.5vw; position: relative; overflow: hidden;
     box-shadow: 0 0.2vw 1.4vw rgba(0,0,0,.12); display: flex; flex-direction: column; min-height: 0; }
@@ -71,13 +71,14 @@
   .verlauf .serie { flex: 1.3; background: rgba(255,149,0,.14); color: #9a5b00; font-weight: 600; display: flex; align-items: center; justify-content: center; text-align: center; }
   .lernen { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.45vw; }
   .lern { border-radius: 0.9vw; padding: 0.4vw 0.6vw; background: #EEF4FF; cursor: pointer; position: relative; min-height: 3.6vw; }
+  .lern-gross { font-size: 1.8vw; font-weight: 600; text-align: center; margin: 1vw 0; white-space: pre-line; line-height: 1.3; }
   .lern .art { font-size: 0.75vw; font-weight: 700; color: var(--blau); text-transform: uppercase; letter-spacing: 0.04em; }
   .lern .was { font-size: 0.85vw; font-weight: 600; line-height: 1.2; margin-top: 0.15vw; white-space: pre-line; }
   .lern.fertig { background: rgba(52,199,89,.16); }
   .lern.fertig .art { color: #1f9d3a; }
-  .lern .haken { position: absolute; top: 0.4vw; right: 0.5vw; font-size: 1.1vw; }
-  .lern { padding-right: 2.2vw; }
-  .lern .stift { position: absolute; bottom: 0.3vw; right: 0.35vw; width: 1.9vw; height: 1.9vw; border-radius: 50%; background: #fff;
+  .lern .haken { position: absolute; top: 0; right: 0; width: 3vw; height: 3vw; display: flex; align-items: center; justify-content: center; font-size: 1.6vw; }
+  .lern { padding-right: 3vw; }
+  .lern .stift { position: absolute; bottom: 0.3vw; right: 0.35vw; width: 2.3vw; height: 2.3vw; border-radius: 50%; background: #fff;
     display: flex; align-items: center; justify-content: center; font-size: 0.95vw; box-shadow: 0 0.08vw 0.3vw rgba(0,0,0,.15); }
   .vorrat-titel { font-size: 0.85vw; color: var(--grau); font-weight: 600; margin: 0.8vw 0 0.4vw; text-transform: uppercase; letter-spacing: 0.04em; }
   .vorrat { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.45vw; overflow: auto; flex: 1; align-content: start; padding: 0.2vw; }
@@ -147,7 +148,7 @@
 
 <script>
 // Bei jeder Änderung an dieser Datei hochzählen – offene Monitore laden sich dann selbst neu
-const SEITEN_VERSION = 8;
+const SEITEN_VERSION = 9;
 const DATEN_URL = "/local/mucki_daten.json";
 const FELDER = "input_text.mucki_felder";
 const ANZAHL_FELDER = 6;
@@ -201,7 +202,7 @@ function esc(t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").repla
 function meldung(t, icon, farbe) { const m = $("meldung"); m.innerHTML = (icon ? ic(icon, farbe) + " " : "") + esc(t); m.style.display = "block"; clearTimeout(meldung.t); meldung.t = setTimeout(() => m.style.display = "none", 3500); }
 // Tippen: am Kiosk-Monitor kommen Finger als Touch-Events, am Laptop als Klick
 function tippen(el, fn) {
-  // Nur echtes Tippen zählt: Finger kaum bewegt (< 12 px) und kurz (< 0,7 s) – Wischen/Scrollen löst nichts aus
+  // Nur Tippen zählt (kurz oder lang), Wischen/Scrollen (Finger mehr als 12 px bewegt) löst nichts aus
   let start = null, touch = 0;
   el.addEventListener("touchstart", ev => { const t = ev.touches[0]; start = { x: t.clientX, y: t.clientY, zeit: Date.now() }; }, { passive: true });
   el.addEventListener("touchmove", ev => {
@@ -210,7 +211,7 @@ function tippen(el, fn) {
   }, { passive: true });
   el.addEventListener("touchend", ev => {
     touch = Date.now();
-    if (!start || Date.now() - start.zeit > 700) { start = null; return; }
+    if (!start) return;
     start = null; ev.preventDefault(); fn(ev);
   }, { passive: false });
   el.addEventListener("click", ev => { if (Date.now() - touch > 700) fn(ev); });
@@ -323,6 +324,20 @@ function rechnenStarten(kw) {
   $("panel").style.display = "block"; $("schleier").style.display = "block";
   zeigen(erledigt ? "Schon geschafft – du kannst trotzdem nochmal üben" : "");
 }
+function lernUmschalten(kw, i) {
+  const l = lernenLesen(kw), la = lernAufgaben(kw); l[i] = !l[i]; lernenSchreiben(kw, l);
+  const bonus = daten.taschengeld.lernBonus == null ? 1 : Number(daten.taschengeld.lernBonus);
+  meldung(l[i] ? (l.every(Boolean) ? `Alle 3 Lernaufgaben geschafft – + ${euro(bonus)}!` : `${la[i].art} geschafft!`) : `${la[i].art} wieder offen`, l[i] ? "stern" : null, "#FFD60A");
+}
+function lernZeigen(kw, i) {
+  const a = lernAufgaben(kw)[i], fertig = lernenLesen(kw)[i];
+  $("panel").innerHTML = `<h3>${a.art}</h3><div class="lern-gross">${esc(a.was)}</div>
+    <div class="zeile"><button class="knopf blau" id="p-fertig">${fertig ? "Wieder offen" : ic("haken") + " Geschafft"}</button>
+    <button class="knopf grau" id="p-zu">Schließen</button></div>`;
+  $("panel").style.display = "block"; $("schleier").style.display = "block";
+  tippen($("p-fertig"), () => { panelZu(); lernUmschalten(kw, i); });
+  tippen($("p-zu"), panelZu);
+}
 function lernBearbeiten(kw, i) {
   const art = ["Rechnen", "Lesen", "Schreiben"][i];
   let wurf = ((daten.lernWurf || {})[kw] || {})[i] || 0;
@@ -426,13 +441,13 @@ function zeichneTafel() {
   const la = lernAufgaben(jetzt);
   $("lern-titel").textContent = `Lern-Challenge der Woche – alle 3 geschafft = + ${euro(lernBonus)}`;
   $("lernen").innerHTML = la.map((a, i) => `<div class="lern ${lern[i] ? "fertig" : ""}" data-lern="${i}"><div class="art">${a.art}</div>`
-    + `<div class="was">${esc(a.was)}</div><div class="haken">${lern[i] ? ic("kastenok", "#34C759") : ic("kasten", "#AEAEB2")}</div><div class="stift" data-stift="${i}">${ic("stift", "#007AFF")}</div></div>`).join("");
+    + `<div class="was">${esc(a.was)}</div><div class="haken" data-haken="${i}">${lern[i] ? ic("kastenok", "#34C759") : ic("kasten", "#AEAEB2")}</div><div class="stift" data-stift="${i}">${ic("stift", "#007AFF")}</div></div>`).join("");
   $("lernen").querySelectorAll("[data-lern]").forEach(el => tippen(el, ev => {
-    const i = +el.dataset.lern;
-    if (ev && ev.target && ev.target.closest && ev.target.closest("[data-stift]")) return lernBearbeiten(jetzt, i);
+    const i = +el.dataset.lern, ziel = ev && ev.target && ev.target.closest ? ev.target : null;
+    if (ziel && ziel.closest("[data-stift]")) return lernBearbeiten(jetzt, i);
+    if (ziel && ziel.closest("[data-haken]")) return lernUmschalten(jetzt, i);
     if (i === 0) return rechnenStarten(jetzt);
-    const l = lernenLesen(jetzt); l[i] = !l[i]; lernenSchreiben(jetzt, l);
-    meldung(l[i] ? (l.every(Boolean) ? `Alle 3 Lernaufgaben geschafft – + ${euro(lernBonus)}!` : `${la[i].art} geschafft!`) : `${la[i].art} wieder offen`, l[i] ? "stern" : null, "#FFD60A");
+    lernZeigen(jetzt, i);
   }));
   let fh = "";
   for (let i = 0; i < ANZAHL_FELDER; i++) {
