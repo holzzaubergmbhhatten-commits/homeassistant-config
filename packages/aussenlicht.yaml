@@ -40,6 +40,26 @@ template:
             {{ states.light | selectattr('name', 'search', '(?i)haust(ü|ue|u)r|eingang')
                | rejectattr('attributes.entity_id', 'defined') | map(attribute='entity_id') | list }}
 
+      - name: Gesimse Licht Status
+        unique_id: gesimse_licht_status
+        icon: mdi:motion-sensor
+        state: >-
+          {% set m = states.binary_sensor | selectattr('attributes.device_class', 'defined')
+             | selectattr('attributes.device_class', 'in', ['motion', 'occupancy', 'presence'])
+             | selectattr('name', 'search', '(?i)giebel|hinten|heini|renate|gesims') | list %}
+          {% set l = states.light | selectattr('name', 'search', '(?i)gesims|\\blicht 0?(7|8|9|10|11|12|20|21|22|23|24)\\b')
+             | rejectattr('attributes.entity_id', 'defined') | list %}
+          {{ (('bereit' if m and l else ('Sensor fehlt' if not m else 'Lampe fehlt'))
+             ~ ' – ' ~ m | count ~ ' Sensoren, ' ~ l | count ~ ' Lampen') }}
+        attributes:
+          bewegung: >-
+            {{ states.binary_sensor | selectattr('attributes.device_class', 'defined')
+               | selectattr('attributes.device_class', 'in', ['motion', 'occupancy', 'presence'])
+               | selectattr('name', 'search', '(?i)giebel|hinten|heini|renate|gesims') | map(attribute='name') | list }}
+          lampen: >-
+            {{ states.light | selectattr('name', 'search', '(?i)gesims|\\blicht 0?(7|8|9|10|11|12|20|21|22|23|24)\\b')
+               | rejectattr('attributes.entity_id', 'defined') | map(attribute='name') | list }}
+
 automation:
   - id: haustuer_licht_bewegung
     alias: "Haustür-Licht: an bei Bewegung im Dunkeln, 3 Minuten danach aus"
@@ -73,14 +93,15 @@ automation:
           # dunkel = Sensor unter 50 Lux ODER Sonne untergegangen (Straßenlicht kann den Sensor aufhellen)
           dunkel: >-
             {{ lux < 50 or state_attr('sun.sun', 'elevation') | float(10) < 0 }}
-          schon_an: "{{ lampen | select('is_state', 'on') | list | count > 0 }}"
+          aus: "{{ lampen | reject('is_state', 'on') | list }}"
       - condition: template
         value_template: "{{ lampen | count > 0 and (dunkel or is_state('input_boolean.haustuer_licht_auto', 'on')) }}"
-      - if: "{{ not schon_an }}"
+      - if: "{{ aus | count > 0 }}"
         then:
           - action: light.turn_on
+            continue_on_error: true
             target:
-              entity_id: "{{ lampen }}"
+              entity_id: "{{ aus }}"
           - action: input_boolean.turn_on
             target:
               entity_id: input_boolean.haustuer_licht_auto
@@ -130,14 +151,15 @@ automation:
           # dunkel = Sensor unter 50 Lux ODER Sonne untergegangen (Straßenlicht kann den Sensor aufhellen)
           dunkel: >-
             {{ lux < 50 or state_attr('sun.sun', 'elevation') | float(10) < 0 }}
-          schon_an: "{{ lampen | select('is_state', 'on') | list | count > 0 }}"
+          aus: "{{ lampen | reject('is_state', 'on') | list }}"
       - condition: template
         value_template: "{{ lampen | count > 0 and (dunkel or is_state('input_boolean.gesimse_licht_auto', 'on')) }}"
-      - if: "{{ not schon_an }}"
+      - if: "{{ aus | count > 0 }}"
         then:
           - action: light.turn_on
+            continue_on_error: true
             target:
-              entity_id: "{{ lampen }}"
+              entity_id: "{{ aus }}"
           - action: input_boolean.turn_on
             target:
               entity_id: input_boolean.gesimse_licht_auto
