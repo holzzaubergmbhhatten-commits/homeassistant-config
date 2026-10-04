@@ -77,6 +77,9 @@
   .lern.fertig { background: rgba(52,199,89,.16); }
   .lern.fertig .art { color: #1f9d3a; }
   .lern .haken { position: absolute; top: 0.4vw; right: 0.5vw; font-size: 1.1vw; }
+  .lern { padding-right: 2.2vw; }
+  .lern .stift { position: absolute; bottom: 0.3vw; right: 0.35vw; width: 1.9vw; height: 1.9vw; border-radius: 50%; background: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 0.95vw; box-shadow: 0 0.08vw 0.3vw rgba(0,0,0,.15); }
   .vorrat-titel { font-size: 0.85vw; color: var(--grau); font-weight: 600; margin: 0.8vw 0 0.4vw; text-transform: uppercase; letter-spacing: 0.04em; }
   .vorrat { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.45vw; overflow: auto; flex: 1; align-content: start; padding: 0.2vw; }
   .vorrat .magnet { font-size: 0.85vw; min-height: 2.3vw; }
@@ -210,8 +213,8 @@ const VERLAUF_URL = "/local/mucki_verlauf.json";
 const LERNEN = "input_text.mucki_lernen";
 // Lern-Challenge 2. Klasse: jede Kalenderwoche andere Aufgaben (fest aus der KW berechnet)
 function zufall(seed) { let x = seed >>> 0; return () => { x = (x * 1664525 + 1013904223) >>> 0; return x / 4294967296; }; }
-function lernAufgaben(kw) {
-  const r = zufall(Number(kw.replace(/\D/g, ""))), z = (a, b) => a + Math.floor(r() * (b - a + 1)), w = l => l[Math.floor(r() * l.length)];
+function lernVorschlag(kw, wurf) {
+  const r = zufall(Number(kw.replace(/\D/g, "")) + 7919 * (wurf || 0)), z = (a, b) => a + Math.floor(r() * (b - a + 1)), w = l => l[Math.floor(r() * l.length)];
   const rechnen = [];
   for (let i = 0; i < 3; i++) {
     const art = z(0, 3);
@@ -227,6 +230,44 @@ function lernAufgaben(kw) {
     "Schreibe den Einkaufszettel für 3 Sachen.", "Schreibe 5 Wörter mit „sch“.", "Schreibe alle Wochentage auf.",
     "Schreibe eine kleine Karte an Oma oder Opa.", "Schreibe 5 Wörter, die sich reimen."]);
   return [{ art: "Rechnen", was: rechnen.join("\n") }, { art: "Lesen", was: lesen }, { art: "Schreiben", was: schreiben }];
+}
+// eigene oder neu gewürfelte Aufgaben dieser Woche (gespeichert in mucki_daten.json → lernEigene)
+function lernAufgaben(kw) {
+  const eigene = (daten.lernEigene || {})[kw] || {}, basis = lernVorschlag(kw, 0);
+  return basis.map((a, i) => ({ art: a.art, was: eigene[i] != null ? eigene[i] : a.was }));
+}
+async function sofortSpeichern() {
+  const h = hass(); if (!h) return false;
+  const marke = Date.now(); daten.gespeichert = marke;
+  try {
+    await h.callService("script", "mucki_speichern", { daten: JSON.stringify(daten) });
+    for (let i = 0; i < 6; i++) {
+      await new Promise(r => setTimeout(r, 700));
+      try { const r = await fetch(DATEN_URL + "?t=" + Date.now(), { cache: "no-store" }); if (r.ok && (await r.json()).gespeichert === marke) return true; } catch (e) { /* weiter */ }
+    }
+  } catch (e) { /* unten */ }
+  return false;
+}
+function lernBearbeiten(kw, i) {
+  const art = ["Rechnen", "Lesen", "Schreiben"][i];
+  let wurf = ((daten.lernWurf || {})[kw] || {})[i] || 0;
+  panel(`<h3>${art} – diese Woche</h3><label>Aufgabe (bei Rechnen eine Aufgabe pro Zeile)</label>
+    <textarea id="p-lern">${esc(lernAufgaben(kw)[i].was)}</textarea>
+    <div class="zeile"><button class="knopf" id="p-wuerfel">🎲 Neuer Vorschlag</button></div>`,
+    async () => {
+      daten.lernEigene = daten.lernEigene || {}; daten.lernEigene[kw] = daten.lernEigene[kw] || {};
+      daten.lernEigene[kw][i] = $("p-lern").value.trim();
+      daten.lernWurf = daten.lernWurf || {}; daten.lernWurf[kw] = daten.lernWurf[kw] || {}; daten.lernWurf[kw][i] = wurf;
+      // alte Wochen aufräumen (nur die letzten 8 behalten)
+      for (const k of Object.keys(daten.lernEigene).sort().slice(0, -8)) { delete daten.lernEigene[k]; if (daten.lernWurf) delete daten.lernWurf[k]; }
+      meldung("Speichere …");
+      meldung(await sofortSpeichern() ? "Gespeichert ✓" : "⚠️ Nicht gespeichert – bitte nochmal versuchen");
+    });
+  tippen($("p-wuerfel"), () => {
+    const alt = $("p-lern").value; let neu = alt;
+    for (let n = 0; n < 20 && neu === alt; n++) { wurf++; neu = lernVorschlag(kw, wurf)[i].was; }
+    $("p-lern").value = neu;
+  });
 }
 function lernenLesen(kw) {
   const h = hass(), st = h && h.states[LERNEN], v = st ? st.state : "";
@@ -308,9 +349,11 @@ function zeichneTafel() {
   const la = lernAufgaben(jetzt);
   $("lern-titel").textContent = `Lern-Challenge der Woche – alle 3 geschafft = + ${euro(lernBonus)}`;
   $("lernen").innerHTML = la.map((a, i) => `<div class="lern ${lern[i] ? "fertig" : ""}" data-lern="${i}"><div class="art">${a.art}</div>`
-    + `<div class="was">${esc(a.was)}</div><div class="haken">${lern[i] ? "✅" : "⬜"}</div></div>`).join("");
-  $("lernen").querySelectorAll("[data-lern]").forEach(el => tippen(el, () => {
-    const i = +el.dataset.lern, l = lernenLesen(jetzt); l[i] = !l[i]; lernenSchreiben(jetzt, l);
+    + `<div class="was">${esc(a.was)}</div><div class="haken">${lern[i] ? "✅" : "⬜"}</div><div class="stift" data-stift="${i}">✏️</div></div>`).join("");
+  $("lernen").querySelectorAll("[data-lern]").forEach(el => tippen(el, ev => {
+    const i = +el.dataset.lern;
+    if (ev && ev.target && ev.target.closest && ev.target.closest("[data-stift]")) return lernBearbeiten(jetzt, i);
+    const l = lernenLesen(jetzt); l[i] = !l[i]; lernenSchreiben(jetzt, l);
     meldung(l[i] ? (l.every(Boolean) ? `🎉 Alle 3 Lernaufgaben geschafft – + ${euro(lernBonus)}!` : `✅ ${la[i].art} geschafft!`) : `${la[i].art} wieder offen`);
   }));
   let fh = "";
