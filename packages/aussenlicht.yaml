@@ -1,5 +1,5 @@
 # Haustür-Licht per Bewegungsmelder (ersetzt die kaputte Apple-Home-Automation "(null)").
-# Bewegung am Eve-Motion-Sensor an der Haustür + draußen dunkel → Lampe an,
+# Bewegung am Eve-Motion-Sensor an der Haustür + draußen dunkel (unter 50 Lux oder nach Sonnenuntergang) → Lampe an,
 # 3 Minuten nach der letzten Bewegung → wieder aus (nur wenn die Automation sie eingeschaltet hat).
 # Sensor und Lampe werden über den Namen gefunden ("Haustür" oder "Eingang"), so funktioniert es,
 # sobald der Sensor (per Matter aus Apple Home geteilt) in Home Assistant auftaucht.
@@ -54,8 +54,9 @@ automation:
           lux: >-
             {% set h = state_attr('sensor.haustuer_licht_status', 'helligkeit') or [] %}
             {{ (h | map('states') | map('float', 9999) | min) if h else 9999 }}
+          # dunkel = Sensor unter 50 Lux ODER Sonne untergegangen (Straßenlicht kann den Sensor aufhellen)
           dunkel: >-
-            {{ lux < 30 if lux < 9999 else (state_attr('sun.sun', 'elevation') | float(0) < -2) }}
+            {{ lux < 50 or state_attr('sun.sun', 'elevation') | float(10) < 0 }}
           schon_an: "{{ lampen | select('is_state', 'on') | list | count > 0 }}"
       - condition: template
         value_template: "{{ lampen | count > 0 and (dunkel or is_state('input_boolean.haustuer_licht_auto', 'on')) }}"
