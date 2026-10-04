@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mucki</title>
+<!--
+  Muckis Seite (im Dashboard "Flur" als Vollbild eingebettet).
+  Links: Stundenplan wie auf dem Papier, über "Bearbeiten" jederzeit änderbar.
+  Rechts: Taschengeld-Tafel – Magnet antippen = kommt ins nächste freie der 6 Felder (je 50 Cent),
+  Feld antippen = wieder raus, "Neue Woche" leert alle Felder.
+  Daten: /local/mucki_daten.json (lokal, nicht im Repository), Felder: input_text.mucki_felder.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+<style>
+  :root { --blau: #007AFF; --grau: #8E8E93; --linie: #3a3a3c; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: transparent; font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-user-select: none; -webkit-touch-callout: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  body { display: grid; grid-template-columns: 56fr 44fr; gap: 1.6vw; padding: 1.2vw; }
+  .karte { background: #fff; color: #1c1c1e; border-radius: 1.4vw; padding: 1.2vw 1.4vw; position: relative; overflow: hidden;
+    box-shadow: 0 0.3vw 1.2vw rgba(0,0,0,.25); display: flex; flex-direction: column; min-height: 0; }
+  /* ---------- Stundenplan ---------- */
+  .kopf { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.6vw; }
+  .kopf h1 { font-size: 1.6vw; margin: 0; }
+  .kopf .klasse { font-size: 1.3vw; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; flex: 1; }
+  th, td { border: 0.12vw solid var(--linie); padding: 0.25vw 0.4vw; vertical-align: middle; }
+  th { background: #d9d9de; font-size: 1.1vw; height: 2.2vw; }
+  th.heute { background: var(--blau); color: #fff; }
+  td.zeit { width: 24%; text-align: center; font-weight: 700; font-size: 0.95vw; line-height: 1.2; white-space: pre-line; }
+  tr.info td.zeit { font-size: 0.72vw; font-weight: 600; line-height: 1.15; }
+  tr.info td { height: 1.9vw; padding-top: 0.1vw; padding-bottom: 0.1vw; }
+  td.fach { text-align: center; position: relative; height: 3.3vw; }
+  td.fach .f { font-weight: 700; font-size: 1.1vw; }
+  td.fach .l { font-size: 0.8vw; text-align: right; margin-top: 0.15vw; color: #333; min-height: 0.9vw; }
+  td.heute { background: rgba(0,122,255,.10); }
+  td.heute .f { color: var(--blau); }
+  /* ---------- Tafel ---------- */
+  .tafel { font-family: "Patrick Hand", "Comic Sans MS", "Segoe Print", cursive; border: 0.6vw solid #d6d6d6; }
+  .tafel h2 { font-size: 2.3vw; margin: 0 0 0.6vw; font-weight: 400; }
+  .posten { display: grid; grid-template-columns: auto 1fr; gap: 0.5vw 1.2vw; align-items: center; margin-bottom: 0.8vw; }
+  .posten .betrag { font-size: 1.7vw; }
+  .magnet { border-radius: 0.5vw; padding: 0.35vw 0.7vw; font-size: 1.35vw; line-height: 1.1; text-align: center; color: #111;
+    box-shadow: inset 0 -0.15vw 0 rgba(0,0,0,.15), 0 0.1vw 0.3vw rgba(0,0,0,.25); cursor: pointer; display: flex;
+    align-items: center; justify-content: center; min-height: 2.9vw; border: 0.08vw solid rgba(0,0,0,.15); }
+  .magnet.weiss { background: #fafafa; }
+  .magnet:active, .magnet.gedrueckt { transform: scale(0.95); }
+  .satz { font-size: 1.6vw; margin: 0.2vw 0 0.5vw; }
+  .felder { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(3, 3.4vw); border: 0.25vw solid #111; }
+  .feld { border: 0.15vw solid #111; padding: 0.25vw; display: flex; }
+  .feld .magnet { flex: 1; }
+  .summe { font-size: 1.6vw; margin: 0.5vw 0; display: flex; justify-content: space-between; align-items: center; }
+  .summe b { color: #1f9d3a; }
+  .knopf { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 1.05vw; border: 0; border-radius: 0.8vw;
+    padding: 0.6vw 1vw; background: #ff3b30; color: #fff; font-weight: 600; cursor: pointer; }
+  .knopf.grau { background: #e5e5ea; color: #1c1c1e; }
+  .knopf.blau { background: var(--blau); }
+  .vorrat { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.45vw; overflow: auto; flex: 1; align-content: start; padding: 0.2vw; }
+  .vorrat .magnet { font-size: 1.15vw; min-height: 2.6vw; }
+  .vorrat .magnet.benutzt { opacity: .35; }
+  /* ---------- Bearbeiten ---------- */
+  .leiste { position: absolute; top: 0.8vw; right: 1vw; display: flex; gap: 0.5vw; z-index: 3; }
+  body.bearbeiten td.fach, body.bearbeiten td.zeit, body.bearbeiten .kopf h1, body.bearbeiten .kopf .klasse,
+  body.bearbeiten .vorrat .magnet, body.bearbeiten .posten .magnet, body.bearbeiten .posten .betrag, body.bearbeiten h2,
+  body.bearbeiten .satz { outline: 0.15vw dashed var(--blau); outline-offset: -0.15vw; cursor: text; }
+  #panel { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); background: #fff; color: #1c1c1e; z-index: 10;
+    border-radius: 1.2vw; padding: 1.4vw; width: 36vw; box-shadow: 0 1vw 4vw rgba(0,0,0,.5); display: none;
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #panel h3 { margin: 0 0 0.8vw; font-size: 1.3vw; }
+  #panel label { display: block; font-size: 0.95vw; color: var(--grau); margin-top: 0.6vw; }
+  #panel input, #panel textarea, #panel select { width: 100%; font-size: 1.2vw; padding: 0.5vw; border: 0.1vw solid #c7c7cc; border-radius: 0.5vw; }
+  #panel textarea { height: 4.5vw; resize: none; }
+  #panel .zeile { display: flex; gap: 0.6vw; margin-top: 1vw; flex-wrap: wrap; }
+  #panel .farben { display: flex; gap: 0.4vw; margin-top: 0.4vw; }
+  #panel .farben span { width: 2.2vw; height: 2.2vw; border-radius: 0.4vw; border: 0.15vw solid #c7c7cc; cursor: pointer; }
+  #panel .farben span.an { border: 0.25vw solid #1c1c1e; }
+  #schleier { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 9; display: none; }
+  #meldung { position: fixed; left: 50%; bottom: 2vw; transform: translateX(-50%); background: rgba(28,28,30,.92); color: #fff;
+    padding: 0.8vw 1.4vw; border-radius: 1vw; font-size: 1.15vw; z-index: 20; display: none; }
+</style>
+</head>
+<body>
+  <div class="karte" id="plan">
+    <div class="kopf"><h1 id="titel"></h1><span class="klasse" id="klasse"></span></div>
+    <table id="tabelle"></table>
+  </div>
+  <div class="karte tafel" id="tafel">
+    <div class="leiste">
+      <button class="knopf grau" id="b-bearbeiten">✏️ Bearbeiten</button>
+      <button class="knopf grau" id="b-abbrechen" style="display:none">Abbrechen</button>
+      <button class="knopf blau" id="b-speichern" style="display:none">Speichern</button>
+    </div>
+    <h2 id="wochengeld"></h2>
+    <div class="posten" id="posten"></div>
+    <div class="satz" id="satz"></div>
+    <div class="felder" id="felder"></div>
+    <div class="summe"><span id="summe"></span><button class="knopf" id="b-woche">🗑 Neue Woche</button></div>
+    <div class="vorrat" id="vorrat"></div>
+  </div>
+  <div id="schleier"></div>
+  <div id="panel"></div>
+  <div id="meldung"></div>
+
+<script>
+const DATEN_URL = "/local/mucki_daten.json";
+const FELDER = "input_text.mucki_felder";
+const ANZAHL_FELDER = 6;
+const FARBEN = { gelb: "#FFE14D", rot: "#F0443A", gruen: "#7BC943", orange: "#FF8A2A", blau: "#8FD0E0", weiss: "#FAFAFA", lila: "#C9A3F0" };
+const TAGE = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag"];
+
+// Vorlage nach dem Papier-Stundenplan (Lehrer leer – die trägt man auf dem Monitor selbst ein, sie bleiben lokal)
+function f(fach) { return { fach, lehrer: "" }; }
+const VORLAGE = {
+  version: 1,
+  titel: "Stundenplan ab 17.08.2026",
+  klasse: "Klasse 2",
+  zeilen: [
+    { zeit: "Frühbetreuung 7.00 - 7.45 Uhr\nGleitzeit 8.00 - 8.10 Uhr", info: true },
+    { zeit: "1. Stunde\n8.10 - 9.05 Uhr", faecher: [f("Deutsch"), f("Religion / WN?"), f("Schwimmen"), f("Deutsch"), f("Deutsch")] },
+    { zeit: "Kurze Pause 9.05 - 9.10 Uhr", info: true },
+    { zeit: "2. Stunde\n9.10 - 9.55 Uhr", faecher: [f("Mathematik"), f("Religion / WN?"), f("Schwimmen"), f("Mathematik"), f("Mathematik")] },
+    { zeit: "Frühstück 9.55 - 10.05 Uhr und\nPause 10.05 - 10.25 Uhr", info: true },
+    { zeit: "3. Stunde\n10.25 - 11.10 Uhr", faecher: [f("Sachunterricht"), f("Deutsch"), f("Deutsch"), f("Kunst"), f("Sachunterricht")] },
+    { zeit: "4. Stunde\n11.10 - 11.55 Uhr", faecher: [f("Mathematik"), f("Mathematik"), f("Mathematik"), f("Kunst"), f("Musik")] },
+    { zeit: "Schulschluss bzw.\nPause 11.55 - 12.15 Uhr", info: true },
+    { zeit: "5. Stunde\n12.15 - 13.00 Uhr", faecher: [f("Betreuung"), f("Sachunterricht"), f("Betreuung"), f("SB"), f("Betreuung")] },
+    { zeit: "Schulschluss bzw.\n13.00 - 13.30 Uhr Mittagessen\n13.30 - 14.15 Uhr Hausaufgaben", info: true },
+    { zeit: "Schulschluss bzw.\n14.15 - 15.45 Uhr\nSpielen und Angebote", info: true },
+  ],
+  taschengeld: {
+    woche: "Taschengeld wöchentl. 5 €",
+    posten: [{ name: "Miete / Strom", betrag: "2,- € wöchentl.", farbe: "blau" }, { name: "Essen, usw.", betrag: "1,- € wöchentl.", farbe: "rot" }],
+    satz: "Helfe ich im Haushalt, bekomme ich 50 Cent",
+    cent: 50,
+  },
+  aufgaben: [
+    { name: "Leergut wegbringen", farbe: "gruen" }, { name: "Fahrrad putzen", farbe: "rot" },
+    { name: "Geschirrspüler einräumen", farbe: "orange" }, { name: "Beim Kochen helfen", farbe: "weiss" },
+    { name: "Laub harken", farbe: "orange" }, { name: "Blumen gießen", farbe: "blau" },
+    { name: "Werkstatt helfen", farbe: "blau" }, { name: "Pakete holen", farbe: "weiss" },
+    { name: "Badezimmer putzen", farbe: "gelb" }, { name: "Wäsche zusammenlegen", farbe: "gruen" },
+    { name: "Rasenmähen", farbe: "gelb" }, { name: "Müll wegbringen", farbe: "blau" },
+    { name: "Hausbau helfen", farbe: "weiss" }, { name: "Zimmer aufräumen", farbe: "gelb" },
+    { name: "Gartenarbeit", farbe: "rot" }, { name: "Fegen", farbe: "gruen" },
+    { name: "Tisch decken", farbe: "lila" }, { name: "Tisch abräumen", farbe: "lila" },
+    { name: "Geschirrspüler ausräumen", farbe: "orange" }, { name: "Staubsaugen", farbe: "gelb" },
+    { name: "Schuhe aufräumen", farbe: "weiss" }, { name: "Auto aussaugen helfen", farbe: "blau" },
+  ],
+};
+
+let daten = null, gesichert = null, bearbeiten = false, letzteFelder = null, letzterTag = null;
+const $ = id => document.getElementById(id);
+function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
+function esc(t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+function meldung(t) { const m = $("meldung"); m.textContent = t; m.style.display = "block"; clearTimeout(meldung.t); meldung.t = setTimeout(() => m.style.display = "none", 3500); }
+// Tippen: am Kiosk-Monitor kommen Finger als Touch-Events, am Laptop als Klick
+function tippen(el, fn) {
+  let touch = 0;
+  el.addEventListener("touchend", ev => { ev.preventDefault(); touch = Date.now(); fn(ev); }, { passive: false });
+  el.addEventListener("click", ev => { if (Date.now() - touch > 700) fn(ev); });
+}
+function farbe(name) { return FARBEN[name] || FARBEN.weiss; }
+function aufgabeFarbe(name) { const a = daten.aufgaben.find(x => x.name === name); return a ? a.farbe : "weiss"; }
+
+// ---------- Felder (gemeinsam für alle Geräte) ----------
+function felderLesen() {
+  const h = hass(); const s = h && h.states[FELDER];
+  const v = s ? s.state : "";
+  return (!v || v === "unknown" || v === "unavailable") ? [] : v.split("|").filter(Boolean).slice(0, ANZAHL_FELDER);
+}
+function felderSchreiben(liste) {
+  const h = hass(); if (!h) return;
+  h.callService("input_text", "set_value", { entity_id: FELDER, value: liste.join("|").slice(0, 255) })
+    .catch(e => meldung("Speichern hat nicht geklappt: " + (e && e.message || e)));
+}
+
+// ---------- Zeichnen ----------
+function zeichnePlan() {
+  const heute = new Date().getDay() - 1; // Montag = 0
+  $("titel").textContent = daten.titel; $("klasse").textContent = daten.klasse;
+  let html = "<tr><th>Zeit</th>" + TAGE.map((t, i) => `<th class="${i === heute ? "heute" : ""}">${t}</th>`).join("") + "</tr>";
+  daten.zeilen.forEach((z, zi) => {
+    if (z.info) {
+      html += `<tr class="info"><td class="zeit" data-zeit="${zi}">${esc(z.zeit)}</td>` + TAGE.map((_, i) => `<td class="${i === heute ? "heute" : ""}"></td>`).join("") + "</tr>";
+    } else {
+      html += `<tr><td class="zeit" data-zeit="${zi}">${esc(z.zeit)}</td>` + z.faecher.map((x, i) =>
+        `<td class="fach ${i === heute ? "heute" : ""}" data-zelle="${zi}:${i}"><div class="f">${esc(x.fach)}</div><div class="l">${esc(x.lehrer)}</div></td>`).join("") + "</tr>";
+    }
+  });
+  $("tabelle").innerHTML = html;
+  $("tabelle").querySelectorAll("[data-zelle]").forEach(el => tippen(el, () => { if (bearbeiten) zelleBearbeiten(el.dataset.zelle); }));
+  $("tabelle").querySelectorAll("[data-zeit]").forEach(el => tippen(el, () => { if (bearbeiten) zeitBearbeiten(+el.dataset.zeit); }));
+  letzterTag = heute;
+}
+function zeichneTafel() {
+  const tg = daten.taschengeld, felder = felderLesen();
+  $("wochengeld").textContent = tg.woche;
+  $("posten").innerHTML = tg.posten.map((p, i) =>
+    `<div class="magnet ${p.farbe === "weiss" ? "weiss" : ""}" data-posten="${i}" style="background:${farbe(p.farbe)}">${esc(p.name)}</div><div class="betrag" data-posten="${i}">${esc(p.betrag)}</div>`).join("");
+  $("satz").textContent = tg.satz;
+  let fh = "";
+  for (let i = 0; i < ANZAHL_FELDER; i++) {
+    const a = felder[i];
+    fh += `<div class="feld" data-feld="${i}">${a ? `<div class="magnet" style="background:${farbe(aufgabeFarbe(a))}">${esc(a)}</div>` : ""}</div>`;
+  }
+  $("felder").innerHTML = fh;
+  const n = felder.length, euro = (n * (tg.cent || 50) / 100).toFixed(2).replace(".", ",");
+  $("summe").innerHTML = `Diese Woche: ${n} × ${tg.cent || 50} Cent = <b>${euro} €</b>`;
+  $("vorrat").innerHTML = daten.aufgaben.map((a, i) =>
+    `<div class="magnet ${felder.includes(a.name) ? "benutzt" : ""}" data-aufgabe="${i}" style="background:${farbe(a.farbe)}">${esc(a.name)}</div>`).join("")
+    + (bearbeiten ? `<div class="magnet weiss" data-neu="1">＋ Neue Aufgabe</div>` : "");
+  // Bedienung
+  $("felder").querySelectorAll("[data-feld]").forEach(el => tippen(el, () => {
+    const i = +el.dataset.feld, l = felderLesen();
+    if (i < l.length) { l.splice(i, 1); felderSchreiben(l); meldung("Aus dem Feld genommen"); }
+  }));
+  $("vorrat").querySelectorAll("[data-aufgabe]").forEach(el => tippen(el, () => {
+    const a = daten.aufgaben[+el.dataset.aufgabe];
+    if (bearbeiten) return aufgabeBearbeiten(+el.dataset.aufgabe);
+    const l = felderLesen();
+    if (l.length >= ANZAHL_FELDER) return meldung("Alle 6 Felder sind voll – super gemacht! 🎉");
+    l.push(a.name); felderSchreiben(l);
+    el.classList.add("gedrueckt"); setTimeout(() => el.classList.remove("gedrueckt"), 200);
+    meldung(`👍 ${a.name} – 50 Cent verdient!`);
+  }));
+  const neu = $("vorrat").querySelector("[data-neu]"); if (neu) tippen(neu, () => aufgabeBearbeiten(-1));
+  $("posten").querySelectorAll("[data-posten]").forEach(el => tippen(el, () => { if (bearbeiten) postenBearbeiten(+el.dataset.posten); }));
+  letzteFelder = felder.join("|");
+}
+function zeichnen() { zeichnePlan(); zeichneTafel(); }
+
+// ---------- Bearbeiten ----------
+function panel(html, ok) {
+  $("panel").innerHTML = html + `<div class="zeile"><button class="knopf blau" id="p-ok">Übernehmen</button><button class="knopf grau" id="p-zu">Abbrechen</button></div>`;
+  $("panel").style.display = "block"; $("schleier").style.display = "block";
+  tippen($("p-ok"), () => { ok(); panelZu(); zeichnen(); });
+  tippen($("p-zu"), panelZu);
+  const erstes = $("panel").querySelector("input, textarea"); if (erstes) setTimeout(() => erstes.focus(), 50);
+}
+function panelZu() { $("panel").style.display = "none"; $("schleier").style.display = "none"; }
+function zelleBearbeiten(k) {
+  const [zi, ti] = k.split(":").map(Number), x = daten.zeilen[zi].faecher[ti];
+  panel(`<h3>${TAGE[ti]} · ${esc(daten.zeilen[zi].zeit.split("\n")[0])}</h3>
+    <label>Fach</label><input id="p-fach" value="${esc(x.fach)}">
+    <label>Lehrer/in</label><input id="p-lehrer" value="${esc(x.lehrer)}">`,
+    () => { x.fach = $("p-fach").value.trim(); x.lehrer = $("p-lehrer").value.trim(); });
+}
+function zeitBearbeiten(zi) {
+  const z = daten.zeilen[zi];
+  panel(`<h3>Zeile bearbeiten</h3><label>Text (Zeilenumbruch mit Enter)</label><textarea id="p-zeit">${esc(z.zeit)}</textarea>
+    <div class="zeile"><button class="knopf grau" id="p-hoch">⬆ Zeile darüber einfügen</button><button class="knopf" id="p-weg">Zeile löschen</button></div>`,
+    () => { z.zeit = $("p-zeit").value; });
+  tippen($("p-hoch"), () => { daten.zeilen.splice(zi, 0, { zeit: "Neue Stunde\n00.00 - 00.00 Uhr", faecher: TAGE.map(() => f("")) }); panelZu(); zeichnen(); });
+  tippen($("p-weg"), () => { daten.zeilen.splice(zi, 1); panelZu(); zeichnen(); });
+}
+function kopfBearbeiten() {
+  panel(`<h3>Überschrift</h3><label>Titel</label><input id="p-titel" value="${esc(daten.titel)}">
+    <label>Klasse</label><input id="p-klasse" value="${esc(daten.klasse)}">`,
+    () => { daten.titel = $("p-titel").value; daten.klasse = $("p-klasse").value; });
+}
+function farbAuswahl(aktuell) {
+  return `<div class="farben" id="p-farben">${Object.keys(FARBEN).map(k => `<span data-farbe="${k}" class="${k === aktuell ? "an" : ""}" style="background:${FARBEN[k]}"></span>`).join("")}</div>`;
+}
+function farbeVerdrahten() {
+  $("p-farben").querySelectorAll("span").forEach(s => tippen(s, () => {
+    $("p-farben").querySelectorAll("span").forEach(x => x.classList.remove("an")); s.classList.add("an");
+  }));
+}
+function gewaehlteFarbe() { const s = $("p-farben").querySelector(".an"); return s ? s.dataset.farbe : "weiss"; }
+function aufgabeBearbeiten(i) {
+  const a = i >= 0 ? daten.aufgaben[i] : { name: "", farbe: "gelb" };
+  panel(`<h3>${i >= 0 ? "Aufgabe bearbeiten" : "Neue Aufgabe"}</h3><label>Name</label><input id="p-name" value="${esc(a.name)}">
+    <label>Farbe</label>${farbAuswahl(a.farbe)}
+    ${i >= 0 ? `<div class="zeile"><button class="knopf" id="p-loeschen">Aufgabe löschen</button></div>` : ""}`,
+    () => { const n = $("p-name").value.trim(); if (!n) return; a.name = n; a.farbe = gewaehlteFarbe(); if (i < 0) daten.aufgaben.push(a); });
+  farbeVerdrahten();
+  if (i >= 0) tippen($("p-loeschen"), () => { daten.aufgaben.splice(i, 1); panelZu(); zeichnen(); });
+}
+function postenBearbeiten(i) {
+  const p = daten.taschengeld.posten[i], tg = daten.taschengeld;
+  panel(`<h3>Taschengeld</h3><label>Überschrift</label><input id="p-woche" value="${esc(tg.woche)}">
+    <label>Posten</label><input id="p-pname" value="${esc(p.name)}"><label>Betrag</label><input id="p-betrag" value="${esc(p.betrag)}">
+    <label>Farbe</label>${farbAuswahl(p.farbe)}
+    <label>Satz unter den Posten</label><input id="p-satz" value="${esc(tg.satz)}">`,
+    () => { tg.woche = $("p-woche").value; p.name = $("p-pname").value; p.betrag = $("p-betrag").value; p.farbe = gewaehlteFarbe(); tg.satz = $("p-satz").value; });
+  farbeVerdrahten();
+}
+function modus(an) {
+  bearbeiten = an; document.body.classList.toggle("bearbeiten", an);
+  $("b-bearbeiten").style.display = an ? "none" : ""; $("b-abbrechen").style.display = an ? "" : "none"; $("b-speichern").style.display = an ? "" : "none";
+  $("b-woche").style.display = an ? "none" : "";
+  zeichnen();
+  if (an) meldung("Bearbeiten: Fach, Zeit, Überschrift oder Magnet antippen");
+}
+tippen($("b-bearbeiten"), () => { gesichert = JSON.stringify(daten); modus(true); });
+tippen($("b-abbrechen"), () => { daten = JSON.parse(gesichert); modus(false); });
+tippen($("b-speichern"), async () => {
+  const h = hass(); if (!h) return;
+  const marke = Date.now(); daten.gespeichert = marke;
+  meldung("Speichere …");
+  try {
+    await h.callService("script", "mucki_speichern", { daten: JSON.stringify(daten) });
+    let ok = false;
+    for (let i = 0; i < 6 && !ok; i++) {
+      await new Promise(r => setTimeout(r, 700));
+      try { const r = await fetch(DATEN_URL + "?t=" + Date.now(), { cache: "no-store" }); if (r.ok) ok = (await r.json()).gespeichert === marke; } catch (e) { /* weiter */ }
+    }
+    if (ok) { meldung("Gespeichert ✓"); modus(false); }
+    else meldung("⚠️ Nicht gespeichert – bitte nochmal auf Speichern tippen");
+  } catch (e) { meldung("⚠️ Speichern fehlgeschlagen: " + (e && e.message || e)); }
+});
+tippen($("b-woche"), () => {
+  if (!felderLesen().length) return meldung("Die Felder sind schon leer");
+  // eigene Abfrage statt confirm() – der Kiosk-Browser zeigt keine Systemdialoge zuverlässig an
+  $("panel").innerHTML = `<h3>Neue Woche?</h3><p style="font-size:1.1vw">Alle Felder leeren – wurde das Taschengeld ausgezahlt?</p>
+    <div class="zeile"><button class="knopf" id="p-ja">🗑 Ja, Felder leeren</button><button class="knopf grau" id="p-nein">Abbrechen</button></div>`;
+  $("panel").style.display = "block"; $("schleier").style.display = "block";
+  tippen($("p-ja"), () => { felderSchreiben([]); panelZu(); meldung("Neue Woche – viel Erfolg! 💪"); });
+  tippen($("p-nein"), panelZu);
+});
+tippen($("schleier"), panelZu);
+tippen($("titel"), () => { if (bearbeiten) kopfBearbeiten(); });
+tippen($("klasse"), () => { if (bearbeiten) kopfBearbeiten(); });
+
+// ---------- Start ----------
+async function laden() {
+  if (!hass()) { setTimeout(laden, 500); return; }
+  try { const r = await fetch(DATEN_URL + "?t=" + Date.now(), { cache: "no-store" }); if (r.ok) daten = await r.json(); } catch (e) { /* noch nichts gespeichert */ }
+  if (!daten || !Array.isArray(daten.zeilen)) daten = JSON.parse(JSON.stringify(VORLAGE));
+  zeichnen();
+  // Felder live halten (Handy/Laptop), um Mitternacht den neuen Tag markieren
+  setInterval(() => {
+    if (bearbeiten) return;
+    if (felderLesen().join("|") !== letzteFelder) zeichneTafel();
+    if (new Date().getDay() - 1 !== letzterTag) zeichnePlan();
+  }, 800);
+}
+laden();
+</script>
+</body>
+</html>

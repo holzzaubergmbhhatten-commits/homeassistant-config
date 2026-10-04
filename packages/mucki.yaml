@@ -1,0 +1,44 @@
+# Muckis Seite auf dem Flur-Monitor (www/mucki.html, im Dashboard als Vollbild eingebettet):
+# links der Stundenplan (änderbar), rechts die Taschengeld-Tafel mit 6 Feldern.
+# Stundenplan und Aufgaben-Magnete liegen lokal in /config/www/mucki_daten.json (nicht im Repository).
+# Die 6 Felder der Woche stehen in input_text.mucki_felder (Aufgaben mit | getrennt),
+# damit Monitor, Handy und Laptop immer dasselbe zeigen.
+input_text:
+  mucki_felder:
+    name: Mucki – erledigte Aufgaben diese Woche
+    icon: mdi:piggy-bank
+    max: 255
+
+shell_command:
+  mucki_schreiben: python3 /config/claude_tools/mucki_speichern.py {{ b64 }}
+
+script:
+  mucki_speichern:
+    alias: Muckis Seite speichern
+    mode: queued
+    fields:
+      daten:
+        description: Inhalt als JSON-Text
+    sequence:
+      - action: shell_command.mucki_schreiben
+        data:
+          # schon hier kodieren – sonst würde Home Assistant den JSON-Text in ein Objekt umwandeln
+          b64: "{{ (daten if daten is string else (daten | to_json)) | base64_encode }}"
+        response_variable: ergebnis
+      - if: "{{ not (ergebnis.stdout | default('') | trim).startswith('ok') }}"
+        then:
+          - action: persistent_notification.create
+            data:
+              notification_id: mucki
+              title: Muckis Seite speichern
+              message: "{{ ergebnis.stdout | default('keine Antwort') }}"
+
+  mucki_neue_woche:
+    alias: "Mucki: neue Woche (Taschengeld-Felder leeren)"
+    icon: mdi:delete-sweep
+    sequence:
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.mucki_felder
+        data:
+          value: ""
