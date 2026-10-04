@@ -8,9 +8,15 @@ input_text:
     name: Mucki – erledigte Aufgaben diese Woche
     icon: mdi:piggy-bank
     max: 255
+  # Lern-Challenge der Woche: "2026-W41:101" (Rechnen, Lesen, Schreiben – 1 = geschafft)
+  mucki_lernen:
+    name: Mucki – Lernaufgaben diese Woche
+    icon: mdi:school
+    max: 40
 
 shell_command:
   mucki_schreiben: python3 /config/claude_tools/mucki_speichern.py {{ b64 }}
+  mucki_verlauf: python3 /config/claude_tools/mucki_verlauf.py {{ b64 }}
 
 script:
   mucki_speichern:
@@ -33,12 +39,95 @@ script:
               title: Muckis Seite speichern
               message: "{{ ergebnis.stdout | default('keine Antwort') }}"
 
-  mucki_neue_woche:
-    alias: "Mucki: neue Woche (Taschengeld-Felder leeren)"
-    icon: mdi:delete-sweep
+  # Woche abschließen: erledigte Aufgaben mit Kalenderwoche in den Verlauf (mucki_verlauf.json), Felder leeren.
+  # Läuft über den Knopf "Neue Woche" und automatisch montags um 0:05 (für die Vorwoche).
+  mucki_woche_abschliessen:
+    alias: "Mucki: Woche abschließen (Verlauf speichern, Felder leeren)"
+    icon: mdi:calendar-check
+    mode: queued
+    fields:
+      woche:
+        description: Kalenderwoche wie 2026-W40 (Standard diese Woche)
     sequence:
+      - variables:
+          kw: "{{ woche if (woche | default('', true) | string) is match('^\\d{4}-W\\d{2}$') else now().strftime('%G-W%V') }}"
+          aufgaben: >-
+            {% set v = states('input_text.mucki_felder') %}
+            {{ v.split('|') | reject('eq', '') | list if v not in ['', 'unknown', 'unavailable'] else [] }}
+          lernen: >-
+            {% set v = states('input_text.mucki_lernen') %}
+            {{ v.split(':')[1] | list | select('eq', '1') | list | count if v.startswith(kw ~ ':') else 0 }}
+      - if: "{{ aufgaben | count > 0 or lernen | int(0) > 0 }}"
+        then:
+          - action: shell_command.mucki_verlauf
+            data:
+              b64: "{{ {'woche': kw, 'aufgaben': aufgaben, 'lernen': lernen | int(0)} | to_json | base64_encode }}"
+            response_variable: ergebnis
+          - if: "{{ not (ergebnis.stdout | default('') | trim).startswith('ok') }}"
+            then:
+              - action: persistent_notification.create
+                data:
+                  notification_id: mucki_verlauf
+                  title: Muckis Wochen-Verlauf
+                  message: "{{ ergebnis.stdout | default('keine Antwort') }}"
+              - stop: Verlauf nicht gespeichert – Felder bleiben stehen
       - action: input_text.set_value
         target:
           entity_id: input_text.mucki_felder
         data:
           value: ""
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.mucki_lernen
+        data:
+          value: ""
+
+  mucki_neue_woche:
+    alias: "Mucki: neue Woche (Taschengeld-Felder leeren)"
+    icon: mdi:delete-sweep
+    sequence:
+      - action: script.mucki_woche_abschliessen
+
+automation:
+  - id: mucki_woche_automatisch
+    alias: "Mucki: Woche montags automatisch abschließen"
+    triggers:
+      - trigger: time
+        at: "00:05:00"
+    conditions:
+      - condition: template
+        value_template: "{{ now().weekday() == 0 }}"
+    actions:
+      - action: script.mucki_woche_abschliessen
+        data:
+          woche: "{{ (now() - timedelta(days=1)).strftime('%G-W%V') }}"
+
+  # Sonntag 18:00: Erinnerung ans Taschengeld (Durchsage in Küche und Muckis Zimmer + Monitor)
+  - id: mucki_taschengeld_erinnerung
+    alias: "Mucki: Erinnerung Taschengeld sonntags 18 Uhr"
+    triggers:
+      - trigger: time
+        at: "18:00:00"
+    conditions:
+      - condition: template
+        value_template: "{{ now().weekday() == 6 }}"
+    actions:
+      - variables:
+          n: >-
+            {% set v = states('input_text.mucki_felder') %}
+            {{ (v.split('|') | reject('eq', '') | list | count) if v not in ['', 'unknown', 'unavailable'] else 0 }}
+          lern: >-
+            {% set v = states('input_text.mucki_lernen') %}
+            {{ v.split(':')[1] | list | select('eq', '1') | list | count if v.startswith(now().strftime('%G-W%V') ~ ':') else 0 }}
+      - action: script.jarvis_durchsage
+        continue_on_error: true
+        data:
+          raeume: Küche, Muckis Zimmer
+          text: >-
+            Taschengeld-Zeit! Mucki hat diese Woche {{ n }} von 6 Haushaltsaufgaben
+            und {{ lern }} von 3 Lernaufgaben geschafft. Den genauen Betrag zeigt Muckis Seite auf dem Monitor.
+      - action: script.jarvis_monitor_nachricht
+        continue_on_error: true
+        data:
+          text: "Taschengeld-Zeit! Mucki hat {{ n }} von 6 Aufgaben und {{ lern }} von 3 Lernaufgaben geschafft."
+          minuten: 120

@@ -23,9 +23,6 @@ input_select:
 
 input_boolean:
   # Einschalten = pausieren (neue Schalter starten ausgeschaltet, also ist alles zuerst aktiv)
-  morgen_uebersicht_pause:
-    name: Morgen-Übersicht pausieren
-    icon: mdi:weather-sunset-up
   morgen_homepod_pause:
     name: Morgen-Ansage HomePods pausieren
     icon: mdi:speaker-off
@@ -300,7 +297,11 @@ script:
           - action: telegram_bot.send_message
             continue_on_error: true
             data:
-              message: "☀️ Morgen-Ansage (Lautsprecher nicht erreichbar):\n{{ text }}"
+              message: >-
+                ☀️ Morgen-Ansage – die Lautsprecher haben nicht abgespielt
+                ({{ ergebnis.ergebnis | default('keine Antwort') if ergebnis is defined and ergebnis is mapping else 'Skript-Fehler' }},
+                Stimme {{ ergebnis.stimme | default('?') if ergebnis is defined and ergebnis is mapping else '?' }}).
+                Text: {{ text }}
 
   jarvis_durchsage:
     alias: Jarvis Durchsage
@@ -381,17 +382,38 @@ script:
                     entity_id: "{{ repeat.item }}"
                   data:
                     volume_level: "{{ laut }}"
-      - action: tts.speak
+      # Weg 1: als Ansage über Music Assistant (Musik wird kurz leiser und läuft danach weiter)
+      - action: media_player.play_media
         continue_on_error: true
         target:
-          entity_id: "{{ stimme }}"
+          entity_id: "{{ ziel }}"
         data:
-          media_player_entity_id: "{{ ziel }}"
-          message: "{{ text }}"
-          language: de
+          media_content_id: "media-source://tts/{{ stimme }}?message={{ text | urlencode }}"
+          media_content_type: music
+          announce: true
+      - wait_template: "{{ ziel | select('is_state', 'playing') | list | count > 0 }}"
+        timeout: "00:00:15"
+        continue_on_timeout: true
+      - variables:
+          gespielt: "{{ wait.completed }}"
+      # Weg 2, falls nichts abspielt: klassisch über tts.speak
+      - if: "{{ not gespielt }}"
+        then:
+          - action: tts.speak
+            continue_on_error: true
+            target:
+              entity_id: "{{ stimme }}"
+            data:
+              media_player_entity_id: "{{ ziel }}"
+              message: "{{ text }}"
+          - wait_template: "{{ ziel | select('is_state', 'playing') | list | count > 0 }}"
+            timeout: "00:00:15"
+            continue_on_timeout: true
+          - variables:
+              gespielt: "{{ wait.completed }}"
       # grob abwarten, bis die Ansage gesprochen ist (ca. 12 Zeichen pro Sekunde + Puffer)
       - delay:
-          seconds: "{{ ((text | length) / 12 + 4) | int }}"
+          seconds: "{{ ((text | length) / 12 + 4) | int if gespielt else 1 }}"
       - repeat:
           for_each: "{{ ziel }}"
           sequence:
@@ -407,8 +429,9 @@ script:
                     volume_level: "{{ alt }}"
       - variables:
           ok:
-            ergebnis: Durchsage gemacht
+            ergebnis: "{{ 'Durchsage gemacht' if gespielt else 'Lautsprecher haben nicht abgespielt' }}"
             lautsprecher: "{{ ziel | map('state_attr', 'friendly_name') | list }}"
+            stimme: "{{ stimme }}"
       - stop: fertig
         response_variable: ok
 
@@ -639,88 +662,7 @@ automation:
                 item: "{{ repeat.item.uid }}"
                 status: completed
 
-  # 07:00 – kurze Übersicht für den Tag
-  - id: jarvis_morgen_uebersicht
-    alias: "Jarvis: Morgen-Übersicht per Telegram"
-    triggers:
-      - trigger: time
-        at: "07:00:00"
-    conditions:
-      - condition: state
-        entity_id: input_boolean.morgen_uebersicht_pause
-        state: "off"
-    actions:
-      - action: weather.get_forecasts
-        continue_on_error: true
-        target:
-          entity_id: weather.touchmonitor_home
-        data:
-          type: daily
-        response_variable: wetter
-      - variables:
-          aufgaben_entity: >-
-            {{ states.todo | selectattr('name', 'search', '(?i)^aufgaben')
-               | map(attribute='entity_id') | first | default('', true) }}
-      - if: "{{ aufgaben_entity != '' }}"
-        then:
-          - action: todo.get_items
-            continue_on_error: true
-            target:
-              entity_id: "{{ aufgaben_entity }}"
-            data:
-              status: needs_action
-            response_variable: aufgaben
-      - variables:
-          heute: "{{ now().strftime('%Y-%m-%d') }}"
-          text: >-
-            {%- set tage = ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'] %}
-            {%- set monate = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'] %}
-            {%- set w = {'sunny': 'sonnig ☀️', 'clear-night': 'klar', 'partlycloudy': 'teils bewölkt ⛅', 'cloudy': 'bewölkt ☁️',
-                'rainy': 'Regen 🌧', 'pouring': 'Starkregen 🌧', 'fog': 'Nebel 🌫', 'snowy': 'Schnee ❄️', 'snowy-rainy': 'Schneeregen',
-                'windy': 'windig 💨', 'windy-variant': 'windig 💨', 'lightning': 'Gewitter ⛈', 'lightning-rainy': 'Gewitter ⛈', 'hail': 'Hagel'} %}
-            ☀️ <b>Guten Morgen!</b> {{ tage[now().weekday()] }}, {{ now().day }}. {{ monate[now().month - 1] }}
-            {%- set f = (wetter['weather.touchmonitor_home'].forecast | first) if wetter is defined and 'weather.touchmonitor_home' in wetter and wetter['weather.touchmonitor_home'].forecast else none %}
-            {%- if f %}
-            🌡 {{ w.get(f.condition, f.condition) }}, {{ f.templow | default(f.temperature) | round(0) | int }}–{{ f.temperature | round(0) | int }} °C{% if f.precipitation_probability is defined and f.precipitation_probability %} · Regen {{ f.precipitation_probability }} %{% endif %}
-            {%- endif %}
-            {%- set termine = (state_attr('sensor.termine_vorschau', 'familie') or []) | selectattr('start', 'search', '^' ~ heute) | list %}
-
-            📅 <b>Termine heute</b>
-            {%- for t in termine %}
-            • {{ t.start[11:16] ~ ' ' if 'T' in t.start else '' }}{{ t.titel | replace('&','&amp;') | replace('<','&lt;') }}
-            {%- else %}
-            • keine
-            {%- endfor %}
-            {%- set a = aufgaben[aufgaben_entity]['items'] if aufgaben is defined and aufgaben_entity in aufgaben else [] %}
-            {%- if a %}
-
-            ✅ <b>{{ a | count }} Aufgabe{{ 'n' if a | count != 1 }} offen</b>
-            {%- for x in a[:5] %}
-            • {{ x.summary | replace('&','&amp;') | replace('<','&lt;') }}{{ ' ⚠️ fällig' if x.due is defined and x.due[:10] <= heute else '' }}
-            {%- endfor %}{{ '\n• …' if a | count > 5 else '' }}
-            {%- endif %}
-            {%- set b = state_attr('sensor.termine_vorschau', 'buchungen') or [] %}
-            {%- set fw = b | rejectattr('kalender', 'search', 'stellpl') | list %}
-            {%- set an = fw | selectattr('start', 'search', '^' ~ heute) | list | count %}
-            {%- set ab = fw | selectattr('ende', 'search', '^' ~ heute) | list | count %}
-            {%- set belegt = fw | selectattr('start', 'le', heute) | selectattr('ende', 'gt', heute) | list | count %}
-            {%- set sp = b | selectattr('kalender', 'search', 'stellpl') | selectattr('start', 'le', heute) | selectattr('ende', 'ge', heute) | list %}
-
-            🏡 <b>Ferienwohnung:</b> {{ 'Anreise heute' if an else ('Abreise heute' if ab else ('belegt' if belegt else 'frei')) }}{{ ' (und Abreise)' if an and ab else '' }}
-            {%- if sp %}
-            🚐 <b>Stellplätze heute:</b> {{ sp | count }} Buchung{{ 'en' if sp | count != 1 }}
-            {%- endif %}
-      - repeat:
-          for_each: >-
-            {{ (states('input_text.telegram_empfaenger') | string).split(';')
-               | reject('in', ['', 'unknown', 'unavailable']) | list }}
-          sequence:
-            - action: telegram_bot.send_message
-              continue_on_error: true
-              data:
-                chat_id: "{{ repeat.item | int }}"
-                parse_mode: html
-                message: "{{ text }}"
+  # (Die Telegram-Morgenübersicht um 07:00 ist entfernt – die Morgen-Ansage über die HomePods ersetzt sie.)
 
   # 22:30 – nur wenn noch Lampen an sind: Nachricht mit Knöpfen
   - id: jarvis_abend_check

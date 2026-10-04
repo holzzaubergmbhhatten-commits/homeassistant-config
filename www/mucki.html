@@ -11,7 +11,9 @@
   Feld antippen = wieder raus, "Neue Woche" leert alle Felder.
   Daten: /local/mucki_daten.json (lokal, nicht im Repository), Felder: input_text.mucki_felder.
 -->
+<script src="https://cdn.jsdelivr.net/npm/@twemoji/api@15.1.0/dist/twemoji.min.js" crossorigin="anonymous"></script>
 <style>
+  img.emoji { height: 1.1em; width: 1.1em; vertical-align: -0.15em; margin: 0 0.05em; }
   :root { --blau: #007AFF; --gruen: #34C759; --rot: #FF3B30; --grau: #8E8E93; --trenn: #E5E5EA; --hell: #F2F2F7; --text: #1C1C1E; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: transparent;
@@ -25,15 +27,15 @@
   .kopf { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.8vw; }
   .kopf h1 { font-size: 1.55vw; }
   .kopf .klasse { font-size: 1vw; color: var(--grau); font-weight: 600; background: var(--hell); padding: 0.25vw 0.7vw; border-radius: 1vw; }
-  .tabelle { flex: 1; display: grid; grid-template-columns: 1.25fr repeat(5, 1fr); grid-auto-rows: auto; align-content: stretch;
+  .tabelle { flex: 1 1 auto; display: grid; grid-template-columns: 1.25fr repeat(5, 1fr); grid-auto-rows: auto; align-content: stretch;
     border-radius: 1vw; overflow: hidden; background: var(--hell); gap: 0.1vw; }
   .tabelle > div { background: #fff; display: flex; flex-direction: column; justify-content: center; align-items: center;
-    text-align: center; padding: 0.3vw 0.3vw; min-height: 0; }
+    text-align: center; padding: 0.22vw 0.3vw; min-height: 0; }
   .tabelle .tag { background: var(--hell); font-weight: 600; font-size: 0.95vw; color: #3C3C43; padding: 0.5vw 0.2vw; }
   .tabelle .tag.heute { background: var(--blau); color: #fff; }
   .tabelle .zeit { font-size: 0.8vw; font-weight: 600; color: #3C3C43; white-space: pre-line; line-height: 1.25; align-items: flex-start; text-align: left; padding-left: 0.6vw; }
   .tabelle .zeit b { color: var(--text); font-size: 0.9vw; }
-  .tabelle .info { grid-column: 1 / -1; background: #FAFAFC; font-size: 0.72vw; color: var(--grau); padding: 0.25vw; white-space: normal; }
+  .tabelle .info { grid-column: 1 / -1; background: #FAFAFC; font-size: 0.68vw; color: var(--grau); padding: 0.12vw; white-space: normal; }
   .tabelle .fach .f { font-weight: 600; font-size: 0.95vw; line-height: 1.15; }
   .tabelle .fach .l { font-size: 0.7vw; color: var(--grau); margin-top: 0.15vw; min-height: 0.8vw; }
   .tabelle .fach.heute { background: rgba(0,122,255,.08); }
@@ -62,6 +64,19 @@
     color: #1C1C1E; display: flex; align-items: center; justify-content: center; min-height: 2.6vw; cursor: pointer;
     box-shadow: 0 0.08vw 0.25vw rgba(0,0,0,.12); transition: transform .12s, opacity .2s; }
   .magnet:active, .magnet.gedrueckt { transform: scale(0.94); }
+  .verlauf { display: flex; gap: 0.4vw; align-items: stretch; }
+  .verlauf .woche { flex: 1; background: var(--hell); border-radius: 0.8vw; padding: 0.35vw 0.3vw; text-align: center; font-size: 0.75vw; color: #3C3C43; }
+  .verlauf .woche b { display: block; font-size: 0.95vw; color: var(--text); }
+  .verlauf .woche.voll { background: rgba(52,199,89,.15); }
+  .verlauf .woche.jetzt { box-shadow: inset 0 0 0 0.12vw var(--blau); }
+  .verlauf .serie { flex: 1.3; background: rgba(255,149,0,.14); color: #9a5b00; font-weight: 600; display: flex; align-items: center; justify-content: center; text-align: center; }
+  .lernen { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.45vw; }
+  .lern { border-radius: 0.9vw; padding: 0.4vw 0.6vw; background: #EEF4FF; cursor: pointer; position: relative; min-height: 3.6vw; }
+  .lern .art { font-size: 0.75vw; font-weight: 700; color: var(--blau); text-transform: uppercase; letter-spacing: 0.04em; }
+  .lern .was { font-size: 0.85vw; font-weight: 600; line-height: 1.2; margin-top: 0.15vw; white-space: pre-line; }
+  .lern.fertig { background: rgba(52,199,89,.16); }
+  .lern.fertig .art { color: #1f9d3a; }
+  .lern .haken { position: absolute; top: 0.4vw; right: 0.5vw; font-size: 1.1vw; }
   .vorrat-titel { font-size: 0.85vw; color: var(--grau); font-weight: 600; margin: 0.8vw 0 0.4vw; text-transform: uppercase; letter-spacing: 0.04em; }
   .vorrat { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.45vw; overflow: auto; flex: 1; align-content: start; padding: 0.2vw; }
   .vorrat .magnet { font-size: 0.85vw; min-height: 2.3vw; }
@@ -93,9 +108,13 @@
   <div class="karte" id="plan">
     <div class="kopf"><h1 id="titel"></h1><span class="klasse" id="klasse"></span></div>
     <div class="tabelle" id="tabelle"></div>
+    <div class="vorrat-titel" id="lern-titel">Lern-Challenge der Woche</div>
+    <div class="lernen" id="lernen"></div>
+    <div class="vorrat-titel">Wochen</div>
+    <div class="verlauf" id="verlauf"></div>
   </div>
   <div class="karte" id="tafel">
-    <div class="tg-kopf"><h2>💰 Taschengeld</h2>
+    <div class="tg-kopf"><h2>💰 Taschengeld <span id="kw" style="font-size:1vw;color:#8E8E93;font-weight:600"></span></h2>
       <div><button class="knopf" id="b-bearbeiten">Bearbeiten</button>
       <button class="knopf" id="b-abbrechen" style="display:none">Abbrechen</button>
       <button class="knopf blau" id="b-speichern" style="display:none">Speichern</button></div></div>
@@ -161,7 +180,7 @@ let daten = null, gesichert = null, bearbeiten = false, letzteFelder = null, let
 const $ = id => document.getElementById(id);
 function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
 function esc(t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
-function meldung(t) { const m = $("meldung"); m.textContent = t; m.style.display = "block"; clearTimeout(meldung.t); meldung.t = setTimeout(() => m.style.display = "none", 3500); }
+function meldung(t) { const m = $("meldung"); m.textContent = t; emoji(m); m.style.display = "block"; clearTimeout(meldung.t); meldung.t = setTimeout(() => m.style.display = "none", 3500); }
 // Tippen: am Kiosk-Monitor kommen Finger als Touch-Events, am Laptop als Klick
 function tippen(el, fn) {
   let touch = 0;
@@ -187,6 +206,50 @@ function felderSchreiben(liste) {
 }
 // Zahl aus Text wie "2,- € wöchentl." oder "Taschengeld wöchentl. 5 €"
 function zahl(t) { const m = String(t || "").match(/(\d+(?:[.,]\d+)?)/); return m ? parseFloat(m[1].replace(",", ".")) : 0; }
+const VERLAUF_URL = "/local/mucki_verlauf.json";
+const LERNEN = "input_text.mucki_lernen";
+// Lern-Challenge 2. Klasse: jede Kalenderwoche andere Aufgaben (fest aus der KW berechnet)
+function zufall(seed) { let x = seed >>> 0; return () => { x = (x * 1664525 + 1013904223) >>> 0; return x / 4294967296; }; }
+function lernAufgaben(kw) {
+  const r = zufall(Number(kw.replace(/\D/g, ""))), z = (a, b) => a + Math.floor(r() * (b - a + 1)), w = l => l[Math.floor(r() * l.length)];
+  const rechnen = [];
+  for (let i = 0; i < 3; i++) {
+    const art = z(0, 3);
+    if (art === 0) { const a = z(12, 68), b = z(5, 99 - a); rechnen.push(`${a} + ${b} = ?`); }
+    else if (art === 1) { const a = z(30, 99), b = z(5, a - 5); rechnen.push(`${a} − ${b} = ?`); }
+    else if (art === 2) { const a = w([2, 5, 10, 3, 4]), b = z(2, 10); rechnen.push(`${b} · ${a} = ?`); }
+    else { const a = z(15, 60), b = z(8, 35); rechnen.push(`${a} + ? = ${a + b}`); }
+  }
+  const lesen = w(["Lies Mama oder Papa 5 Minuten aus deinem Lieblingsbuch vor.", "Lies eine Seite vor und erzähle danach, was passiert ist.",
+    "Lies das Wetter für morgen vom Monitor vor.", "Lies den Einkaufszettel vor.", "Lies ein Gedicht oder einen Witz vor.",
+    "Lies eine Seite aus deinem Lesebuch ganz ohne Fehler vor.", "Lies die Termine dieser Woche vom Monitor vor."]);
+  const schreiben = w(["Schreibe 5 Wörter mit „ie“.", "Schreibe 3 Sätze über dein Wochenende.", "Schreibe 5 Tiere auf – groß am Anfang!",
+    "Schreibe den Einkaufszettel für 3 Sachen.", "Schreibe 5 Wörter mit „sch“.", "Schreibe alle Wochentage auf.",
+    "Schreibe eine kleine Karte an Oma oder Opa.", "Schreibe 5 Wörter, die sich reimen."]);
+  return [{ art: "Rechnen", was: rechnen.join("\n") }, { art: "Lesen", was: lesen }, { art: "Schreiben", was: schreiben }];
+}
+function lernenLesen(kw) {
+  const h = hass(), st = h && h.states[LERNEN], v = st ? st.state : "";
+  return v && v.startsWith(kw + ":") ? v.split(":")[1].padEnd(3, "0").slice(0, 3).split("").map(c => c === "1") : [false, false, false];
+}
+function lernenSchreiben(kw, liste) {
+  const h = hass(); if (!h) return;
+  Promise.resolve(h.callService("input_text", "set_value", { entity_id: LERNEN, value: kw + ":" + liste.map(b => b ? "1" : "0").join("") }))
+    .catch(e => meldung("⚠️ Hat nicht geklappt: " + (e && e.message || e)));
+}
+let verlauf = { wochen: {} };
+function isoWoche(d) {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const tag = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - tag);
+  const jahr = t.getUTCFullYear(), w = Math.ceil(((t - Date.UTC(jahr, 0, 1)) / 864e5 + 1) / 7);
+  return `${jahr}-W${String(w).padStart(2, "0")}`;
+}
+function wocheDavor(kw, n) { const [j, w] = kw.split("-W").map(Number); const d = new Date(j, 0, 4 + (w - 1) * 7); d.setDate(d.getDate() - 7 * n); return isoWoche(d); }
+async function verlaufLaden() {
+  try { const r = await fetch(VERLAUF_URL + "?t=" + Date.now(), { cache: "no-store" }); if (r.ok) verlauf = await r.json(); } catch (e) { /* noch leer */ }
+  if (!verlauf || typeof verlauf.wochen !== "object") verlauf = { wochen: {} };
+}
+function emoji(el) { try { if (window.twemoji) twemoji.parse(el || document.body, { folder: "svg", ext: ".svg" }); } catch (e) { /* ohne Bilder */ } }
 function euro(x) { return x.toFixed(2).replace(".", ",") + " €"; }
 
 function zeichnePlan() {
@@ -211,15 +274,45 @@ function zeichneTafel() {
   const tg = daten.taschengeld, felder = felderLesen(), cent = tg.cent || 50;
   // Rechnung: 5 € − Miete/Strom − Essen = bleibt, dazu bis zu 6 × 50 Cent
   const grund = zahl(tg.woche), abzug = tg.posten.reduce((s, p) => s + zahl(p.betrag), 0);
-  const bleibt = grund - abzug, extra = felder.length * cent / 100, max = bleibt + ANZAHL_FELDER * cent / 100;
+  const jetzt = isoWoche(new Date()), vorher = wocheDavor(jetzt, 1);
+  const voll = kw => ((verlauf.wochen || {})[kw] || []).length >= ANZAHL_FELDER;
+  const bonusBetrag = tg.bonus == null ? 1 : Number(tg.bonus);
+  // Bonus: diese Woche alles geschafft UND letzte Woche auch
+  const bonusMoeglich = voll(vorher) && bonusBetrag > 0, bonus = bonusMoeglich && felder.length >= ANZAHL_FELDER ? bonusBetrag : 0;
+  const lernBonus = tg.lernBonus == null ? 1 : Number(tg.lernBonus), lern = lernenLesen(jetzt), lernAnz = lern.filter(Boolean).length;
+  const lernGeld = lernAnz === 3 ? lernBonus : 0;
+  const bleibt = grund - abzug, extra = felder.length * cent / 100 + lernGeld;
+  const max = bleibt + ANZAHL_FELDER * cent / 100 + (bonusMoeglich ? bonusBetrag : 0) + lernBonus;
+  $("kw").textContent = "· KW " + Number(jetzt.split("-W")[1]);
   $("rechnung").innerHTML =
     `<span>Taschengeld pro Woche</span><span class="betrag">${euro(grund)}</span>`
     + tg.posten.map(p => `<span><span class="punkt" style="background:${farbe(p.farbe)}"></span>${esc(p.name)}</span><span class="betrag minus">− ${euro(zahl(p.betrag))}</span>`).join("")
-    + `<span>Verdient diese Woche (${felder.length} × ${cent} Cent)</span><span class="betrag plus">+ ${euro(extra)}</span>`
-    + `<div class="linie"></div><span class="gesamt">Bekommst du diese Woche</span><span class="betrag gesamt">${euro(bleibt + extra)}</span>`
+    + `<span>Verdient diese Woche (${felder.length} × ${cent} Cent)</span><span class="betrag plus">+ ${euro(felder.length * cent / 100)}</span>`
+    + (lernBonus > 0 ? `<span>📚 Lern-Challenge (${lernAnz} von 3)</span><span class="betrag plus">${lernGeld ? "+ " + euro(lernGeld) : "noch offen"}</span>` : "")
+    + (bonusMoeglich ? `<span>🎁 Bonus: 2 Wochen hintereinander alles geschafft</span><span class="betrag plus">${bonus ? "+ " + euro(bonus) : "noch offen"}</span>` : "")
+    + `<div class="linie"></div><span class="gesamt">Bekommst du diese Woche</span><span class="betrag gesamt">${euro(bleibt + extra + bonus)}</span>`
     + `<span style="color:#8E8E93">höchstens möglich</span><span class="betrag" style="color:#8E8E93">${euro(max)}</span>`
     + `<div class="balken"><div style="width:${Math.round(felder.length / ANZAHL_FELDER * 100)}%"></div></div>`;
   $("satz").textContent = tg.satz;
+  // Verlauf: die letzten 4 Wochen + diese Woche, dazu die Serie "alles geschafft"
+  let serie = felder.length >= ANZAHL_FELDER ? 1 : 0;
+  for (let n = 1; n < 60 && voll(wocheDavor(jetzt, n)); n++) serie++;
+  let vh = "";
+  for (let n = 4; n >= 0; n--) {
+    const kw = wocheDavor(jetzt, n), anz = n === 0 ? felder.length : ((verlauf.wochen || {})[kw] || []).length;
+    const geld = bleibt + anz * cent / 100 + (anz >= ANZAHL_FELDER && voll(wocheDavor(kw, 1)) ? bonusBetrag : 0);
+    vh += `<div class="woche ${anz >= ANZAHL_FELDER ? "voll" : ""} ${n === 0 ? "jetzt" : ""}">KW ${Number(kw.split("-W")[1])}<b>${anz}/${ANZAHL_FELDER}${anz >= ANZAHL_FELDER ? " ⭐" : ""}</b>${n === 0 ? "läuft" : euro(geld)}</div>`;
+  }
+  vh += `<div class="woche serie">${serie >= 2 ? `🔥 ${serie} Wochen alles geschafft!` : serie === 1 ? "⭐ Noch 1 Woche voll = Bonus!" : "6 Felder voll = ⭐"}</div>`;
+  $("verlauf").innerHTML = vh;
+  const la = lernAufgaben(jetzt);
+  $("lern-titel").textContent = `Lern-Challenge der Woche – alle 3 geschafft = + ${euro(lernBonus)}`;
+  $("lernen").innerHTML = la.map((a, i) => `<div class="lern ${lern[i] ? "fertig" : ""}" data-lern="${i}"><div class="art">${a.art}</div>`
+    + `<div class="was">${esc(a.was)}</div><div class="haken">${lern[i] ? "✅" : "⬜"}</div></div>`).join("");
+  $("lernen").querySelectorAll("[data-lern]").forEach(el => tippen(el, () => {
+    const i = +el.dataset.lern, l = lernenLesen(jetzt); l[i] = !l[i]; lernenSchreiben(jetzt, l);
+    meldung(l[i] ? (l.every(Boolean) ? `🎉 Alle 3 Lernaufgaben geschafft – + ${euro(lernBonus)}!` : `✅ ${la[i].art} geschafft!`) : `${la[i].art} wieder offen`);
+  }));
   let fh = "";
   for (let i = 0; i < ANZAHL_FELDER; i++) {
     const a = felder[i];
@@ -246,8 +339,9 @@ function zeichneTafel() {
   }));
   const neu = $("vorrat").querySelector("[data-neu]"); if (neu) tippen(neu, () => aufgabeBearbeiten(-1));
   letzteFelder = felder.join("|");
+  emoji($("tafel"));
 }
-function zeichnen() { zeichnePlan(); zeichneTafel(); }
+function zeichnen() { zeichnePlan(); zeichneTafel(); emoji(document.body); }
 
 // ---------- Bearbeiten ----------
 function panel(html, ok) {
@@ -302,11 +396,15 @@ function postenBearbeiten() {
     <label>Taschengeld pro Woche</label><input id="p-woche" value="${esc(tg.woche)}">
     ${tg.posten.map((p, i) => `<label>Abzug ${i + 1}</label><div style="display:flex;gap:0.5vw"><input id="p-n${i}" value="${esc(p.name)}"><input id="p-b${i}" value="${esc(p.betrag)}" style="width:40%"></div>`).join("")}
     <label>Pro erledigter Aufgabe (Cent)</label><input id="p-cent" value="${tg.cent || 50}" inputmode="numeric">
-    <label>Satz über den Feldern</label><input id="p-satz" value="${esc(tg.satz)}">`,
+    <label>Satz über den Feldern</label><input id="p-satz" value="${esc(tg.satz)}">
+    <label>Bonus in € bei 2 Wochen hintereinander alles geschafft (0 = kein Bonus)</label><input id="p-bonus" value="${tg.bonus == null ? 1 : tg.bonus}" inputmode="decimal">
+    <label>Extra in € wenn alle 3 Lernaufgaben geschafft (0 = aus)</label><input id="p-lern" value="${tg.lernBonus == null ? 1 : tg.lernBonus}" inputmode="decimal">`,
     () => {
       tg.woche = $("p-woche").value;
       tg.posten.forEach((p, i) => { p.name = $("p-n" + i).value; p.betrag = $("p-b" + i).value; });
       tg.cent = parseInt($("p-cent").value, 10) || 50; tg.satz = $("p-satz").value;
+      tg.bonus = parseFloat(String($("p-bonus").value).replace(",", ".")) || 0;
+      tg.lernBonus = parseFloat(String($("p-lern").value).replace(",", ".")) || 0;
     });
 }
 function modus(an) {
@@ -344,7 +442,10 @@ tippen($("b-woche"), () => {
     return;
   }
   wocheScharf = 0; k.textContent = "Neue Woche"; k.classList.remove("scharf");
-  felderSchreiben([]); meldung("Neue Woche – viel Erfolg! 💪");
+  const h = hass(); if (!h) return;
+  Promise.resolve(h.callService("script", "mucki_woche_abschliessen", {}))
+    .then(() => { meldung("Woche gespeichert – viel Erfolg in der neuen! 💪"); setTimeout(async () => { await verlaufLaden(); zeichneTafel(); }, 1500); })
+    .catch(e => meldung("⚠️ Hat nicht geklappt: " + (e && e.message || e)));
 });
 tippen($("rechnung"), () => { if (bearbeiten) postenBearbeiten(); });
 tippen($("schleier"), panelZu);
@@ -356,11 +457,14 @@ async function laden() {
   if (!hass()) { setTimeout(laden, 500); return; }
   try { const r = await fetch(DATEN_URL + "?t=" + Date.now(), { cache: "no-store" }); if (r.ok) daten = await r.json(); } catch (e) { /* noch nichts gespeichert */ }
   if (!daten || !Array.isArray(daten.zeilen)) daten = JSON.parse(JSON.stringify(VORLAGE));
+  await verlaufLaden();
   zeichnen();
+  setInterval(async () => { if (!bearbeiten) { await verlaufLaden(); zeichneTafel(); } }, 60000);
   // Felder live halten (Handy/Laptop), um Mitternacht den neuen Tag markieren
   setInterval(() => {
     if (bearbeiten) return;
-    if (felderLesen().join("|") !== letzteFelder) zeichneTafel();
+    const lk = JSON.stringify(lernenLesen(isoWoche(new Date())));
+    if (felderLesen().join("|") !== letzteFelder || lk !== zeichneTafel.lern) { zeichneTafel.lern = lk; zeichneTafel(); }
     if (new Date().getDay() - 1 !== letzterTag) zeichnePlan();
   }, 800);
 }

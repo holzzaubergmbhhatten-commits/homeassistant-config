@@ -27,7 +27,7 @@ views:
         cards:
         - type: markdown
           content: |-
-            ## 💬 {{ states('input_text.flur_nachricht') }}
+            ## <ha-icon icon="mdi:message-text"></ha-icon> {{ states('input_text.flur_nachricht') }}
             <font color="#8E8E93">{{ (states.input_text.flur_nachricht.last_changed | as_local).strftime('%H:%M') }} Uhr</font>
         - type: button
           name: Nachricht ausblenden
@@ -692,7 +692,7 @@ views:
   type: panel
   cards:
   - type: iframe
-    url: /local/mucki.html?v=2
+    url: /local/mucki.html?v=3
     aspect_ratio: 53.3%
 - title: Musik
   path: musik
