@@ -147,6 +147,8 @@
   <div id="meldung"></div>
 
 <script>
+// Bei jeder Änderung an dieser Datei hochzählen – offene Monitore laden sich dann selbst neu
+const SEITEN_VERSION = 6;
 const DATEN_URL = "/local/mucki_daten.json";
 const FELDER = "input_text.mucki_felder";
 const ANZAHL_FELDER = 6;
@@ -577,6 +579,15 @@ async function laden() {
   }, 800);
 }
 laden();
+// Selbst-Aktualisierung: alle 5 Minuten nachsehen, ob es eine neuere Fassung dieser Seite gibt
+setInterval(async () => {
+  if (bearbeiten || $("panel").style.display === "block") return;
+  try {
+    const r = await fetch(location.pathname + "?t=" + Date.now(), { cache: "no-store" });
+    const m = (await r.text()).match(/SEITEN_VERSION = (\d+)/);
+    if (m && Number(m[1]) > SEITEN_VERSION) location.replace(location.pathname + "?v=" + m[1] + "&t=" + Date.now());
+  } catch (e) { /* später nochmal */ }
+}, 300000);
 </script>
 </body>
 </html>
