@@ -4,10 +4,14 @@
 # Sensor und Lampe werden über den Namen gefunden ("Haustür" oder "Eingang"), so funktioniert es,
 # sobald der Sensor (per Matter aus Apple Home geteilt) in Home Assistant auftaucht.
 # "Haustuer Licht Status" (Entitäten-Suche) zeigt, was gefunden wurde.
+# Zweite Regel: Bewegungsmelder hinten am Giebel (bei Heini und Renate) → Gesimse, genauso.
 
 input_boolean:
   haustuer_licht_auto:
     name: Haustür-Licht – von der Automation eingeschaltet
+    icon: mdi:robot
+  gesimse_licht_auto:
+    name: Gesimse – von der Automation eingeschaltet
     icon: mdi:robot
 
 template:
@@ -92,3 +96,60 @@ automation:
       - action: input_boolean.turn_off
         target:
           entity_id: input_boolean.haustuer_licht_auto
+
+  - id: gesimse_licht_bewegung
+    alias: "Gesimse: an bei Bewegung hinten am Giebel im Dunkeln, 3 Minuten danach aus"
+    mode: restart
+    triggers:
+      - trigger: event
+        event_type: state_changed
+    # Bewegungsmelder hinten am Giebel (bei Heini und Renate): Name mit Giebel/hinten/Heini/Renate/Gesims
+    conditions:
+      - condition: template
+        value_template: >-
+          {% set e = trigger.event.data.entity_id %}
+          {{ e.startswith('binary_sensor.') and trigger.event.data.new_state is not none
+             and trigger.event.data.new_state.state == 'on'
+             and trigger.event.data.new_state.attributes.device_class | default('') in ['motion', 'occupancy', 'presence']
+             and (trigger.event.data.new_state.attributes.friendly_name | default('')) is search('(?i)giebel|hinten|heini|renate|gesims') }}
+    actions:
+      - variables:
+          lampen: >-
+            {{ states.light | selectattr('name', 'search', '(?i)gesims')
+               | rejectattr('attributes.entity_id', 'defined') | map(attribute='entity_id') | list }}
+          bewegung: >-
+            {{ states.binary_sensor | selectattr('attributes.device_class', 'defined')
+               | selectattr('attributes.device_class', 'in', ['motion', 'occupancy', 'presence'])
+               | selectattr('name', 'search', '(?i)giebel|hinten|heini|renate|gesims') | map(attribute='entity_id') | list }}
+          lux: >-
+            {% set h = states.sensor | selectattr('attributes.device_class', 'defined')
+               | selectattr('attributes.device_class', 'eq', 'illuminance')
+               | selectattr('name', 'search', '(?i)giebel|hinten|heini|renate|gesims') | map(attribute='state') | map('float', 9999) | list %}
+            {{ h | min if h else 9999 }}
+          # dunkel = Sensor unter 50 Lux ODER Sonne untergegangen (Straßenlicht kann den Sensor aufhellen)
+          dunkel: >-
+            {{ lux < 50 or state_attr('sun.sun', 'elevation') | float(10) < 0 }}
+          schon_an: "{{ lampen | select('is_state', 'on') | list | count > 0 }}"
+      - condition: template
+        value_template: "{{ lampen | count > 0 and (dunkel or is_state('input_boolean.gesimse_licht_auto', 'on')) }}"
+      - if: "{{ not schon_an }}"
+        then:
+          - action: light.turn_on
+            target:
+              entity_id: "{{ lampen }}"
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.gesimse_licht_auto
+      # warten bis keine Bewegung mehr, dann noch 3 Minuten (neue Bewegung startet alles neu)
+      - wait_template: "{{ bewegung | select('is_state', 'on') | list | count == 0 }}"
+        timeout: "00:30:00"
+      - delay: "00:03:00"
+      - condition: state
+        entity_id: input_boolean.gesimse_licht_auto
+        state: "on"
+      - action: light.turn_off
+        target:
+          entity_id: "{{ lampen }}"
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.gesimse_licht_auto
