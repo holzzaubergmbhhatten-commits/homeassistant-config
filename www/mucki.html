@@ -11,9 +11,8 @@
   Feld antippen = wieder raus, "Neue Woche" leert alle Felder.
   Daten: /local/mucki_daten.json (lokal, nicht im Repository), Felder: input_text.mucki_felder.
 -->
-<script src="https://cdn.jsdelivr.net/npm/@twemoji/api@15.1.0/dist/twemoji.min.js" crossorigin="anonymous"></script>
 <style>
-  img.emoji { height: 1.1em; width: 1.1em; vertical-align: -0.15em; margin: 0 0.05em; }
+  .ic { width: 1.05em; height: 1.05em; vertical-align: -0.17em; display: inline-block; }
   :root { --blau: #007AFF; --gruen: #34C759; --rot: #FF3B30; --grau: #8E8E93; --trenn: #E5E5EA; --hell: #F2F2F7; --text: #1C1C1E; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: transparent;
@@ -27,14 +26,14 @@
   .kopf { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.8vw; }
   .kopf h1 { font-size: 1.55vw; }
   .kopf .klasse { font-size: 1vw; color: var(--grau); font-weight: 600; background: var(--hell); padding: 0.25vw 0.7vw; border-radius: 1vw; }
-  .tabelle { flex: 1 1 auto; display: grid; grid-template-columns: 1.25fr repeat(5, 1fr); grid-auto-rows: auto; align-content: stretch;
+  .tabelle { flex: 1 1 auto; display: grid; grid-template-columns: 1.45fr repeat(5, 1fr); grid-auto-rows: auto; align-content: stretch;
     border-radius: 1vw; overflow: hidden; background: var(--hell); gap: 0.1vw; }
   .tabelle > div { background: #fff; display: flex; flex-direction: column; justify-content: center; align-items: center;
     text-align: center; padding: 0.22vw 0.3vw; min-height: 0; }
   .tabelle .tag { background: var(--hell); font-weight: 600; font-size: 0.95vw; color: #3C3C43; padding: 0.5vw 0.2vw; }
   .tabelle .tag.heute { background: var(--blau); color: #fff; }
-  .tabelle .zeit { font-size: 0.8vw; font-weight: 600; color: #3C3C43; white-space: pre-line; line-height: 1.25; align-items: flex-start; text-align: left; padding-left: 0.6vw; }
-  .tabelle .zeit b { color: var(--text); font-size: 0.9vw; }
+  .tabelle .zeit { font-size: 0.72vw; font-weight: 600; color: #3C3C43; white-space: pre-line; line-height: 1.25; align-items: flex-start; text-align: left; padding-left: 0.6vw; }
+  .tabelle .zeit b { color: var(--text); font-size: 0.82vw; white-space: nowrap; }
   .tabelle .info { grid-column: 1 / -1; background: #FAFAFC; font-size: 0.68vw; color: var(--grau); padding: 0.12vw; white-space: normal; }
   .tabelle .fach .f { font-weight: 600; font-size: 0.95vw; line-height: 1.15; }
   .tabelle .fach .l { font-size: 0.7vw; color: var(--grau); margin-top: 0.15vw; min-height: 0.8vw; }
@@ -131,14 +130,14 @@
     <div class="verlauf" id="verlauf"></div>
   </div>
   <div class="karte" id="tafel">
-    <div class="tg-kopf"><h2>💰 Taschengeld <span id="kw" style="font-size:1vw;color:#8E8E93;font-weight:600"></span></h2>
+    <div class="tg-kopf"><h2><svg class="ic" viewBox="0 0 24 24"><path fill="#34C759" d="M5,6H23V18H5V6M14,9A3,3 0 0,1 17,12A3,3 0 0,1 14,15A3,3 0 0,1 11,12A3,3 0 0,1 14,9M9,8A2,2 0 0,1 7,10V14A2,2 0 0,1 9,16H19A2,2 0 0,1 21,14V10A2,2 0 0,1 19,8H9M1,10H3V20H19V22H1V10Z"/></svg> Taschengeld <span id="kw" style="font-size:1vw;color:#8E8E93;font-weight:600"></span></h2>
       <div><button class="knopf" id="b-bearbeiten">Bearbeiten</button>
       <button class="knopf" id="b-abbrechen" style="display:none">Abbrechen</button>
       <button class="knopf blau" id="b-speichern" style="display:none">Speichern</button></div></div>
     <div class="rechnung" id="rechnung"></div>
     <div class="satz" id="satz"></div>
     <div class="felder" id="felder"></div>
-    <div class="unten"><span style="font-size:0.85vw;color:#8E8E93">Falsch getippt? Auf das ✕ tippen.</span><button class="knopf rot" id="b-woche">Neue Woche</button></div>
+    <div class="unten"><span style="font-size:0.85vw;color:#8E8E93">Falsch getippt? Auf das <svg class="ic" viewBox="0 0 24 24"><path fill="#FF3B30" d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"/></svg> tippen.</span><button class="knopf rot" id="b-woche">Neue Woche</button></div>
     <div class="vorrat-titel">Aufgaben – antippen, wenn erledigt</div>
     <div class="vorrat" id="vorrat"></div>
   </div>
@@ -148,7 +147,7 @@
 
 <script>
 // Bei jeder Änderung an dieser Datei hochzählen – offene Monitore laden sich dann selbst neu
-const SEITEN_VERSION = 6;
+const SEITEN_VERSION = 7;
 const DATEN_URL = "/local/mucki_daten.json";
 const FELDER = "input_text.mucki_felder";
 const ANZAHL_FELDER = 6;
@@ -199,7 +198,7 @@ let daten = null, gesichert = null, bearbeiten = false, letzteFelder = null, let
 const $ = id => document.getElementById(id);
 function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
 function esc(t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
-function meldung(t) { const m = $("meldung"); m.textContent = t; emoji(m); m.style.display = "block"; clearTimeout(meldung.t); meldung.t = setTimeout(() => m.style.display = "none", 3500); }
+function meldung(t, icon, farbe) { const m = $("meldung"); m.innerHTML = (icon ? ic(icon, farbe) + " " : "") + esc(t); m.style.display = "block"; clearTimeout(meldung.t); meldung.t = setTimeout(() => m.style.display = "none", 3500); }
 // Tippen: am Kiosk-Monitor kommen Finger als Touch-Events, am Laptop als Klick
 function tippen(el, fn) {
   let touch = 0;
@@ -221,7 +220,7 @@ function felderSchreiben(liste) {
   // leeren über das Skript (läuft auf dem Server), sonst direkt
   const auftrag = wert === "" ? h.callService("script", "mucki_neue_woche", {})
                               : h.callService("input_text", "set_value", { entity_id: FELDER, value: wert });
-  Promise.resolve(auftrag).catch(e => meldung("⚠️ Hat nicht geklappt: " + (e && e.message || e)));
+  Promise.resolve(auftrag).catch(e => meldung("Hat nicht geklappt: " + (e && e.message || e), "warn", "#FF9500"));
 }
 // Zahl aus Text wie "2,- € wöchentl." oder "Taschengeld wöchentl. 5 €"
 function zahl(t) { const m = String(t || "").match(/(\d+(?:[.,]\d+)?)/); return m ? parseFloat(m[1].replace(",", ".")) : 0; }
@@ -289,7 +288,7 @@ function rechnenStarten(kw) {
       <div class="rechnen-aufgabe ${klasse || ""}">${esc(teile[0])}<span class="luecke">${esc(eingabe) || "&nbsp;"}</span>${esc(teile[1])}</div>
       <div class="rechnen-hinweis">${hinweis || ""}</div>
       <div class="tasten">${[1,2,3,4,5,6,7,8,9].map(z => `<button data-z="${z}">${z}</button>`).join("")}
-        <button class="weg" data-z="weg">⌫</button><button data-z="0">0</button><button class="ok" data-z="ok">✓</button></div>
+        <button class="weg" data-z="weg">${ic("loeschen")}</button><button data-z="0">0</button><button class="ok" data-z="ok">${ic("haken")}</button></div>
       <div class="zeile"><button class="knopf grau" id="p-zu">Schließen</button>
         <button class="knopf" id="p-ohne">${erledigt ? "Wieder offen" : "Ohne Prüfen abhaken"}</button></div>`;
     emoji($("panel"));
@@ -302,24 +301,24 @@ function rechnenStarten(kw) {
         ok[nr] = true; eingabe = "";
         if (ok.every(Boolean)) {
           const l = lernenLesen(kw); l[0] = true; lernenSchreiben(kw, l);
-          panelZu(); return meldung(l.every(Boolean) ? "🎉 Alles richtig – und die ganze Lern-Challenge geschafft!" : "🎉 Alles richtig gerechnet – super, Mucki!");
+          panelZu(); return meldung(l.every(Boolean) ? "Alles richtig – und die ganze Lern-Challenge geschafft!" : "Alles richtig gerechnet – super, Mucki!", "stern", "#FFD60A");
         }
-        zeigen("✅ Richtig! Weiter geht's …", "richtig");
+        zeigen(ic("haken", "#34C759") + " Richtig! Weiter geht's …", "richtig");
         setTimeout(() => { nr = ok.findIndex(x => !x); zeigen(); }, 900);
-      } else { eingabe = ""; zeigen("Fast! Nochmal versuchen 💪", "falsch"); }
+      } else { eingabe = ""; zeigen("Fast! Nochmal versuchen", "falsch"); }
     }));
     tippen($("p-zu"), panelZu);
     tippen($("p-ohne"), () => { const l = lernenLesen(kw); l[0] = !erledigt; lernenSchreiben(kw, l); panelZu(); });
   };
   $("panel").style.display = "block"; $("schleier").style.display = "block";
-  zeigen(erledigt ? "Schon geschafft ✅ – du kannst trotzdem nochmal üben" : "");
+  zeigen(erledigt ? "Schon geschafft – du kannst trotzdem nochmal üben" : "");
 }
 function lernBearbeiten(kw, i) {
   const art = ["Rechnen", "Lesen", "Schreiben"][i];
   let wurf = ((daten.lernWurf || {})[kw] || {})[i] || 0;
   panel(`<h3>${art} – diese Woche</h3><label>Aufgabe (bei Rechnen eine Aufgabe pro Zeile)</label>
     <textarea id="p-lern">${esc(lernAufgaben(kw)[i].was)}</textarea>
-    <div class="zeile"><button class="knopf" id="p-wuerfel">🎲 Neuer Vorschlag</button></div>`,
+    <div class="zeile"><button class="knopf" id="p-wuerfel">${ic("wuerfel")} Neuer Vorschlag</button></div>`,
     async () => {
       daten.lernEigene = daten.lernEigene || {}; daten.lernEigene[kw] = daten.lernEigene[kw] || {};
       daten.lernEigene[kw][i] = $("p-lern").value.trim();
@@ -327,7 +326,7 @@ function lernBearbeiten(kw, i) {
       // alte Wochen aufräumen (nur die letzten 8 behalten)
       for (const k of Object.keys(daten.lernEigene).sort().slice(0, -8)) { delete daten.lernEigene[k]; if (daten.lernWurf) delete daten.lernWurf[k]; }
       meldung("Speichere …");
-      meldung(await sofortSpeichern() ? "Gespeichert ✓" : "⚠️ Nicht gespeichert – bitte nochmal versuchen");
+      meldung(...(await sofortSpeichern() ? ["Gespeichert", "haken", "#34C759"] : ["Nicht gespeichert – bitte nochmal versuchen", "warn", "#FF9500"]));
     });
   tippen($("p-wuerfel"), () => {
     const alt = $("p-lern").value; let neu = alt;
@@ -342,7 +341,7 @@ function lernenLesen(kw) {
 function lernenSchreiben(kw, liste) {
   const h = hass(); if (!h) return;
   Promise.resolve(h.callService("input_text", "set_value", { entity_id: LERNEN, value: kw + ":" + liste.map(b => b ? "1" : "0").join("") }))
-    .catch(e => meldung("⚠️ Hat nicht geklappt: " + (e && e.message || e)));
+    .catch(e => meldung("Hat nicht geklappt: " + (e && e.message || e), "warn", "#FF9500"));
 }
 let verlauf = { wochen: {} };
 function isoWoche(d) {
@@ -356,7 +355,9 @@ async function verlaufLaden() {
   try { const r = await fetch(VERLAUF_URL + "?t=" + Date.now(), { cache: "no-store" }); if (r.ok) verlauf = await r.json(); } catch (e) { /* noch leer */ }
   if (!verlauf || typeof verlauf.wochen !== "object") verlauf = { wochen: {} };
 }
-function emoji(el) { try { if (window.twemoji) twemoji.parse(el || document.body, { folder: "svg", ext: ".svg" }); } catch (e) { /* ohne Bilder */ } }
+function emoji() { /* Symbole sind eingebaute Grafiken (der Monitor hat keine Emoji-Schrift) */ }
+const ICON = {"geld": "M5,6H23V18H5V6M14,9A3,3 0 0,1 17,12A3,3 0 0,1 14,15A3,3 0 0,1 11,12A3,3 0 0,1 14,9M9,8A2,2 0 0,1 7,10V14A2,2 0 0,1 9,16H19A2,2 0 0,1 21,14V10A2,2 0 0,1 19,8H9M1,10H3V20H19V22H1V10Z", "x": "M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z", "haken": "M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z", "loeschen": "M22,3H7C6.31,3 5.77,3.35 5.41,3.88L0,12L5.41,20.11C5.77,20.64 6.31,21 7,21H22A2,2 0 0,0 24,19V5A2,2 0 0,0 22,3M19,15.59L17.59,17L14,13.41L10.41,17L9,15.59L12.59,12L9,8.41L10.41,7L14,10.59L17.59,7L19,8.41L15.41,12", "wuerfel": "M5,3H19A2,2 0 0,1 21,5V19A2,2 0 0,1 19,21H5A2,2 0 0,1 3,19V5A2,2 0 0,1 5,3M7,5A2,2 0 0,0 5,7A2,2 0 0,0 7,9A2,2 0 0,0 9,7A2,2 0 0,0 7,5M17,15A2,2 0 0,0 15,17A2,2 0 0,0 17,19A2,2 0 0,0 19,17A2,2 0 0,0 17,15M17,5A2,2 0 0,0 15,7A2,2 0 0,0 17,9A2,2 0 0,0 19,7A2,2 0 0,0 17,5M12,10A2,2 0 0,0 10,12A2,2 0 0,0 12,14A2,2 0 0,0 14,12A2,2 0 0,0 12,10M7,15A2,2 0 0,0 5,17A2,2 0 0,0 7,19A2,2 0 0,0 9,17A2,2 0 0,0 7,15Z", "buch": "M19,2L14,6.5V17.5L19,13V2M6.5,5C4.55,5 2.45,5.4 1,6.5V21.16C1,21.41 1.25,21.66 1.5,21.66C1.6,21.66 1.65,21.59 1.75,21.59C3.1,20.94 5.05,20.5 6.5,20.5C8.45,20.5 10.55,20.9 12,22C13.35,21.15 15.8,20.5 17.5,20.5C19.15,20.5 20.85,20.81 22.25,21.56C22.35,21.61 22.4,21.59 22.5,21.59C22.75,21.59 23,21.34 23,21.09V6.5C22.4,6.05 21.75,5.75 21,5.5V19C19.9,18.65 18.7,18.5 17.5,18.5C15.8,18.5 13.35,19.15 12,20V6.5C10.55,5.4 8.45,5 6.5,5Z", "geschenk": "M22,12V20A2,2 0 0,1 20,22H4A2,2 0 0,1 2,20V12A1,1 0 0,1 1,11V8A2,2 0 0,1 3,6H6.17C6.06,5.69 6,5.35 6,5A3,3 0 0,1 9,2C10,2 10.88,2.5 11.43,3.24V3.23L12,4L12.57,3.23V3.24C13.12,2.5 14,2 15,2A3,3 0 0,1 18,5C18,5.35 17.94,5.69 17.83,6H21A2,2 0 0,1 23,8V11A1,1 0 0,1 22,12M4,20H11V12H4V20M20,20V12H13V20H20M9,4A1,1 0 0,0 8,5A1,1 0 0,0 9,6A1,1 0 0,0 10,5A1,1 0 0,0 9,4M15,4A1,1 0 0,0 14,5A1,1 0 0,0 15,6A1,1 0 0,0 16,5A1,1 0 0,0 15,4M3,8V10H11V8H3M13,8V10H21V8H13Z", "stern": "M12,17.27L18.18,21L16.54,13.97L22,9.24L14.81,8.62L12,2L9.19,8.62L2,9.24L7.45,13.97L5.82,21L12,17.27Z", "feuer": "M17.66 11.2C17.43 10.9 17.15 10.64 16.89 10.38C16.22 9.78 15.46 9.35 14.82 8.72C13.33 7.26 13 4.85 13.95 3C13 3.23 12.17 3.75 11.46 4.32C8.87 6.4 7.85 10.07 9.07 13.22C9.11 13.32 9.15 13.42 9.15 13.55C9.15 13.77 9 13.97 8.8 14.05C8.57 14.15 8.33 14.09 8.14 13.93C8.08 13.88 8.04 13.83 8 13.76C6.87 12.33 6.69 10.28 7.45 8.64C5.78 10 4.87 12.3 5 14.47C5.06 14.97 5.12 15.47 5.29 15.97C5.43 16.57 5.7 17.17 6 17.7C7.08 19.43 8.95 20.67 10.96 20.92C13.1 21.19 15.39 20.8 17.03 19.32C18.86 17.66 19.5 15 18.56 12.72L18.43 12.46C18.22 12 17.66 11.2 17.66 11.2Z", "kasten": "M19,3H5C3.89,3 3,3.89 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5C21,3.89 20.1,3 19,3M19,5V19H5V5H19Z", "kastenok": "M10,17L5,12L6.41,10.58L10,14.17L17.59,6.58L19,8M19,3H5C3.89,3 3,3.89 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5C21,3.89 20.1,3 19,3Z", "stift": "M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z", "warn": "M13,14H11V10H13M13,18H11V16H13M1,21H23L12,2L1,21Z"};
+function ic(n, f) { return `<svg class="ic" viewBox="0 0 24 24"><path fill="${f || "currentColor"}" d="${ICON[n]}"/></svg>`; }
 function euro(x) { return x.toFixed(2).replace(".", ",") + " €"; }
 
 function zeichnePlan() {
@@ -395,8 +396,8 @@ function zeichneTafel() {
     `<span>Taschengeld pro Woche</span><span class="betrag">${euro(grund)}</span>`
     + tg.posten.map(p => `<span><span class="punkt" style="background:${farbe(p.farbe)}"></span>${esc(p.name)}</span><span class="betrag minus">− ${euro(zahl(p.betrag))}</span>`).join("")
     + `<span>Verdient diese Woche (${felder.length} × ${cent} Cent)</span><span class="betrag plus">+ ${euro(felder.length * cent / 100)}</span>`
-    + (lernBonus > 0 ? `<span>📚 Lern-Challenge (${lernAnz} von 3)</span><span class="betrag plus">${lernGeld ? "+ " + euro(lernGeld) : "noch offen"}</span>` : "")
-    + (bonusMoeglich ? `<span>🎁 Bonus: 2 Wochen hintereinander alles geschafft</span><span class="betrag plus">${bonus ? "+ " + euro(bonus) : "noch offen"}</span>` : "")
+    + (lernBonus > 0 ? `<span>${ic("buch", "#007AFF")} Lern-Challenge (${lernAnz} von 3)</span><span class="betrag plus">${lernGeld ? "+ " + euro(lernGeld) : "noch offen"}</span>` : "")
+    + (bonusMoeglich ? `<span>${ic("geschenk", "#FF9500")} Bonus: 2 Wochen hintereinander alles geschafft</span><span class="betrag plus">${bonus ? "+ " + euro(bonus) : "noch offen"}</span>` : "")
     + `<div class="linie"></div><span class="gesamt">Bekommst du diese Woche</span><span class="betrag gesamt">${euro(bleibt + extra + bonus)}</span>`
     + `<span style="color:#8E8E93">höchstens möglich</span><span class="betrag" style="color:#8E8E93">${euro(max)}</span>`
     + `<div class="balken"><div style="width:${Math.round(felder.length / ANZAHL_FELDER * 100)}%"></div></div>`;
@@ -408,25 +409,25 @@ function zeichneTafel() {
   for (let n = 4; n >= 0; n--) {
     const kw = wocheDavor(jetzt, n), anz = n === 0 ? felder.length : ((verlauf.wochen || {})[kw] || []).length;
     const geld = bleibt + anz * cent / 100 + (anz >= ANZAHL_FELDER && voll(wocheDavor(kw, 1)) ? bonusBetrag : 0);
-    vh += `<div class="woche ${anz >= ANZAHL_FELDER ? "voll" : ""} ${n === 0 ? "jetzt" : ""}">KW ${Number(kw.split("-W")[1])}<b>${anz}/${ANZAHL_FELDER}${anz >= ANZAHL_FELDER ? " ⭐" : ""}</b>${n === 0 ? "läuft" : euro(geld)}</div>`;
+    vh += `<div class="woche ${anz >= ANZAHL_FELDER ? "voll" : ""} ${n === 0 ? "jetzt" : ""}">KW ${Number(kw.split("-W")[1])}<b>${anz}/${ANZAHL_FELDER}${anz >= ANZAHL_FELDER ? " " + ic("stern", "#FFB800") : ""}</b>${n === 0 ? "läuft" : euro(geld)}</div>`;
   }
-  vh += `<div class="woche serie">${serie >= 2 ? `🔥 ${serie} Wochen alles geschafft!` : serie === 1 ? "⭐ Noch 1 Woche voll = Bonus!" : "6 Felder voll = ⭐"}</div>`;
+  vh += `<div class="woche serie">${serie >= 2 ? `${ic("feuer", "#FF6B00")} ${serie} Wochen alles geschafft!` : serie === 1 ? `${ic("stern", "#FFB800")} Noch 1 Woche voll = Bonus!` : `6 Felder voll = ${ic("stern", "#FFB800")}`}</div>`;
   $("verlauf").innerHTML = vh;
   const la = lernAufgaben(jetzt);
   $("lern-titel").textContent = `Lern-Challenge der Woche – alle 3 geschafft = + ${euro(lernBonus)}`;
   $("lernen").innerHTML = la.map((a, i) => `<div class="lern ${lern[i] ? "fertig" : ""}" data-lern="${i}"><div class="art">${a.art}</div>`
-    + `<div class="was">${esc(a.was)}</div><div class="haken">${lern[i] ? "✅" : "⬜"}</div><div class="stift" data-stift="${i}">✏️</div></div>`).join("");
+    + `<div class="was">${esc(a.was)}</div><div class="haken">${lern[i] ? ic("kastenok", "#34C759") : ic("kasten", "#AEAEB2")}</div><div class="stift" data-stift="${i}">${ic("stift", "#007AFF")}</div></div>`).join("");
   $("lernen").querySelectorAll("[data-lern]").forEach(el => tippen(el, ev => {
     const i = +el.dataset.lern;
     if (ev && ev.target && ev.target.closest && ev.target.closest("[data-stift]")) return lernBearbeiten(jetzt, i);
     if (i === 0) return rechnenStarten(jetzt);
     const l = lernenLesen(jetzt); l[i] = !l[i]; lernenSchreiben(jetzt, l);
-    meldung(l[i] ? (l.every(Boolean) ? `🎉 Alle 3 Lernaufgaben geschafft – + ${euro(lernBonus)}!` : `✅ ${la[i].art} geschafft!`) : `${la[i].art} wieder offen`);
+    meldung(l[i] ? (l.every(Boolean) ? `Alle 3 Lernaufgaben geschafft – + ${euro(lernBonus)}!` : `${la[i].art} geschafft!`) : `${la[i].art} wieder offen`, l[i] ? "stern" : null, "#FFD60A");
   }));
   let fh = "";
   for (let i = 0; i < ANZAHL_FELDER; i++) {
     const a = felder[i];
-    fh += a ? `<div class="feld voll" data-feld="${i}"><div class="magnet" style="background:${farbe(aufgabeFarbe(a))}">${esc(a)}</div><div class="weg">✕</div></div>`
+    fh += a ? `<div class="feld voll" data-feld="${i}"><div class="magnet" style="background:${farbe(aufgabeFarbe(a))}">${esc(a)}</div><div class="weg">${ic("x")}</div></div>`
             : `<div class="feld">${i + 1}</div>`;
   }
   $("felder").innerHTML = fh;
@@ -442,10 +443,10 @@ function zeichneTafel() {
     const a = daten.aufgaben[+el.dataset.aufgabe];
     if (bearbeiten) return aufgabeBearbeiten(+el.dataset.aufgabe);
     const l = felderLesen();
-    if (l.length >= ANZAHL_FELDER) return meldung("Alle 6 Felder sind voll – super gemacht! 🎉");
+    if (l.length >= ANZAHL_FELDER) return meldung("Alle 6 Felder sind voll – super gemacht!", "stern", "#FFD60A");
     l.push(a.name); felderSchreiben(l);
     el.classList.add("gedrueckt"); setTimeout(() => el.classList.remove("gedrueckt"), 200);
-    meldung(`👍 ${a.name} – ${cent} Cent verdient!`);
+    meldung(`${a.name} – ${cent} Cent verdient!`, "haken", "#34C759");
   }));
   const neu = $("vorrat").querySelector("[data-neu]"); if (neu) tippen(neu, () => aufgabeBearbeiten(-1));
   letzteFelder = felder.join("|");
@@ -537,9 +538,9 @@ tippen($("b-speichern"), async () => {
       await new Promise(r => setTimeout(r, 700));
       try { const r = await fetch(DATEN_URL + "?t=" + Date.now(), { cache: "no-store" }); if (r.ok) ok = (await r.json()).gespeichert === marke; } catch (e) { /* weiter */ }
     }
-    if (ok) { meldung("Gespeichert ✓"); modus(false); }
-    else meldung("⚠️ Nicht gespeichert – bitte nochmal auf Speichern tippen");
-  } catch (e) { meldung("⚠️ Speichern fehlgeschlagen: " + (e && e.message || e)); }
+    if (ok) { meldung("Gespeichert", "haken", "#34C759"); modus(false); }
+    else meldung("Nicht gespeichert – bitte nochmal auf Speichern tippen", "warn", "#FF9500");
+  } catch (e) { meldung("Speichern fehlgeschlagen: " + (e && e.message || e), "warn", "#FF9500"); }
 });
 // Neue Woche: zur Sicherheit zweimal tippen (kein Dialog – der Kiosk-Browser zeigt die nicht zuverlässig)
 let wocheScharf = 0;
@@ -554,8 +555,8 @@ tippen($("b-woche"), () => {
   wocheScharf = 0; k.textContent = "Neue Woche"; k.classList.remove("scharf");
   const h = hass(); if (!h) return;
   Promise.resolve(h.callService("script", "mucki_woche_abschliessen", {}))
-    .then(() => { meldung("Woche gespeichert – viel Erfolg in der neuen! 💪"); setTimeout(async () => { await verlaufLaden(); zeichneTafel(); }, 1500); })
-    .catch(e => meldung("⚠️ Hat nicht geklappt: " + (e && e.message || e)));
+    .then(() => { meldung("Woche gespeichert – viel Erfolg in der neuen!", "haken", "#34C759"); setTimeout(async () => { await verlaufLaden(); zeichneTafel(); }, 1500); })
+    .catch(e => meldung("Hat nicht geklappt: " + (e && e.message || e), "warn", "#FF9500"));
 });
 tippen($("rechnung"), () => { if (bearbeiten) postenBearbeiten(); });
 tippen($("schleier"), panelZu);

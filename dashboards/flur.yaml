@@ -692,7 +692,7 @@ views:
   type: panel
   cards:
   - type: iframe
-    url: /local/mucki.html?v=6
+    url: /local/mucki.html?v=7
     aspect_ratio: 53.3%
 - title: Musik
   path: musik
