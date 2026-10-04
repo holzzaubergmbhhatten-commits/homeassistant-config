@@ -291,6 +291,16 @@ views:
         columns: 6
         rows: 2
     - type: button
+      name: Schule & Taschengeld
+      icon: mdi:school
+      show_state: false
+      tap_action:
+        action: navigate
+        navigation_path: /flur-display/schule
+      grid_options:
+        columns: 6
+        rows: 2
+    - type: button
       name: Kameras
       icon: mdi:cctv
       show_state: false
@@ -676,6 +686,273 @@ views:
     tap_action:
       action: navigate
       navigation_path: /flur-display/start
+- title: Schule & Taschengeld
+  path: schule
+  icon: mdi:school
+  type: sections
+  max_columns: 2
+  badges:
+  - type: entity
+    entity: weather.touchmonitor_home
+    name: Start
+    icon: mdi:home
+    show_name: true
+    show_state: false
+    show_icon: true
+    color: blue
+    tap_action:
+      action: navigate
+      navigation_path: /flur-display/start
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Stundenplan
+      heading_style: title
+      icon: mdi:school
+    - type: markdown
+      grid_options:
+        columns: full
+      content: |-
+        {% set heute = now().weekday() %}
+        <table width="100%"><tr><th></th><th>{% if heute == 0 %}<font color="#007AFF">▶ Mo</font>{% else %}Mo{% endif %}</th><th>{% if heute == 1 %}<font color="#007AFF">▶ Di</font>{% else %}Di{% endif %}</th><th>{% if heute == 2 %}<font color="#007AFF">▶ Mi</font>{% else %}Mi{% endif %}</th><th>{% if heute == 3 %}<font color="#007AFF">▶ Do</font>{% else %}Do{% endif %}</th><th>{% if heute == 4 %}<font color="#007AFF">▶ Fr</font>{% else %}Fr{% endif %}</th></tr>
+        <tr><td><b>1. Stunde</b><br><font color="#8E8E93">8.10–9.05</font></td><td align="center">{% if heute == 0 %}<b><font color="#007AFF">Deutsch</font></b>{% else %}Deutsch{% endif %}</td><td align="center">{% if heute == 1 %}<b><font color="#007AFF">Religion / WN</font></b>{% else %}Religion / WN{% endif %}</td><td align="center">{% if heute == 2 %}<b><font color="#007AFF">Schwimmen</font></b>{% else %}Schwimmen{% endif %}</td><td align="center">{% if heute == 3 %}<b><font color="#007AFF">Deutsch</font></b>{% else %}Deutsch{% endif %}</td><td align="center">{% if heute == 4 %}<b><font color="#007AFF">Deutsch</font></b>{% else %}Deutsch{% endif %}</td></tr>
+        <tr><td><b>2. Stunde</b><br><font color="#8E8E93">9.10–9.55</font></td><td align="center">{% if heute == 0 %}<b><font color="#007AFF">Mathe</font></b>{% else %}Mathe{% endif %}</td><td align="center">{% if heute == 1 %}<b><font color="#007AFF">Religion / WN</font></b>{% else %}Religion / WN{% endif %}</td><td align="center">{% if heute == 2 %}<b><font color="#007AFF">Schwimmen</font></b>{% else %}Schwimmen{% endif %}</td><td align="center">{% if heute == 3 %}<b><font color="#007AFF">Mathe</font></b>{% else %}Mathe{% endif %}</td><td align="center">{% if heute == 4 %}<b><font color="#007AFF">Mathe</font></b>{% else %}Mathe{% endif %}</td></tr>
+        <tr><td colspan="6" align="center"><font color="#8E8E93">Frühstück & Pause · 9.55–10.25</font></td></tr>
+        <tr><td><b>3. Stunde</b><br><font color="#8E8E93">10.25–11.10</font></td><td align="center">{% if heute == 0 %}<b><font color="#007AFF">Sachunterricht</font></b>{% else %}Sachunterricht{% endif %}</td><td align="center">{% if heute == 1 %}<b><font color="#007AFF">Deutsch</font></b>{% else %}Deutsch{% endif %}</td><td align="center">{% if heute == 2 %}<b><font color="#007AFF">Deutsch</font></b>{% else %}Deutsch{% endif %}</td><td align="center">{% if heute == 3 %}<b><font color="#007AFF">Kunst</font></b>{% else %}Kunst{% endif %}</td><td align="center">{% if heute == 4 %}<b><font color="#007AFF">Sachunterricht</font></b>{% else %}Sachunterricht{% endif %}</td></tr>
+        <tr><td><b>4. Stunde</b><br><font color="#8E8E93">11.10–11.55</font></td><td align="center">{% if heute == 0 %}<b><font color="#007AFF">Mathe</font></b>{% else %}Mathe{% endif %}</td><td align="center">{% if heute == 1 %}<b><font color="#007AFF">Mathe</font></b>{% else %}Mathe{% endif %}</td><td align="center">{% if heute == 2 %}<b><font color="#007AFF">Mathe</font></b>{% else %}Mathe{% endif %}</td><td align="center">{% if heute == 3 %}<b><font color="#007AFF">Kunst</font></b>{% else %}Kunst{% endif %}</td><td align="center">{% if heute == 4 %}<b><font color="#007AFF">Musik</font></b>{% else %}Musik{% endif %}</td></tr>
+        <tr><td colspan="6" align="center"><font color="#8E8E93">Pause · 11.55–12.15</font></td></tr>
+        <tr><td><b>5. Stunde</b><br><font color="#8E8E93">12.15–13.00</font></td><td align="center">{% if heute == 0 %}<b><font color="#007AFF">Betreuung</font></b>{% else %}Betreuung{% endif %}</td><td align="center">{% if heute == 1 %}<b><font color="#007AFF">Sachunterricht</font></b>{% else %}Sachunterricht{% endif %}</td><td align="center">{% if heute == 2 %}<b><font color="#007AFF">Betreuung</font></b>{% else %}Betreuung{% endif %}</td><td align="center">{% if heute == 3 %}<b><font color="#007AFF">SB</font></b>{% else %}SB{% endif %}</td><td align="center">{% if heute == 4 %}<b><font color="#007AFF">Betreuung</font></b>{% else %}Betreuung{% endif %}</td></tr>
+        <tr><td colspan="6" align="center"><font color="#8E8E93">Mittagessen · 13.00–13.30</font></td></tr>
+        <tr><td colspan="6" align="center"><font color="#8E8E93">Hausaufgaben · 13.30–14.15</font></td></tr>
+        <tr><td colspan="6" align="center"><font color="#8E8E93">Spielen & Angebote · 14.15–15.45</font></td></tr>
+        </table>
+
+        <font color="#8E8E93">Frühbetreuung 7.00–7.45 · Gleitzeit 8.00–8.10 · Klasse 2, ab 17.08.2026</font>
+  - type: grid
+    cards:
+    - type: heading
+      heading: Taschengeld
+      heading_style: title
+      icon: mdi:piggy-bank
+    - type: markdown
+      grid_options:
+        columns: full
+      content: |-
+        ## Taschengeld wöchentlich: 5 €
+        | | |
+        |---|---|
+        | 🏠 **Miete / Strom** | 2 € wöchentlich |
+        | 🍽 **Essen usw.** | 1 € wöchentlich |
+
+        **Helfe ich im Haushalt, bekomme ich 50 Cent.**
+        {% set n = states('counter.taschengeld_extra') | int(0) %}
+        ### Diese Woche: <font color="#34C759">{{ n }} × 50 ct = {{ '%.2f' | format(n * 0.5) | replace('.', ',') }} €</font>
+        {% set l = states('input_text.taschengeld_liste') %}{% if l not in ['', 'unknown', 'unavailable'] %}<font color="#8E8E93">{{ l }}</font>{% endif %}
+    - type: grid
+      columns: 3
+      square: false
+      grid_options:
+        columns: full
+      cards:
+        - type: button
+          name: "Zimmer aufräumen"
+          show_icon: false
+          tap_action:
+            action: perform-action
+            perform_action: script.taschengeld_aufgabe
+            data:
+              aufgabe: "Zimmer aufräumen"
+        - type: button
+          name: "Gartenarbeit"
+          show_icon: false
+          tap_action:
+            action: perform-action
+            perform_action: script.taschengeld_aufgabe
+            data:
+              aufgabe: "Gartenarbeit"
+        - type: button
+          name: "Fegen"
+          show_icon: false
+          tap_action:
+            action: perform-action
+            perform_action: script.taschengeld_aufgabe
+            data:
+              aufgabe: "Fegen"
+        - type: button
+          name: "Leergut wegbringen"
+          show_icon: false
+          tap_action:
+            action: perform-action
+            perform_action: script.taschengeld_aufgabe
+            data:
+              aufgabe: "Leergut wegbringen"
+        - type: button
+          name: "Fahrrad putzen"
+          show_icon: false
+          tap_action:
+            action: perform-action
+            perform_action: script.taschengeld_aufgabe
+            data:
+              aufgabe: "Fahrrad putzen"
+        - type: button
+          name: "Geschirrspüler einräumen"
+          show_icon: false
+          tap_action:
+            action: perform-action
+            perform_action: script.taschengeld_aufgabe
+            data:
+              aufgabe: "Geschirrspüler einräumen"
+        - type: button
+          name: "Beim Kochen helfen"
+          show_icon: false
+          tap_action:
+            action: perform-action
+            perform_action: script.taschengeld_aufgabe
+            data:
+              aufgabe: "Beim Kochen helfen"
+        - type: button
+          name: "Laub harken"
+          show_icon: false
+          tap_action:
+            action: perform-action
+            perform_action: script.taschengeld_aufgabe
+            data:
+              aufgabe: "Laub harken"
+        - type: button
+          name: "Blumen gießen"
+          show_icon: false
+          tap_action:
+            action: perform-action
+            perform_action: script.taschengeld_aufgabe
+            data:
+              aufgabe: "Blumen gießen"
+        - type: button
+          name: "Werkstatt helfen"
+          show_icon: false
+          tap_action:
+            action: perform-action
+            perform_action: script.taschengeld_aufgabe
+            data:
+              aufgabe: "Werkstatt helfen"
+        - type: button
+          name: "Pakete holen"
+          show_icon: false
+          tap_action:
+            action: perform-action
+            perform_action: script.taschengeld_aufgabe
+            data:
+              aufgabe: "Pakete holen"
+        - type: button
+          name: "Badezimmer putzen"
+          show_icon: false
+          tap_action:
+            action: perform-action
+            perform_action: script.taschengeld_aufgabe
+            data:
+              aufgabe: "Badezimmer putzen"
+        - type: button
+          name: "Wäsche zusammenlegen"
+          show_icon: false
+          tap_action:
+            action: perform-action
+            perform_action: script.taschengeld_aufgabe
+            data:
+              aufgabe: "Wäsche zusammenlegen"
+        - type: button
+          name: "Rasenmähen"
+          show_icon: false
+          tap_action:
+            action: perform-action
+            perform_action: script.taschengeld_aufgabe
+            data:
+              aufgabe: "Rasenmähen"
+        - type: button
+          name: "Müll wegbringen"
+          show_icon: false
+          tap_action:
+            action: perform-action
+            perform_action: script.taschengeld_aufgabe
+            data:
+              aufgabe: "Müll wegbringen"
+        - type: button
+          name: "Hausbau helfen"
+          show_icon: false
+          tap_action:
+            action: perform-action
+            perform_action: script.taschengeld_aufgabe
+            data:
+              aufgabe: "Hausbau helfen"
+        - type: button
+          name: "✨ Tisch decken"
+          show_icon: false
+          tap_action:
+            action: perform-action
+            perform_action: script.taschengeld_aufgabe
+            data:
+              aufgabe: "Tisch decken"
+        - type: button
+          name: "✨ Tisch abräumen"
+          show_icon: false
+          tap_action:
+            action: perform-action
+            perform_action: script.taschengeld_aufgabe
+            data:
+              aufgabe: "Tisch abräumen"
+        - type: button
+          name: "✨ Geschirrspüler ausräumen"
+          show_icon: false
+          tap_action:
+            action: perform-action
+            perform_action: script.taschengeld_aufgabe
+            data:
+              aufgabe: "Geschirrspüler ausräumen"
+        - type: button
+          name: "✨ Staubsaugen"
+          show_icon: false
+          tap_action:
+            action: perform-action
+            perform_action: script.taschengeld_aufgabe
+            data:
+              aufgabe: "Staubsaugen"
+        - type: button
+          name: "✨ Schuhe aufräumen"
+          show_icon: false
+          tap_action:
+            action: perform-action
+            perform_action: script.taschengeld_aufgabe
+            data:
+              aufgabe: "Schuhe aufräumen"
+        - type: button
+          name: "✨ Auto aussaugen helfen"
+          show_icon: false
+          tap_action:
+            action: perform-action
+            perform_action: script.taschengeld_aufgabe
+            data:
+              aufgabe: "Auto aussaugen helfen"
+    - type: button
+      name: Letzte zurücknehmen
+      icon: mdi:undo
+      show_state: false
+      icon_height: 28px
+      grid_options:
+        columns: 6
+      tap_action:
+        action: perform-action
+        perform_action: script.taschengeld_rueckgaengig
+    - type: button
+      name: Ausgezahlt – neue Woche
+      icon: mdi:cash-check
+      show_state: false
+      icon_height: 28px
+      grid_options:
+        columns: 6
+      tap_action:
+        action: perform-action
+        perform_action: script.taschengeld_ausgezahlt
+        confirmation:
+          text: Wurde das Taschengeld ausgezahlt? Der Zähler fängt dann wieder bei 0 an.
 - title: Musik
   path: musik
   icon: mdi:music
