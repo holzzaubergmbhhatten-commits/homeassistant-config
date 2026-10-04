@@ -11,92 +11,99 @@
   Feld antippen = wieder raus, "Neue Woche" leert alle Felder.
   Daten: /local/mucki_daten.json (lokal, nicht im Repository), Felder: input_text.mucki_felder.
 -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
 <style>
-  :root { --blau: #007AFF; --grau: #8E8E93; --linie: #3a3a3c; }
+  :root { --blau: #007AFF; --gruen: #34C759; --rot: #FF3B30; --grau: #8E8E93; --trenn: #E5E5EA; --hell: #F2F2F7; --text: #1C1C1E; }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: transparent; font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+  html, body { margin: 0; height: 100%; background: transparent;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", Roboto, sans-serif;
     -webkit-user-select: none; -webkit-touch-callout: none; user-select: none; -webkit-tap-highlight-color: transparent; }
-  body { display: grid; grid-template-columns: 56fr 44fr; gap: 1.6vw; padding: 1.2vw; }
-  .karte { background: #fff; color: #1c1c1e; border-radius: 1.4vw; padding: 1.2vw 1.4vw; position: relative; overflow: hidden;
-    box-shadow: 0 0.3vw 1.2vw rgba(0,0,0,.25); display: flex; flex-direction: column; min-height: 0; }
+  body { display: grid; grid-template-columns: 50fr 50fr; gap: 1.4vw; padding: 1.2vw; color: var(--text); }
+  .karte { background: #fff; border-radius: 1.6vw; padding: 1.3vw 1.5vw; position: relative; overflow: hidden;
+    box-shadow: 0 0.2vw 1.4vw rgba(0,0,0,.12); display: flex; flex-direction: column; min-height: 0; }
+  h1, h2 { font-weight: 700; letter-spacing: -0.02em; margin: 0; }
   /* ---------- Stundenplan ---------- */
-  .kopf { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.6vw; }
-  .kopf h1 { font-size: 1.6vw; margin: 0; }
-  .kopf .klasse { font-size: 1.3vw; }
-  table { width: 100%; border-collapse: collapse; table-layout: fixed; flex: 1; }
-  th, td { border: 0.12vw solid var(--linie); padding: 0.25vw 0.4vw; vertical-align: middle; }
-  th { background: #d9d9de; font-size: 1.1vw; height: 2.2vw; }
-  th.heute { background: var(--blau); color: #fff; }
-  td.zeit { width: 24%; text-align: center; font-weight: 700; font-size: 0.95vw; line-height: 1.2; white-space: pre-line; }
-  tr.info td.zeit { font-size: 0.72vw; font-weight: 600; line-height: 1.15; }
-  tr.info td { height: 1.9vw; padding-top: 0.1vw; padding-bottom: 0.1vw; }
-  td.fach { text-align: center; position: relative; height: 3.3vw; }
-  td.fach .f { font-weight: 700; font-size: 1.1vw; }
-  td.fach .l { font-size: 0.8vw; text-align: right; margin-top: 0.15vw; color: #333; min-height: 0.9vw; }
-  td.heute { background: rgba(0,122,255,.10); }
-  td.heute .f { color: var(--blau); }
-  /* ---------- Tafel ---------- */
-  .tafel { font-family: "Patrick Hand", "Comic Sans MS", "Segoe Print", cursive; border: 0.6vw solid #d6d6d6; }
-  .tafel h2 { font-size: 2.3vw; margin: 0 0 0.6vw; font-weight: 400; }
-  .posten { display: grid; grid-template-columns: auto 1fr; gap: 0.5vw 1.2vw; align-items: center; margin-bottom: 0.8vw; }
-  .posten .betrag { font-size: 1.7vw; }
-  .magnet { border-radius: 0.5vw; padding: 0.35vw 0.7vw; font-size: 1.35vw; line-height: 1.1; text-align: center; color: #111;
-    box-shadow: inset 0 -0.15vw 0 rgba(0,0,0,.15), 0 0.1vw 0.3vw rgba(0,0,0,.25); cursor: pointer; display: flex;
-    align-items: center; justify-content: center; min-height: 2.9vw; border: 0.08vw solid rgba(0,0,0,.15); }
-  .magnet.weiss { background: #fafafa; }
-  .magnet:active, .magnet.gedrueckt { transform: scale(0.95); }
-  .satz { font-size: 1.6vw; margin: 0.2vw 0 0.5vw; }
-  .felder { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(3, 3.4vw); border: 0.25vw solid #111; }
-  .feld { border: 0.15vw solid #111; padding: 0.25vw; display: flex; }
-  .feld .magnet { flex: 1; }
-  .summe { font-size: 1.6vw; margin: 0.5vw 0; display: flex; justify-content: space-between; align-items: center; }
-  .summe b { color: #1f9d3a; }
-  .knopf { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 1.05vw; border: 0; border-radius: 0.8vw;
-    padding: 0.6vw 1vw; background: #ff3b30; color: #fff; font-weight: 600; cursor: pointer; }
-  .knopf.grau { background: #e5e5ea; color: #1c1c1e; }
-  .knopf.blau { background: var(--blau); }
+  .kopf { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.8vw; }
+  .kopf h1 { font-size: 1.55vw; }
+  .kopf .klasse { font-size: 1vw; color: var(--grau); font-weight: 600; background: var(--hell); padding: 0.25vw 0.7vw; border-radius: 1vw; }
+  .tabelle { flex: 1; display: grid; grid-template-columns: 1.25fr repeat(5, 1fr); grid-auto-rows: auto; align-content: stretch;
+    border-radius: 1vw; overflow: hidden; background: var(--hell); gap: 0.1vw; }
+  .tabelle > div { background: #fff; display: flex; flex-direction: column; justify-content: center; align-items: center;
+    text-align: center; padding: 0.3vw 0.3vw; min-height: 0; }
+  .tabelle .tag { background: var(--hell); font-weight: 600; font-size: 0.95vw; color: #3C3C43; padding: 0.5vw 0.2vw; }
+  .tabelle .tag.heute { background: var(--blau); color: #fff; }
+  .tabelle .zeit { font-size: 0.8vw; font-weight: 600; color: #3C3C43; white-space: pre-line; line-height: 1.25; align-items: flex-start; text-align: left; padding-left: 0.6vw; }
+  .tabelle .zeit b { color: var(--text); font-size: 0.9vw; }
+  .tabelle .info { grid-column: 1 / -1; background: #FAFAFC; font-size: 0.72vw; color: var(--grau); padding: 0.25vw; white-space: normal; }
+  .tabelle .fach .f { font-weight: 600; font-size: 0.95vw; line-height: 1.15; }
+  .tabelle .fach .l { font-size: 0.7vw; color: var(--grau); margin-top: 0.15vw; min-height: 0.8vw; }
+  .tabelle .fach.heute { background: rgba(0,122,255,.08); }
+  .tabelle .fach.heute .f { color: var(--blau); }
+  /* ---------- Taschengeld ---------- */
+  .tg-kopf { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.7vw; }
+  .tg-kopf h2 { font-size: 1.55vw; }
+  .rechnung { display: grid; grid-template-columns: 1fr auto; gap: 0.35vw 1vw; background: var(--hell); border-radius: 1vw; padding: 0.7vw 1vw; font-size: 1vw; }
+  .rechnung .minus { color: var(--rot); } .rechnung .plus { color: var(--gruen); }
+  .rechnung .linie { grid-column: 1 / -1; height: 0.08vw; background: #D1D1D6; }
+  .rechnung .gesamt { font-weight: 700; font-size: 1.2vw; }
+  .rechnung .betrag { text-align: right; font-variant-numeric: tabular-nums; }
+  .punkt { display: inline-block; width: 0.75vw; height: 0.75vw; border-radius: 50%; margin-right: 0.5vw; vertical-align: middle; }
+  .balken { grid-column: 1 / -1; height: 0.6vw; border-radius: 0.3vw; background: #E5E5EA; overflow: hidden; margin-top: 0.2vw; }
+  .balken > div { height: 100%; background: var(--gruen); border-radius: 0.3vw; transition: width .4s; }
+  .satz { font-size: 1vw; color: #3C3C43; margin: 0.8vw 0 0.5vw; font-weight: 600; }
+  .felder { display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 2.9vw; gap: 0.5vw; }
+  .feld { border-radius: 0.9vw; border: 0.12vw dashed #C7C7CC; display: flex; align-items: center; justify-content: center;
+    color: #C7C7CC; font-size: 0.85vw; position: relative; }
+  .feld.voll { border: 0; }
+  .feld .magnet { width: 100%; height: 100%; }
+  .feld .weg { position: absolute; top: -0.45vw; right: -0.45vw; width: 1.6vw; height: 1.6vw; border-radius: 50%; background: #fff;
+    color: var(--rot); font-size: 1vw; font-weight: 700; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0.1vw 0.4vw rgba(0,0,0,.25); }
+  .magnet { border-radius: 0.9vw; padding: 0.3vw 0.6vw; font-size: 0.95vw; font-weight: 600; line-height: 1.15; text-align: center;
+    color: #1C1C1E; display: flex; align-items: center; justify-content: center; min-height: 2.6vw; cursor: pointer;
+    box-shadow: 0 0.08vw 0.25vw rgba(0,0,0,.12); transition: transform .12s, opacity .2s; }
+  .magnet:active, .magnet.gedrueckt { transform: scale(0.94); }
+  .vorrat-titel { font-size: 0.85vw; color: var(--grau); font-weight: 600; margin: 0.8vw 0 0.4vw; text-transform: uppercase; letter-spacing: 0.04em; }
   .vorrat { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.45vw; overflow: auto; flex: 1; align-content: start; padding: 0.2vw; }
-  .vorrat .magnet { font-size: 1.15vw; min-height: 2.6vw; }
-  .vorrat .magnet.benutzt { opacity: .35; }
+  .vorrat .magnet { font-size: 0.85vw; min-height: 2.3vw; }
+  .knopf { font: inherit; font-size: 0.95vw; font-weight: 600; border: 0; border-radius: 2vw; padding: 0.5vw 1.1vw; cursor: pointer;
+    background: var(--hell); color: var(--blau); }
+  .knopf.rot { background: rgba(255,59,48,.12); color: var(--rot); }
+  .knopf.rot.scharf { background: var(--rot); color: #fff; }
+  .knopf.blau { background: var(--blau); color: #fff; }
+  .unten { display: flex; justify-content: space-between; align-items: center; margin-top: 0.6vw; gap: 0.6vw; }
   /* ---------- Bearbeiten ---------- */
-  .leiste { position: absolute; top: 0.8vw; right: 1vw; display: flex; gap: 0.5vw; z-index: 3; }
-  body.bearbeiten td.fach, body.bearbeiten td.zeit, body.bearbeiten .kopf h1, body.bearbeiten .kopf .klasse,
-  body.bearbeiten .vorrat .magnet, body.bearbeiten .posten .magnet, body.bearbeiten .posten .betrag, body.bearbeiten h2,
-  body.bearbeiten .satz { outline: 0.15vw dashed var(--blau); outline-offset: -0.15vw; cursor: text; }
-  #panel { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); background: #fff; color: #1c1c1e; z-index: 10;
-    border-radius: 1.2vw; padding: 1.4vw; width: 36vw; box-shadow: 0 1vw 4vw rgba(0,0,0,.5); display: none;
-    font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
-  #panel h3 { margin: 0 0 0.8vw; font-size: 1.3vw; }
-  #panel label { display: block; font-size: 0.95vw; color: var(--grau); margin-top: 0.6vw; }
-  #panel input, #panel textarea, #panel select { width: 100%; font-size: 1.2vw; padding: 0.5vw; border: 0.1vw solid #c7c7cc; border-radius: 0.5vw; }
+  body.bearbeiten .tabelle .fach, body.bearbeiten .tabelle .zeit, body.bearbeiten .tabelle .info, body.bearbeiten .kopf h1,
+  body.bearbeiten .kopf .klasse, body.bearbeiten .vorrat .magnet, body.bearbeiten .rechnung { outline: 0.12vw dashed var(--blau); outline-offset: -0.2vw; }
+  #panel { position: fixed; left: 50%; top: 1.5vw; transform: translateX(-50%); background: #fff; color: var(--text); z-index: 10;
+    border-radius: 1.4vw; padding: 1.4vw; width: 38vw; box-shadow: 0 1vw 4vw rgba(0,0,0,.35); display: none; }
+  #panel h3 { margin: 0 0 0.6vw; font-size: 1.3vw; }
+  #panel label { display: block; font-size: 0.9vw; color: var(--grau); margin-top: 0.6vw; }
+  #panel input, #panel textarea { width: 100%; font: inherit; font-size: 1.2vw; padding: 0.55vw 0.7vw; border: 0; background: var(--hell); border-radius: 0.7vw; }
   #panel textarea { height: 4.5vw; resize: none; }
   #panel .zeile { display: flex; gap: 0.6vw; margin-top: 1vw; flex-wrap: wrap; }
-  #panel .farben { display: flex; gap: 0.4vw; margin-top: 0.4vw; }
-  #panel .farben span { width: 2.2vw; height: 2.2vw; border-radius: 0.4vw; border: 0.15vw solid #c7c7cc; cursor: pointer; }
-  #panel .farben span.an { border: 0.25vw solid #1c1c1e; }
-  #schleier { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 9; display: none; }
-  #meldung { position: fixed; left: 50%; bottom: 2vw; transform: translateX(-50%); background: rgba(28,28,30,.92); color: #fff;
-    padding: 0.8vw 1.4vw; border-radius: 1vw; font-size: 1.15vw; z-index: 20; display: none; }
+  #panel .farben { display: flex; gap: 0.5vw; margin-top: 0.4vw; }
+  #panel .farben span { width: 2.2vw; height: 2.2vw; border-radius: 50%; cursor: pointer; box-shadow: inset 0 0 0 0.1vw rgba(0,0,0,.1); }
+  #panel .farben span.an { box-shadow: 0 0 0 0.25vw #fff, 0 0 0 0.4vw var(--blau); }
+  #schleier { position: fixed; inset: 0; background: rgba(0,0,0,.3); z-index: 9; display: none; }
+  #meldung { position: fixed; left: 50%; bottom: 2vw; transform: translateX(-50%); background: rgba(28,28,30,.9); color: #fff;
+    padding: 0.7vw 1.3vw; border-radius: 2vw; font-size: 1.05vw; z-index: 20; display: none; }
 </style>
 </head>
 <body>
   <div class="karte" id="plan">
     <div class="kopf"><h1 id="titel"></h1><span class="klasse" id="klasse"></span></div>
-    <table id="tabelle"></table>
+    <div class="tabelle" id="tabelle"></div>
   </div>
-  <div class="karte tafel" id="tafel">
-    <div class="leiste">
-      <button class="knopf grau" id="b-bearbeiten">✏️ Bearbeiten</button>
-      <button class="knopf grau" id="b-abbrechen" style="display:none">Abbrechen</button>
-      <button class="knopf blau" id="b-speichern" style="display:none">Speichern</button>
-    </div>
-    <h2 id="wochengeld"></h2>
-    <div class="posten" id="posten"></div>
+  <div class="karte" id="tafel">
+    <div class="tg-kopf"><h2>💰 Taschengeld</h2>
+      <div><button class="knopf" id="b-bearbeiten">Bearbeiten</button>
+      <button class="knopf" id="b-abbrechen" style="display:none">Abbrechen</button>
+      <button class="knopf blau" id="b-speichern" style="display:none">Speichern</button></div></div>
+    <div class="rechnung" id="rechnung"></div>
     <div class="satz" id="satz"></div>
     <div class="felder" id="felder"></div>
-    <div class="summe"><span id="summe"></span><button class="knopf" id="b-woche">🗑 Neue Woche</button></div>
+    <div class="unten"><span style="font-size:0.85vw;color:#8E8E93">Falsch getippt? Auf das ✕ tippen.</span><button class="knopf rot" id="b-woche">Neue Woche</button></div>
+    <div class="vorrat-titel">Aufgaben – antippen, wenn erledigt</div>
     <div class="vorrat" id="vorrat"></div>
   </div>
   <div id="schleier"></div>
@@ -107,7 +114,7 @@
 const DATEN_URL = "/local/mucki_daten.json";
 const FELDER = "input_text.mucki_felder";
 const ANZAHL_FELDER = 6;
-const FARBEN = { gelb: "#FFE14D", rot: "#F0443A", gruen: "#7BC943", orange: "#FF8A2A", blau: "#8FD0E0", weiss: "#FAFAFA", lila: "#C9A3F0" };
+const FARBEN = { gelb: "#FFD60A", rot: "#FF6B5E", gruen: "#8CD867", orange: "#FFA94D", blau: "#7DCBEB", weiss: "#F2F2F7", lila: "#C7A6F5" };
 const TAGE = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag"];
 
 // Vorlage nach dem Papier-Stundenplan (Lehrer leer – die trägt man auf dem Monitor selbst ein, sie bleiben lokal)
@@ -172,21 +179,27 @@ function felderLesen() {
 }
 function felderSchreiben(liste) {
   const h = hass(); if (!h) return;
-  h.callService("input_text", "set_value", { entity_id: FELDER, value: liste.join("|").slice(0, 255) })
-    .catch(e => meldung("Speichern hat nicht geklappt: " + (e && e.message || e)));
+  const wert = liste.join("|").slice(0, 255);
+  // leeren über das Skript (läuft auf dem Server), sonst direkt
+  const auftrag = wert === "" ? h.callService("script", "mucki_neue_woche", {})
+                              : h.callService("input_text", "set_value", { entity_id: FELDER, value: wert });
+  Promise.resolve(auftrag).catch(e => meldung("⚠️ Hat nicht geklappt: " + (e && e.message || e)));
 }
+// Zahl aus Text wie "2,- € wöchentl." oder "Taschengeld wöchentl. 5 €"
+function zahl(t) { const m = String(t || "").match(/(\d+(?:[.,]\d+)?)/); return m ? parseFloat(m[1].replace(",", ".")) : 0; }
+function euro(x) { return x.toFixed(2).replace(".", ",") + " €"; }
 
-// ---------- Zeichnen ----------
 function zeichnePlan() {
   const heute = new Date().getDay() - 1; // Montag = 0
   $("titel").textContent = daten.titel; $("klasse").textContent = daten.klasse;
-  let html = "<tr><th>Zeit</th>" + TAGE.map((t, i) => `<th class="${i === heute ? "heute" : ""}">${t}</th>`).join("") + "</tr>";
+  let html = `<div class="tag">Zeit</div>` + TAGE.map((t, i) => `<div class="tag ${i === heute ? "heute" : ""}">${t}</div>`).join("");
   daten.zeilen.forEach((z, zi) => {
     if (z.info) {
-      html += `<tr class="info"><td class="zeit" data-zeit="${zi}">${esc(z.zeit)}</td>` + TAGE.map((_, i) => `<td class="${i === heute ? "heute" : ""}"></td>`).join("") + "</tr>";
+      html += `<div class="info" data-zeit="${zi}">${esc(z.zeit.replace(/\n/g, " · "))}</div>`;
     } else {
-      html += `<tr><td class="zeit" data-zeit="${zi}">${esc(z.zeit)}</td>` + z.faecher.map((x, i) =>
-        `<td class="fach ${i === heute ? "heute" : ""}" data-zelle="${zi}:${i}"><div class="f">${esc(x.fach)}</div><div class="l">${esc(x.lehrer)}</div></td>`).join("") + "</tr>";
+      const [kopf, ...rest] = z.zeit.split("\n");
+      html += `<div class="zeit" data-zeit="${zi}"><b>${esc(kopf)}</b>${esc(rest.join("\n"))}</div>` + z.faecher.map((x, i) =>
+        `<div class="fach ${i === heute ? "heute" : ""}" data-zelle="${zi}:${i}"><div class="f">${esc(x.fach)}</div><div class="l">${esc(x.lehrer)}</div></div>`).join("");
     }
   });
   $("tabelle").innerHTML = html;
@@ -195,26 +208,32 @@ function zeichnePlan() {
   letzterTag = heute;
 }
 function zeichneTafel() {
-  const tg = daten.taschengeld, felder = felderLesen();
-  $("wochengeld").textContent = tg.woche;
-  $("posten").innerHTML = tg.posten.map((p, i) =>
-    `<div class="magnet ${p.farbe === "weiss" ? "weiss" : ""}" data-posten="${i}" style="background:${farbe(p.farbe)}">${esc(p.name)}</div><div class="betrag" data-posten="${i}">${esc(p.betrag)}</div>`).join("");
+  const tg = daten.taschengeld, felder = felderLesen(), cent = tg.cent || 50;
+  // Rechnung: 5 € − Miete/Strom − Essen = bleibt, dazu bis zu 6 × 50 Cent
+  const grund = zahl(tg.woche), abzug = tg.posten.reduce((s, p) => s + zahl(p.betrag), 0);
+  const bleibt = grund - abzug, extra = felder.length * cent / 100, max = bleibt + ANZAHL_FELDER * cent / 100;
+  $("rechnung").innerHTML =
+    `<span>Taschengeld pro Woche</span><span class="betrag">${euro(grund)}</span>`
+    + tg.posten.map(p => `<span><span class="punkt" style="background:${farbe(p.farbe)}"></span>${esc(p.name)}</span><span class="betrag minus">− ${euro(zahl(p.betrag))}</span>`).join("")
+    + `<span>Verdient diese Woche (${felder.length} × ${cent} Cent)</span><span class="betrag plus">+ ${euro(extra)}</span>`
+    + `<div class="linie"></div><span class="gesamt">Bekommst du diese Woche</span><span class="betrag gesamt">${euro(bleibt + extra)}</span>`
+    + `<span style="color:#8E8E93">höchstens möglich</span><span class="betrag" style="color:#8E8E93">${euro(max)}</span>`
+    + `<div class="balken"><div style="width:${Math.round(felder.length / ANZAHL_FELDER * 100)}%"></div></div>`;
   $("satz").textContent = tg.satz;
   let fh = "";
   for (let i = 0; i < ANZAHL_FELDER; i++) {
     const a = felder[i];
-    fh += `<div class="feld" data-feld="${i}">${a ? `<div class="magnet" style="background:${farbe(aufgabeFarbe(a))}">${esc(a)}</div>` : ""}</div>`;
+    fh += a ? `<div class="feld voll" data-feld="${i}"><div class="magnet" style="background:${farbe(aufgabeFarbe(a))}">${esc(a)}</div><div class="weg">✕</div></div>`
+            : `<div class="feld">${i + 1}</div>`;
   }
   $("felder").innerHTML = fh;
-  const n = felder.length, euro = (n * (tg.cent || 50) / 100).toFixed(2).replace(".", ",");
-  $("summe").innerHTML = `Diese Woche: ${n} × ${tg.cent || 50} Cent = <b>${euro} €</b>`;
   $("vorrat").innerHTML = daten.aufgaben.map((a, i) =>
-    `<div class="magnet ${felder.includes(a.name) ? "benutzt" : ""}" data-aufgabe="${i}" style="background:${farbe(a.farbe)}">${esc(a.name)}</div>`).join("")
-    + (bearbeiten ? `<div class="magnet weiss" data-neu="1">＋ Neue Aufgabe</div>` : "");
-  // Bedienung
+    `<div class="magnet" data-aufgabe="${i}" style="background:${farbe(a.farbe)}">${esc(a.name)}</div>`).join("")
+    + (bearbeiten ? `<div class="magnet" data-neu="1" style="background:#fff;border:0.12vw dashed #C7C7CC;color:#007AFF">＋ Neue Aufgabe</div>` : "");
+  // Feld antippen (oder das ✕) = falsch getippt, wieder raus
   $("felder").querySelectorAll("[data-feld]").forEach(el => tippen(el, () => {
     const i = +el.dataset.feld, l = felderLesen();
-    if (i < l.length) { l.splice(i, 1); felderSchreiben(l); meldung("Aus dem Feld genommen"); }
+    if (i < l.length) { const weg = l.splice(i, 1)[0]; felderSchreiben(l); meldung(`„${weg}“ wieder entfernt`); }
   }));
   $("vorrat").querySelectorAll("[data-aufgabe]").forEach(el => tippen(el, () => {
     const a = daten.aufgaben[+el.dataset.aufgabe];
@@ -223,10 +242,9 @@ function zeichneTafel() {
     if (l.length >= ANZAHL_FELDER) return meldung("Alle 6 Felder sind voll – super gemacht! 🎉");
     l.push(a.name); felderSchreiben(l);
     el.classList.add("gedrueckt"); setTimeout(() => el.classList.remove("gedrueckt"), 200);
-    meldung(`👍 ${a.name} – 50 Cent verdient!`);
+    meldung(`👍 ${a.name} – ${cent} Cent verdient!`);
   }));
   const neu = $("vorrat").querySelector("[data-neu]"); if (neu) tippen(neu, () => aufgabeBearbeiten(-1));
-  $("posten").querySelectorAll("[data-posten]").forEach(el => tippen(el, () => { if (bearbeiten) postenBearbeiten(+el.dataset.posten); }));
   letzteFelder = felder.join("|");
 }
 function zeichnen() { zeichnePlan(); zeichneTafel(); }
@@ -278,19 +296,23 @@ function aufgabeBearbeiten(i) {
   farbeVerdrahten();
   if (i >= 0) tippen($("p-loeschen"), () => { daten.aufgaben.splice(i, 1); panelZu(); zeichnen(); });
 }
-function postenBearbeiten(i) {
-  const p = daten.taschengeld.posten[i], tg = daten.taschengeld;
-  panel(`<h3>Taschengeld</h3><label>Überschrift</label><input id="p-woche" value="${esc(tg.woche)}">
-    <label>Posten</label><input id="p-pname" value="${esc(p.name)}"><label>Betrag</label><input id="p-betrag" value="${esc(p.betrag)}">
-    <label>Farbe</label>${farbAuswahl(p.farbe)}
-    <label>Satz unter den Posten</label><input id="p-satz" value="${esc(tg.satz)}">`,
-    () => { tg.woche = $("p-woche").value; p.name = $("p-pname").value; p.betrag = $("p-betrag").value; p.farbe = gewaehlteFarbe(); tg.satz = $("p-satz").value; });
-  farbeVerdrahten();
+function postenBearbeiten() {
+  const tg = daten.taschengeld;
+  panel(`<h3>Taschengeld</h3>
+    <label>Taschengeld pro Woche</label><input id="p-woche" value="${esc(tg.woche)}">
+    ${tg.posten.map((p, i) => `<label>Abzug ${i + 1}</label><div style="display:flex;gap:0.5vw"><input id="p-n${i}" value="${esc(p.name)}"><input id="p-b${i}" value="${esc(p.betrag)}" style="width:40%"></div>`).join("")}
+    <label>Pro erledigter Aufgabe (Cent)</label><input id="p-cent" value="${tg.cent || 50}" inputmode="numeric">
+    <label>Satz über den Feldern</label><input id="p-satz" value="${esc(tg.satz)}">`,
+    () => {
+      tg.woche = $("p-woche").value;
+      tg.posten.forEach((p, i) => { p.name = $("p-n" + i).value; p.betrag = $("p-b" + i).value; });
+      tg.cent = parseInt($("p-cent").value, 10) || 50; tg.satz = $("p-satz").value;
+    });
 }
 function modus(an) {
   bearbeiten = an; document.body.classList.toggle("bearbeiten", an);
   $("b-bearbeiten").style.display = an ? "none" : ""; $("b-abbrechen").style.display = an ? "" : "none"; $("b-speichern").style.display = an ? "" : "none";
-  $("b-woche").style.display = an ? "none" : "";
+  $("b-woche").parentNode.style.display = an ? "none" : "";
   zeichnen();
   if (an) meldung("Bearbeiten: Fach, Zeit, Überschrift oder Magnet antippen");
 }
@@ -311,15 +333,20 @@ tippen($("b-speichern"), async () => {
     else meldung("⚠️ Nicht gespeichert – bitte nochmal auf Speichern tippen");
   } catch (e) { meldung("⚠️ Speichern fehlgeschlagen: " + (e && e.message || e)); }
 });
+// Neue Woche: zur Sicherheit zweimal tippen (kein Dialog – der Kiosk-Browser zeigt die nicht zuverlässig)
+let wocheScharf = 0;
 tippen($("b-woche"), () => {
+  const k = $("b-woche");
   if (!felderLesen().length) return meldung("Die Felder sind schon leer");
-  // eigene Abfrage statt confirm() – der Kiosk-Browser zeigt keine Systemdialoge zuverlässig an
-  $("panel").innerHTML = `<h3>Neue Woche?</h3><p style="font-size:1.1vw">Alle Felder leeren – wurde das Taschengeld ausgezahlt?</p>
-    <div class="zeile"><button class="knopf" id="p-ja">🗑 Ja, Felder leeren</button><button class="knopf grau" id="p-nein">Abbrechen</button></div>`;
-  $("panel").style.display = "block"; $("schleier").style.display = "block";
-  tippen($("p-ja"), () => { felderSchreiben([]); panelZu(); meldung("Neue Woche – viel Erfolg! 💪"); });
-  tippen($("p-nein"), panelZu);
+  if (Date.now() - wocheScharf > 4000) {
+    wocheScharf = Date.now(); k.textContent = "Wirklich leeren? Nochmal tippen"; k.classList.add("scharf");
+    setTimeout(() => { if (Date.now() - wocheScharf >= 4000) { k.textContent = "Neue Woche"; k.classList.remove("scharf"); } }, 4100);
+    return;
+  }
+  wocheScharf = 0; k.textContent = "Neue Woche"; k.classList.remove("scharf");
+  felderSchreiben([]); meldung("Neue Woche – viel Erfolg! 💪");
 });
+tippen($("rechnung"), () => { if (bearbeiten) postenBearbeiten(); });
 tippen($("schleier"), panelZu);
 tippen($("titel"), () => { if (bearbeiten) kopfBearbeiten(); });
 tippen($("klasse"), () => { if (bearbeiten) kopfBearbeiten(); });
