@@ -148,7 +148,7 @@
 
 <script>
 // Bei jeder Änderung an dieser Datei hochzählen – offene Monitore laden sich dann selbst neu
-const SEITEN_VERSION = 9;
+const SEITEN_VERSION = 10;
 const DATEN_URL = "/local/mucki_daten.json";
 const FELDER = "input_text.mucki_felder";
 const ANZAHL_FELDER = 6;
@@ -485,9 +485,16 @@ function panel(html, ok) {
   $("panel").style.display = "block"; $("schleier").style.display = "block";
   tippen($("p-ok"), () => { ok(); panelZu(); zeichnen(); });
   tippen($("p-zu"), panelZu);
-  const erstes = $("panel").querySelector("input, textarea"); if (erstes) setTimeout(() => erstes.focus(), 50);
+  // kein automatisches Fokussieren: am Monitor würde sonst sofort die Bildschirmtastatur aufspringen
 }
-function panelZu() { $("panel").style.display = "none"; $("schleier").style.display = "none"; }
+function panelZu() {
+  const fokus = document.activeElement; if (fokus && fokus.blur) fokus.blur();
+  $("panel").style.display = "none"; $("schleier").style.display = "none";
+}
+// Sicherheitsnetz: offene Fenster schließen sich nach 2 Minuten ohne Berührung von selbst
+let letzteBeruehrung = Date.now();
+["touchstart", "mousedown", "keydown"].forEach(t => document.addEventListener(t, () => { letzteBeruehrung = Date.now(); }, { passive: true }));
+setInterval(() => { if ($("panel").style.display === "block" && Date.now() - letzteBeruehrung > 120000) panelZu(); }, 10000);
 function zelleBearbeiten(k) {
   const [zi, ti] = k.split(":").map(Number), x = daten.zeilen[zi].faecher[ti];
   panel(`<h3>${TAGE[ti]} · ${esc(daten.zeilen[zi].zeit.split("\n")[0])}</h3>

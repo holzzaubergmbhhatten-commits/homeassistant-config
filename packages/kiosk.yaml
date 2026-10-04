@@ -15,6 +15,20 @@ rest_command:
     payload: '{"url": "http://localhost:8123/flur-display/start"}'
 
 script:
+  monitor_neu_laden:
+    alias: Monitor neu laden
+    description: >-
+      Lädt die Startseite auf dem Touchmonitor im Flur neu und schaltet den Bildschirm ein.
+      Nutze das, wenn jemand sagt "der Monitor hängt", "lade den Monitor neu" oder "Monitor neu starten".
+    icon: mdi:monitor-shimmer
+    sequence:
+      - action: script.monitor_an
+        continue_on_error: true
+        data:
+          timeout: "{{ 60 if is_state('binary_sensor.monitor_nachtmodus', 'on') else 0 }}"
+      - action: rest_command.kiosk_dashboard
+        continue_on_error: true
+
   stellplaetze_verwalten:
     alias: Stellplätze verwalten (Homepage) auf dem Flur-Monitor
     description: >-
