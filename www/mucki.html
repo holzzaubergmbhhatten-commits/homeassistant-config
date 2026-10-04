@@ -148,7 +148,7 @@
 
 <script>
 // Bei jeder Änderung an dieser Datei hochzählen – offene Monitore laden sich dann selbst neu
-const SEITEN_VERSION = 10;
+const SEITEN_VERSION = 11;
 const DATEN_URL = "/local/mucki_daten.json";
 const FELDER = "input_text.mucki_felder";
 const ANZAHL_FELDER = 6;
@@ -201,20 +201,23 @@ function hass() { try { return window.parent.document.querySelector("home-assist
 function esc(t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 function meldung(t, icon, farbe) { const m = $("meldung"); m.innerHTML = (icon ? ic(icon, farbe) + " " : "") + esc(t); m.style.display = "block"; clearTimeout(meldung.t); meldung.t = setTimeout(() => m.style.display = "none", 3500); }
 // Tippen: am Kiosk-Monitor kommen Finger als Touch-Events, am Laptop als Klick
+// Der Monitor meldet jeden Fingertipp zweimal (Touch + kurz danach ein Maus-Klick). Der Zeitpunkt des letzten
+// Fingertipps gilt deshalb für ALLE Knöpfe – sonst trifft der zweite Klick einen gerade neu gezeichneten Knopf.
+let letzterFingertipp = 0;
 function tippen(el, fn) {
   // Nur Tippen zählt (kurz oder lang), Wischen/Scrollen (Finger mehr als 12 px bewegt) löst nichts aus
-  let start = null, touch = 0;
-  el.addEventListener("touchstart", ev => { const t = ev.touches[0]; start = { x: t.clientX, y: t.clientY, zeit: Date.now() }; }, { passive: true });
+  let start = null;
+  el.addEventListener("touchstart", ev => { const t = ev.touches[0]; start = { x: t.clientX, y: t.clientY }; }, { passive: true });
   el.addEventListener("touchmove", ev => {
     const t = ev.touches[0];
     if (start && Math.hypot(t.clientX - start.x, t.clientY - start.y) > 12) start = null;
   }, { passive: true });
   el.addEventListener("touchend", ev => {
-    touch = Date.now();
+    letzterFingertipp = Date.now();
     if (!start) return;
     start = null; ev.preventDefault(); fn(ev);
   }, { passive: false });
-  el.addEventListener("click", ev => { if (Date.now() - touch > 700) fn(ev); });
+  el.addEventListener("click", ev => { if (Date.now() - letzterFingertipp > 1000) fn(ev); });
 }
 function farbe(name) { return FARBEN[name] || FARBEN.weiss; }
 function aufgabeFarbe(name) { const a = daten.aufgaben.find(x => x.name === name); return a ? a.farbe : "weiss"; }
@@ -591,7 +594,7 @@ tippen($("b-woche"), () => {
     .catch(e => meldung("Hat nicht geklappt: " + (e && e.message || e), "warn", "#FF9500"));
 });
 tippen($("rechnung"), () => { if (bearbeiten) postenBearbeiten(); });
-tippen($("schleier"), panelZu);
+// Abgedunkelter Hintergrund schließt bewusst NICHT – nur der Schließen/Abbrechen-Knopf
 tippen($("titel"), () => { if (bearbeiten) kopfBearbeiten(); });
 tippen($("klasse"), () => { if (bearbeiten) kopfBearbeiten(); });
 
