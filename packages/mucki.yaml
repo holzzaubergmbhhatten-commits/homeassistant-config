@@ -17,6 +17,7 @@ input_text:
 shell_command:
   mucki_schreiben: python3 /config/claude_tools/mucki_speichern.py {{ b64 }}
   mucki_verlauf: python3 /config/claude_tools/mucki_verlauf.py {{ b64 }}
+  mucki_ergebnis: python3 /config/claude_tools/mucki_ergebnis.py {{ b64 }}
 
 script:
   mucki_speichern:
@@ -102,7 +103,8 @@ automation:
         data:
           woche: "{{ (now() - timedelta(days=1)).strftime('%G-W%V') }}"
 
-  # Sonntag 18:00: Erinnerung ans Taschengeld (Durchsage in Küche und Muckis Zimmer + Monitor)
+  # Sonntag 18:00: Erinnerung ans Taschengeld (Durchsage in Küche und Muckis Zimmer + Monitor).
+  # Alles geschafft (6 Felder + 3 Lernaufgaben) → Ergebnis per Telegram an die Familie teilen + Jubel-Durchsage.
   - id: mucki_taschengeld_erinnerung
     alias: "Mucki: Erinnerung Taschengeld sonntags 18 Uhr"
     triggers:
@@ -113,21 +115,58 @@ automation:
         value_template: "{{ now().weekday() == 6 }}"
     actions:
       - variables:
-          n: >-
+          kw: "{{ now().strftime('%G-W%V') }}"
+          felder: >-
             {% set v = states('input_text.mucki_felder') %}
-            {{ (v.split('|') | reject('eq', '') | list | count) if v not in ['', 'unknown', 'unavailable'] else 0 }}
+            {{ v.split('|') | reject('eq', '') | list if v not in ['', 'unknown', 'unavailable'] else [] }}
           lern: >-
             {% set v = states('input_text.mucki_lernen') %}
             {{ v.split(':')[1] | list | select('eq', '1') | list | count if v.startswith(now().strftime('%G-W%V') ~ ':') else 0 }}
-      - action: script.jarvis_durchsage
+      - action: shell_command.mucki_ergebnis
         continue_on_error: true
         data:
-          raeume: Küche, Muckis Zimmer
-          text: >-
-            Taschengeld-Zeit! Mucki hat diese Woche {{ n }} von 6 Haushaltsaufgaben
-            und {{ lern }} von 3 Lernaufgaben geschafft. Den genauen Betrag zeigt Muckis Seite auf dem Monitor.
+          b64: "{{ {'woche': kw, 'felder': felder, 'lernen': lern | int(0)} | to_json | base64_encode }}"
+        response_variable: rechnung
+      - variables:
+          r: "{{ (rechnung.stdout | from_json) if rechnung is defined and rechnung is mapping and (rechnung.stdout | default('')).startswith('{') else {} }}"
+          betrag: "{{ '%.2f' | format(r.gesamt | default(0) | float) | replace('.', ',') }}"
+          alles: "{{ r.alles | default(false) }}"
+      - if: "{{ alles }}"
+        then:
+          - repeat:
+              for_each: >-
+                {{ (states('input_text.telegram_empfaenger') | string).split(';')
+                   | reject('in', ['', 'unknown', 'unavailable']) | list }}
+              sequence:
+                - action: telegram_bot.send_message
+                  continue_on_error: true
+                  data:
+                    chat_id: "{{ repeat.item | int }}"
+                    message: >-
+                      🏆 Mucki hat diese Woche (KW {{ kw[-2:] | int }}) ALLES geschafft!
+                      ✅ 6 von 6 Haushaltsaufgaben: {{ felder | join(', ') }}
+                      📚 Lern-Challenge: 3 von 3
+                      {%- if r.bonus | default(0) | float > 0 %}
+                      🎁 Dazu der Bonus für 2 Wochen hintereinander!{% endif %}
+                      💰 Taschengeld diese Woche: {{ betrag }} €
+          - action: script.jarvis_durchsage
+            continue_on_error: true
+            data:
+              raeume: Küche, Muckis Zimmer
+              text: >-
+                Achtung, Achtung! Mucki hat diese Woche alles geschafft: alle sechs Haushaltsaufgaben und die Lern-Challenge.
+                Das gibt {{ betrag | replace(',00', '') }} Euro Taschengeld. Herzlichen Glückwunsch, Mucki!
+        else:
+          - action: script.jarvis_durchsage
+            continue_on_error: true
+            data:
+              raeume: Küche, Muckis Zimmer
+              text: >-
+                Taschengeld-Zeit! Mucki hat diese Woche {{ felder | count }} von 6 Haushaltsaufgaben
+                und {{ lern }} von 3 Lernaufgaben geschafft. Das sind {{ betrag | replace(',00', '') }} Euro.
       - action: script.jarvis_monitor_nachricht
         continue_on_error: true
         data:
-          text: "Taschengeld-Zeit! Mucki hat {{ n }} von 6 Aufgaben und {{ lern }} von 3 Lernaufgaben geschafft."
+          text: >-
+            Taschengeld-Zeit! Mucki: {{ felder | count }} von 6 Aufgaben, {{ lern }} von 3 Lernaufgaben – {{ betrag }} €{{ ' – alles geschafft!' if alles else '' }}
           minuten: 120
