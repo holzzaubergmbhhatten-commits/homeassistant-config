@@ -80,8 +80,8 @@
   .lern .stift { position: absolute; bottom: 0.3vw; right: 0.35vw; width: 1.9vw; height: 1.9vw; border-radius: 50%; background: #fff;
     display: flex; align-items: center; justify-content: center; font-size: 0.95vw; box-shadow: 0 0.08vw 0.3vw rgba(0,0,0,.15); }
   .vorrat-titel { font-size: 0.85vw; color: var(--grau); font-weight: 600; margin: 0.8vw 0 0.4vw; text-transform: uppercase; letter-spacing: 0.04em; }
-  .vorrat { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.45vw; overflow: auto; flex: 1; align-content: start; padding: 0.2vw; }
-  .vorrat .magnet { font-size: 0.85vw; min-height: 2.3vw; }
+  .vorrat { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.45vw; overflow: auto; flex: 1; align-content: start; padding: 0.2vw; }
+  .vorrat .magnet { font-size: 0.78vw; min-height: 2.4vw; padding: 0.25vw 0.35vw; }
   .knopf { font: inherit; font-size: 0.95vw; font-weight: 600; border: 0; border-radius: 2vw; padding: 0.5vw 1.1vw; cursor: pointer;
     background: var(--hell); color: var(--blau); }
   .knopf.rot { background: rgba(255,59,48,.12); color: var(--rot); }
@@ -147,7 +147,7 @@
 
 <script>
 // Bei jeder Änderung an dieser Datei hochzählen – offene Monitore laden sich dann selbst neu
-const SEITEN_VERSION = 7;
+const SEITEN_VERSION = 8;
 const DATEN_URL = "/local/mucki_daten.json";
 const FELDER = "input_text.mucki_felder";
 const ANZAHL_FELDER = 6;
@@ -201,8 +201,18 @@ function esc(t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").repla
 function meldung(t, icon, farbe) { const m = $("meldung"); m.innerHTML = (icon ? ic(icon, farbe) + " " : "") + esc(t); m.style.display = "block"; clearTimeout(meldung.t); meldung.t = setTimeout(() => m.style.display = "none", 3500); }
 // Tippen: am Kiosk-Monitor kommen Finger als Touch-Events, am Laptop als Klick
 function tippen(el, fn) {
-  let touch = 0;
-  el.addEventListener("touchend", ev => { ev.preventDefault(); touch = Date.now(); fn(ev); }, { passive: false });
+  // Nur echtes Tippen zählt: Finger kaum bewegt (< 12 px) und kurz (< 0,7 s) – Wischen/Scrollen löst nichts aus
+  let start = null, touch = 0;
+  el.addEventListener("touchstart", ev => { const t = ev.touches[0]; start = { x: t.clientX, y: t.clientY, zeit: Date.now() }; }, { passive: true });
+  el.addEventListener("touchmove", ev => {
+    const t = ev.touches[0];
+    if (start && Math.hypot(t.clientX - start.x, t.clientY - start.y) > 12) start = null;
+  }, { passive: true });
+  el.addEventListener("touchend", ev => {
+    touch = Date.now();
+    if (!start || Date.now() - start.zeit > 700) { start = null; return; }
+    start = null; ev.preventDefault(); fn(ev);
+  }, { passive: false });
   el.addEventListener("click", ev => { if (Date.now() - touch > 700) fn(ev); });
 }
 function farbe(name) { return FARBEN[name] || FARBEN.weiss; }
