@@ -8,7 +8,7 @@ input_text:
     name: Mucki – erledigte Aufgaben diese Woche
     icon: mdi:piggy-bank
     max: 255
-  # Lern-Challenge der Woche: "2026-W41:101" (Rechnen, Lesen, Schreiben – 1 = geschafft)
+  # Lern-Challenge der Woche: "2026-W41:101|110" (Rechnen, Lesen, Schreiben – 1 = geschafft | gelöste Rechenaufgaben)
   mucki_lernen:
     name: Mucki – Lernaufgaben diese Woche
     icon: mdi:school
@@ -57,7 +57,7 @@ script:
             {{ v.split('|') | reject('eq', '') | list if v not in ['', 'unknown', 'unavailable'] else [] }}
           lernen: >-
             {% set v = states('input_text.mucki_lernen') %}
-            {{ v.split(':')[1] | list | select('eq', '1') | list | count if v.startswith(kw ~ ':') else 0 }}
+            {{ v.split(':')[1].split('|')[0] | list | select('eq', '1') | list | count if v.startswith(kw ~ ':') else 0 }}
       - if: "{{ aufgaben | count > 0 or lernen | int(0) > 0 }}"
         then:
           - action: shell_command.mucki_verlauf
@@ -121,7 +121,7 @@ automation:
             {{ v.split('|') | reject('eq', '') | list if v not in ['', 'unknown', 'unavailable'] else [] }}
           lern: >-
             {% set v = states('input_text.mucki_lernen') %}
-            {{ v.split(':')[1] | list | select('eq', '1') | list | count if v.startswith(now().strftime('%G-W%V') ~ ':') else 0 }}
+            {{ v.split(':')[1].split('|')[0] | list | select('eq', '1') | list | count if v.startswith(now().strftime('%G-W%V') ~ ':') else 0 }}
       - action: shell_command.mucki_ergebnis
         continue_on_error: true
         data:

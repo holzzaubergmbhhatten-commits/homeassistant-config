@@ -148,7 +148,7 @@
 
 <script>
 // Bei jeder Änderung an dieser Datei hochzählen – offene Monitore laden sich dann selbst neu
-const SEITEN_VERSION = 11;
+const SEITEN_VERSION = 12;
 const DATEN_URL = "/local/mucki_daten.json";
 const FELDER = "input_text.mucki_felder";
 const ANZAHL_FELDER = 6;
@@ -294,7 +294,9 @@ function rechnenStarten(kw) {
   const zeilen = lernAufgaben(kw)[0].was.split("\n").map(aufgabeLesen).filter(Boolean);
   const erledigt = lernenLesen(kw)[0];
   if (!zeilen.length) { const l = lernenLesen(kw); l[0] = !l[0]; lernenSchreiben(kw, l); return; }
-  let nr = 0, eingabe = "", ok = zeilen.map(() => false);
+  const gemerkt = rechnenGeloest(kw);
+  let eingabe = "", ok = zeilen.map((_, i) => !!gemerkt[i] || erledigt);
+  let nr = Math.max(0, ok.findIndex(x => !x));
   const zeigen = (hinweis, klasse) => {
     const a = zeilen[nr], teile = a.text.split("?");
     $("panel").innerHTML = `<h3>Rechnen – Aufgabe ${nr + 1} von ${zeilen.length}</h3>
@@ -313,8 +315,10 @@ function rechnenStarten(kw) {
       if (eingabe === "") return zeigen("Erst eine Zahl eintippen");
       if (Number(eingabe) === a.loesung) {
         ok[nr] = true; eingabe = "";
+        const l = lernenLesen(kw);
+        if (ok.every(Boolean)) l[0] = true;
+        lernSpeichern(kw, l, ok);   // jede richtige Aufgabe bleibt gespeichert
         if (ok.every(Boolean)) {
-          const l = lernenLesen(kw); l[0] = true; lernenSchreiben(kw, l);
           panelZu(); return meldung(l.every(Boolean) ? "Alles richtig – und die ganze Lern-Challenge geschafft!" : "Alles richtig gerechnet – super, Mucki!", "stern", "#FFD60A");
         }
         zeigen(ic("haken", "#34C759") + " Richtig! Weiter geht's …", "richtig");
@@ -322,10 +326,12 @@ function rechnenStarten(kw) {
       } else { eingabe = ""; zeigen("Fast! Nochmal versuchen", "falsch"); }
     }));
     tippen($("p-zu"), panelZu);
-    tippen($("p-ohne"), () => { const l = lernenLesen(kw); l[0] = !erledigt; lernenSchreiben(kw, l); panelZu(); });
+    tippen($("p-ohne"), () => { const l = lernenLesen(kw); l[0] = !erledigt; lernSpeichern(kw, l, erledigt ? [] : ok.map(() => true)); panelZu(); });
   };
   $("panel").style.display = "block"; $("schleier").style.display = "block";
-  zeigen(erledigt ? "Schon geschafft – du kannst trotzdem nochmal üben" : "");
+  if (erledigt) { ok = ok.map(() => false); nr = 0; }
+  zeigen(erledigt ? "Schon geschafft – du kannst trotzdem nochmal üben"
+       : gemerkt.some(Boolean) ? `${gemerkt.filter(Boolean).length} von ${zeilen.length} schon gelöst – weiter geht's!` : "");
 }
 function lernUmschalten(kw, i) {
   const l = lernenLesen(kw), la = lernAufgaben(kw); l[i] = !l[i]; lernenSchreiben(kw, l);
@@ -349,6 +355,7 @@ function lernBearbeiten(kw, i) {
     <div class="zeile"><button class="knopf" id="p-wuerfel">${ic("wuerfel")} Neuer Vorschlag</button></div>`,
     async () => {
       daten.lernEigene = daten.lernEigene || {}; daten.lernEigene[kw] = daten.lernEigene[kw] || {};
+      if (i === 0 && lernAufgaben(kw)[0].was.trim() !== $("p-lern").value.trim()) lernSpeichern(kw, lernenLesen(kw), []);
       daten.lernEigene[kw][i] = $("p-lern").value.trim();
       daten.lernWurf = daten.lernWurf || {}; daten.lernWurf[kw] = daten.lernWurf[kw] || {}; daten.lernWurf[kw][i] = wurf;
       // alte Wochen aufräumen (nur die letzten 8 behalten)
@@ -362,15 +369,22 @@ function lernBearbeiten(kw, i) {
     $("p-lern").value = neu;
   });
 }
-function lernenLesen(kw) {
+function lernRoh(kw) {
   const h = hass(), st = h && h.states[LERNEN], v = st ? st.state : "";
-  return v && v.startsWith(kw + ":") ? v.split(":")[1].padEnd(3, "0").slice(0, 3).split("").map(c => c === "1") : [false, false, false];
+  if (!v || !v.startsWith(kw + ":")) return { haken: [false, false, false], geloest: [] };
+  const [haken, geloest] = v.split(":")[1].split("|");
+  return { haken: (haken || "").padEnd(3, "0").slice(0, 3).split("").map(c => c === "1"),
+           geloest: (geloest || "").split("").map(c => c === "1") };
 }
-function lernenSchreiben(kw, liste) {
+function lernenLesen(kw) { return lernRoh(kw).haken; }
+function rechnenGeloest(kw) { return lernRoh(kw).geloest; }
+function lernSpeichern(kw, haken, geloest) {
   const h = hass(); if (!h) return;
-  Promise.resolve(h.callService("input_text", "set_value", { entity_id: LERNEN, value: kw + ":" + liste.map(b => b ? "1" : "0").join("") }))
+  const wert = kw + ":" + haken.map(b => b ? "1" : "0").join("") + "|" + (geloest || []).map(b => b ? "1" : "0").join("");
+  Promise.resolve(h.callService("input_text", "set_value", { entity_id: LERNEN, value: wert }))
     .catch(e => meldung("Hat nicht geklappt: " + (e && e.message || e), "warn", "#FF9500"));
 }
+function lernenSchreiben(kw, liste) { lernSpeichern(kw, liste, rechnenGeloest(kw)); }
 let verlauf = { wochen: {} };
 function isoWoche(d) {
   const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
@@ -441,10 +455,10 @@ function zeichneTafel() {
   }
   vh += `<div class="woche serie">${serie >= 2 ? `${ic("feuer", "#FF6B00")} ${serie} Wochen alles geschafft!` : serie === 1 ? `${ic("stern", "#FFB800")} Noch 1 Woche voll = Bonus!` : `6 Felder voll = ${ic("stern", "#FFB800")}`}</div>`;
   $("verlauf").innerHTML = vh;
-  const la = lernAufgaben(jetzt);
+  const la = lernAufgaben(jetzt), geloest = rechnenGeloest(jetzt);
   $("lern-titel").textContent = `Lern-Challenge der Woche – alle 3 geschafft = + ${euro(lernBonus)}`;
   $("lernen").innerHTML = la.map((a, i) => `<div class="lern ${lern[i] ? "fertig" : ""}" data-lern="${i}"><div class="art">${a.art}</div>`
-    + `<div class="was">${esc(a.was)}</div><div class="haken" data-haken="${i}">${lern[i] ? ic("kastenok", "#34C759") : ic("kasten", "#AEAEB2")}</div><div class="stift" data-stift="${i}">${ic("stift", "#007AFF")}</div></div>`).join("");
+    + `<div class="was">${i === 0 ? a.was.split("\n").map((z, k) => (geloest[k] || lern[0]) ? `<span style="color:#1f9d3a">${ic("haken", "#34C759")} ${esc(z)}</span>` : esc(z)).join("\n") : esc(a.was)}</div><div class="haken" data-haken="${i}">${lern[i] ? ic("kastenok", "#34C759") : ic("kasten", "#AEAEB2")}</div><div class="stift" data-stift="${i}">${ic("stift", "#007AFF")}</div></div>`).join("");
   $("lernen").querySelectorAll("[data-lern]").forEach(el => tippen(el, ev => {
     const i = +el.dataset.lern, ziel = ev && ev.target && ev.target.closest ? ev.target : null;
     if (ziel && ziel.closest("[data-stift]")) return lernBearbeiten(jetzt, i);
@@ -609,7 +623,7 @@ async function laden() {
   // Felder live halten (Handy/Laptop), um Mitternacht den neuen Tag markieren
   setInterval(() => {
     if (bearbeiten) return;
-    const lk = JSON.stringify(lernenLesen(isoWoche(new Date())));
+    const lk = JSON.stringify(lernRoh(isoWoche(new Date())));
     if (felderLesen().join("|") !== letzteFelder || lk !== zeichneTafel.lern) { zeichneTafel.lern = lk; zeichneTafel(); }
     if (new Date().getDay() - 1 !== letzterTag) zeichnePlan();
   }, 800);
