@@ -102,6 +102,20 @@
   #panel .farben { display: flex; gap: 0.5vw; margin-top: 0.4vw; }
   #panel .farben span { width: 2.2vw; height: 2.2vw; border-radius: 50%; cursor: pointer; box-shadow: inset 0 0 0 0.1vw rgba(0,0,0,.1); }
   #panel .farben span.an { box-shadow: 0 0 0 0.25vw #fff, 0 0 0 0.4vw var(--blau); }
+  .rechnen-aufgabe { font-size: 2.6vw; font-weight: 700; text-align: center; margin: 0.6vw 0; font-variant-numeric: tabular-nums; }
+  .rechnen-aufgabe .luecke { display: inline-block; min-width: 4.5vw; border-bottom: 0.25vw solid var(--blau); color: var(--blau); }
+  .rechnen-aufgabe.richtig .luecke { color: #1f9d3a; border-color: #1f9d3a; }
+  .rechnen-aufgabe.falsch { animation: wackeln .35s; }
+  .rechnen-aufgabe.falsch .luecke { color: var(--rot); border-color: var(--rot); }
+  @keyframes wackeln { 20%, 60% { transform: translateX(-0.6vw); } 40%, 80% { transform: translateX(0.6vw); } }
+  .punkte { display: flex; justify-content: center; gap: 0.5vw; margin-bottom: 0.4vw; }
+  .punkte span { width: 0.9vw; height: 0.9vw; border-radius: 50%; background: #E5E5EA; }
+  .punkte span.ok { background: var(--gruen); } .punkte span.jetzt { background: var(--blau); }
+  .tasten { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5vw; margin-top: 0.6vw; }
+  .tasten button { font: inherit; font-size: 1.9vw; font-weight: 600; border: 0; border-radius: 1vw; padding: 0.6vw 0; background: var(--hell); color: var(--text); cursor: pointer; }
+  .tasten button:active { background: #D1D1D6; }
+  .tasten .ok { background: var(--gruen); color: #fff; } .tasten .weg { color: var(--rot); }
+  .rechnen-hinweis { text-align: center; font-size: 1.1vw; min-height: 1.6vw; margin-top: 0.3vw; font-weight: 600; }
   #schleier { position: fixed; inset: 0; background: rgba(0,0,0,.3); z-index: 9; display: none; }
   #meldung { position: fixed; left: 50%; bottom: 2vw; transform: translateX(-50%); background: rgba(28,28,30,.9); color: #fff;
     padding: 0.7vw 1.3vw; border-radius: 2vw; font-size: 1.05vw; z-index: 20; display: none; }
@@ -211,7 +225,7 @@ function felderSchreiben(liste) {
 function zahl(t) { const m = String(t || "").match(/(\d+(?:[.,]\d+)?)/); return m ? parseFloat(m[1].replace(",", ".")) : 0; }
 const VERLAUF_URL = "/local/mucki_verlauf.json";
 const LERNEN = "input_text.mucki_lernen";
-// Lern-Challenge 2. Klasse: jede Kalenderwoche andere Aufgaben (fest aus der KW berechnet)
+// Lern-Challenge 2. Klasse (nur Plus und Minus bis 100): jede Kalenderwoche andere Aufgaben (fest aus der KW berechnet)
 function zufall(seed) { let x = seed >>> 0; return () => { x = (x * 1664525 + 1013904223) >>> 0; return x / 4294967296; }; }
 function lernVorschlag(kw, wurf) {
   const r = zufall(Number(kw.replace(/\D/g, "")) + 7919 * (wurf || 0)), z = (a, b) => a + Math.floor(r() * (b - a + 1)), w = l => l[Math.floor(r() * l.length)];
@@ -220,8 +234,8 @@ function lernVorschlag(kw, wurf) {
     const art = z(0, 3);
     if (art === 0) { const a = z(12, 68), b = z(5, 99 - a); rechnen.push(`${a} + ${b} = ?`); }
     else if (art === 1) { const a = z(30, 99), b = z(5, a - 5); rechnen.push(`${a} − ${b} = ?`); }
-    else if (art === 2) { const a = w([2, 5, 10, 3, 4]), b = z(2, 10); rechnen.push(`${b} · ${a} = ?`); }
-    else { const a = z(15, 60), b = z(8, 35); rechnen.push(`${a} + ? = ${a + b}`); }
+    else if (art === 2) { const a = z(15, 60), b = z(8, 35); rechnen.push(`${a} + ? = ${a + b}`); }
+    else { const a = z(30, 95), b = z(5, a - 10); rechnen.push(`${a} − ? = ${a - b}`); }
   }
   const lesen = w(["Lies Mama oder Papa 5 Minuten aus deinem Lieblingsbuch vor.", "Lies eine Seite vor und erzähle danach, was passiert ist.",
     "Lies das Wetter für morgen vom Monitor vor.", "Lies den Einkaufszettel vor.", "Lies ein Gedicht oder einen Witz vor.",
@@ -247,6 +261,56 @@ async function sofortSpeichern() {
     }
   } catch (e) { /* unten */ }
   return false;
+}
+// Rechenaufgaben prüfen: "37 + ? = 47", "8 · 2 = ?", "56 − 9 = ?", "12 : 3 = ?"
+function aufgabeLesen(zeile) {
+  const t = String(zeile).replace(/[−–]/g, "-").replace(/[·×xX*]/g, "*").replace(/[:÷]/g, "/").trim();
+  const m = t.match(/^(\d+|\?)\s*([-+*/])\s*(\d+|\?)\s*=\s*(\d+|\?)$/);
+  if (!m || (m[1] + m[3] + m[4]).split("?").length !== 2) return null;
+  const [a, op, b, c] = [m[1], m[2], m[3], m[4]], n = x => Number(x);
+  const rechne = (x, y) => op === "+" ? x + y : op === "-" ? x - y : op === "*" ? x * y : x / y;
+  let loesung;
+  if (c === "?") loesung = rechne(n(a), n(b));
+  else if (a === "?") loesung = op === "+" ? n(c) - n(b) : op === "-" ? n(c) + n(b) : op === "*" ? n(c) / n(b) : n(c) * n(b);
+  else loesung = op === "+" ? n(c) - n(a) : op === "-" ? n(a) - n(c) : op === "*" ? n(c) / n(a) : n(a) / n(c);
+  return Number.isInteger(loesung) && loesung >= 0 ? { text: zeile.trim(), loesung } : null;
+}
+function rechnenStarten(kw) {
+  const zeilen = lernAufgaben(kw)[0].was.split("\n").map(aufgabeLesen).filter(Boolean);
+  const erledigt = lernenLesen(kw)[0];
+  if (!zeilen.length) { const l = lernenLesen(kw); l[0] = !l[0]; lernenSchreiben(kw, l); return; }
+  let nr = 0, eingabe = "", ok = zeilen.map(() => false);
+  const zeigen = (hinweis, klasse) => {
+    const a = zeilen[nr], teile = a.text.split("?");
+    $("panel").innerHTML = `<h3>Rechnen – Aufgabe ${nr + 1} von ${zeilen.length}</h3>
+      <div class="punkte">${zeilen.map((_, i) => `<span class="${ok[i] ? "ok" : i === nr ? "jetzt" : ""}"></span>`).join("")}</div>
+      <div class="rechnen-aufgabe ${klasse || ""}">${esc(teile[0])}<span class="luecke">${esc(eingabe) || "&nbsp;"}</span>${esc(teile[1])}</div>
+      <div class="rechnen-hinweis">${hinweis || ""}</div>
+      <div class="tasten">${[1,2,3,4,5,6,7,8,9].map(z => `<button data-z="${z}">${z}</button>`).join("")}
+        <button class="weg" data-z="weg">⌫</button><button data-z="0">0</button><button class="ok" data-z="ok">✓</button></div>
+      <div class="zeile"><button class="knopf grau" id="p-zu">Schließen</button>
+        <button class="knopf" id="p-ohne">${erledigt ? "Wieder offen" : "Ohne Prüfen abhaken"}</button></div>`;
+    emoji($("panel"));
+    $("panel").querySelectorAll("[data-z]").forEach(k => tippen(k, () => {
+      const z = k.dataset.z;
+      if (z === "weg") { eingabe = eingabe.slice(0, -1); return zeigen(); }
+      if (z !== "ok") { if (eingabe.length < 4) eingabe += z; return zeigen(); }
+      if (eingabe === "") return zeigen("Erst eine Zahl eintippen");
+      if (Number(eingabe) === a.loesung) {
+        ok[nr] = true; eingabe = "";
+        if (ok.every(Boolean)) {
+          const l = lernenLesen(kw); l[0] = true; lernenSchreiben(kw, l);
+          panelZu(); return meldung(l.every(Boolean) ? "🎉 Alles richtig – und die ganze Lern-Challenge geschafft!" : "🎉 Alles richtig gerechnet – super, Mucki!");
+        }
+        zeigen("✅ Richtig! Weiter geht's …", "richtig");
+        setTimeout(() => { nr = ok.findIndex(x => !x); zeigen(); }, 900);
+      } else { eingabe = ""; zeigen("Fast! Nochmal versuchen 💪", "falsch"); }
+    }));
+    tippen($("p-zu"), panelZu);
+    tippen($("p-ohne"), () => { const l = lernenLesen(kw); l[0] = !erledigt; lernenSchreiben(kw, l); panelZu(); });
+  };
+  $("panel").style.display = "block"; $("schleier").style.display = "block";
+  zeigen(erledigt ? "Schon geschafft ✅ – du kannst trotzdem nochmal üben" : "");
 }
 function lernBearbeiten(kw, i) {
   const art = ["Rechnen", "Lesen", "Schreiben"][i];
@@ -353,6 +417,7 @@ function zeichneTafel() {
   $("lernen").querySelectorAll("[data-lern]").forEach(el => tippen(el, ev => {
     const i = +el.dataset.lern;
     if (ev && ev.target && ev.target.closest && ev.target.closest("[data-stift]")) return lernBearbeiten(jetzt, i);
+    if (i === 0) return rechnenStarten(jetzt);
     const l = lernenLesen(jetzt); l[i] = !l[i]; lernenSchreiben(jetzt, l);
     meldung(l[i] ? (l.every(Boolean) ? `🎉 Alle 3 Lernaufgaben geschafft – + ${euro(lernBonus)}!` : `✅ ${la[i].art} geschafft!`) : `${la[i].art} wieder offen`);
   }));
