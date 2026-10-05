@@ -257,34 +257,42 @@ script:
           agent: >-
             {{ states.conversation | map(attribute='entity_id') | select('search', 'claude|anthropic')
                | first | default('conversation.home_assistant', true) }}
+          beginn: "{{ now().timestamp() }}"
       - action: conversation.process
         continue_on_error: true
         data:
           agent_id: "{{ agent }}"
           language: de
           text: >-
-            Guten Morgen, Jarvis. Es ist {{ now().strftime('%H:%M') }} Uhr. Gib mir den Tagesüberblick für heute
-            als kurze, freundliche Morgenansage zum Vorlesen, höchstens sechs Sätze: Termine, wichtige Aufgaben,
-            Wetter, Ferienwohnung. Sprich mich mit "Sir" an. Mach selbst KEINE Durchsage, antworte nur mit dem Text.
+            Es ist {{ now().strftime('%H:%M') }} Uhr. Schreib den Tagesüberblick für heute als kurze, freundliche
+            Morgenansage zum Vorlesen, höchstens sechs Sätze: Termine, wichtige Aufgaben, Wetter, Ferienwohnung.
+            Die ganze Familie hört zu: beginne mit "Guten Morgen zusammen" und sag NICHT "Sir".
+            Benutze KEIN Werkzeug für Durchsagen oder Nachrichten – antworte nur mit dem Text, die Durchsage mache ich selbst.
         response_variable: antwort
       # Falls Claude nicht antwortet: einfache Ansage ohne KI
       - variables:
           ki_text: >-
-            {{ antwort.response.speech.plain.speech if antwort is defined and antwort is mapping
+            {{ (antwort.response.speech.plain.speech if antwort is defined and antwort is mapping
                and antwort.response is defined and antwort.response.speech is defined
-               and antwort.response.speech.plain is defined else '' }}
+               and antwort.response.speech.plain is defined else '')
+               | regex_replace('(?i),?\\s*\\bSir\\b', '') }}
           einfach: >-
             {%- set tage = ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'] %}
             {%- set heute = now().strftime('%Y-%m-%d') %}
             {%- set t = (state_attr('sensor.termine_vorschau', 'familie') or []) | selectattr('start', 'search', '^' ~ heute) | list %}
             {%- set w = {'sunny': 'sonnig', 'clear-night': 'klar', 'partlycloudy': 'teils bewölkt', 'cloudy': 'bewölkt',
                 'rainy': 'regnerisch', 'pouring': 'mit Starkregen', 'fog': 'neblig', 'snowy': 'verschneit', 'windy': 'windig'} %}
-            Guten Morgen, Sir. Heute ist {{ tage[now().weekday()] }}.
+            Guten Morgen zusammen. Heute ist {{ tage[now().weekday()] }}.
             {%- if t %} Heute stehen {{ t | count }} Termine an: {% for x in t %}{{ x.titel }}{{ ' um ' ~ x.start[11:16] ~ ' Uhr' if 'T' in x.start else '' }}{{ ', ' if not loop.last else '.' }}{% endfor %}
             {%- else %} Heute stehen keine Termine an.{% endif %}
             {%- if states('weather.touchmonitor_home') not in ['unknown', 'unavailable'] %} Das Wetter ist {{ w.get(states('weather.touchmonitor_home'), states('weather.touchmonitor_home')) }} bei {{ state_attr('weather.touchmonitor_home', 'temperature') | round(0) | int }} Grad.{% endif %}
             Einen schönen Tag.
           text: "{{ ki_text if ki_text | length > 5 else einfach }}"
+          # Hat Claude trotzdem schon selbst eine Durchsage gemacht? Dann nicht ein zweites Mal ansagen.
+          schon_angesagt: "{{ as_timestamp(state_attr('script.jarvis_durchsage', 'last_triggered'), 0) > beginn | float(0) }}"
+      - if: "{{ schon_angesagt }}"
+        then:
+          - stop: Claude hat die Ansage schon gemacht
       - action: script.jarvis_durchsage
         continue_on_error: true
         data:

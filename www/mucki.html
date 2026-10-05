@@ -148,7 +148,7 @@
 
 <script>
 // Bei jeder Änderung an dieser Datei hochzählen – offene Monitore laden sich dann selbst neu
-const SEITEN_VERSION = 12;
+const SEITEN_VERSION = 13;
 const DATEN_URL = "/local/mucki_daten.json";
 const FELDER = "input_text.mucki_felder";
 const ANZAHL_FELDER = 6;
@@ -450,8 +450,10 @@ function zeichneTafel() {
   let vh = "";
   for (let n = 4; n >= 0; n--) {
     const kw = wocheDavor(jetzt, n), anz = n === 0 ? felder.length : ((verlauf.wochen || {})[kw] || []).length;
-    const geld = bleibt + anz * cent / 100 + (anz >= ANZAHL_FELDER && voll(wocheDavor(kw, 1)) ? bonusBetrag : 0);
-    vh += `<div class="woche ${anz >= ANZAHL_FELDER ? "voll" : ""} ${n === 0 ? "jetzt" : ""}">KW ${Number(kw.split("-W")[1])}<b>${anz}/${ANZAHL_FELDER}${anz >= ANZAHL_FELDER ? " " + ic("stern", "#FFB800") : ""}</b>${n === 0 ? "läuft" : euro(geld)}</div>`;
+    // Lern-Challenge der Woche (alle 3 geschafft) zählt mit – steht im Verlauf unter "lernen"
+    const lernFertig = n > 0 && Number((verlauf.lernen || {})[kw] || 0) >= 3;
+    const geld = bleibt + anz * cent / 100 + (anz >= ANZAHL_FELDER && voll(wocheDavor(kw, 1)) ? bonusBetrag : 0) + (lernFertig ? lernBonus : 0);
+    vh += `<div class="woche ${anz >= ANZAHL_FELDER ? "voll" : ""} ${n === 0 ? "jetzt" : ""}">KW ${Number(kw.split("-W")[1])}<b>${anz}/${ANZAHL_FELDER}${anz >= ANZAHL_FELDER ? " " + ic("stern", "#FFB800") : ""}</b>${n === 0 ? "läuft" : euro(geld) + (lernFertig ? " " + ic("buch", "#007AFF") : "")}</div>`;
   }
   vh += `<div class="woche serie">${serie >= 2 ? `${ic("feuer", "#FF6B00")} ${serie} Wochen alles geschafft!` : serie === 1 ? `${ic("stern", "#FFB800")} Noch 1 Woche voll = Bonus!` : `6 Felder voll = ${ic("stern", "#FFB800")}`}</div>`;
   $("verlauf").innerHTML = vh;
