@@ -390,22 +390,25 @@ script:
                     entity_id: "{{ repeat.item }}"
                   data:
                     volume_level: "{{ laut }}"
-      # Weg 1: als Ansage über Music Assistant (Musik wird kurz leiser und läuft danach weiter)
-      - action: media_player.play_media
+      # Weg 1: als Ansage über Music Assistant (Musik wird kurz leiser und läuft danach weiter).
+      # Läuft in einem eigenen Skript: das meldet nur dann "ok", wenn Music Assistant die Ansage angenommen hat.
+      - action: script.jarvis_durchsage_abspielen
         continue_on_error: true
-        target:
-          entity_id: "{{ ziel }}"
         data:
-          media_content_id: "media-source://tts/{{ stimme }}?message={{ text | urlencode }}"
-          media_content_type: music
-          announce: true
+          ziel: "{{ ziel }}"
+          stimme: "{{ stimme }}"
+          text: "{{ text }}"
+        response_variable: weg1
+      - variables:
+          angenommen: "{{ weg1 is defined and weg1 is mapping and weg1.ok | default(false) }}"
       - wait_template: "{{ ziel | select('is_state', 'playing') | list | count > 0 }}"
         timeout: "00:00:15"
         continue_on_timeout: true
       - variables:
-          gespielt: "{{ wait.completed }}"
-      # Weg 2, falls nichts abspielt: klassisch über tts.speak
-      - if: "{{ not gespielt }}"
+          gespielt: "{{ angenommen or wait.completed }}"
+      # Weg 2 NUR wenn Music Assistant die Ansage abgelehnt hat (früher auch bei "spielt nicht sichtbar" –
+      # dann kam die Ansage doppelt, weil die HomePods während einer Ansage nicht immer "playing" melden)
+      - if: "{{ not angenommen }}"
         then:
           - action: tts.speak
             continue_on_error: true
@@ -442,6 +445,31 @@ script:
             stimme: "{{ stimme }}"
       - stop: fertig
         response_variable: ok
+
+  jarvis_durchsage_abspielen:
+    alias: Jarvis Durchsage abspielen (intern)
+    description: Nur intern für "Jarvis Durchsage" – nicht direkt benutzen.
+    mode: parallel
+    fields:
+      ziel:
+        description: Lautsprecher-Entitäten
+      stimme:
+        description: TTS-Entität
+      text:
+        description: Text
+    sequence:
+      - action: media_player.play_media
+        target:
+          entity_id: "{{ ziel }}"
+        data:
+          media_content_id: "media-source://tts/{{ stimme }}?message={{ text | urlencode }}"
+          media_content_type: music
+          announce: true
+      - variables:
+          ergebnis:
+            ok: true
+      - stop: angenommen
+        response_variable: ergebnis
 
   jarvis_telegram_nachricht:
     alias: Jarvis Nachricht per Telegram
