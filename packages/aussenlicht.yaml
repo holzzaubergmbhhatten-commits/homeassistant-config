@@ -47,8 +47,7 @@ template:
           {% set m = states.binary_sensor | selectattr('attributes.device_class', 'defined')
              | selectattr('attributes.device_class', 'in', ['motion', 'occupancy', 'presence'])
              | selectattr('name', 'search', '(?i)giebel|hinten|heini|renate|gesims') | list %}
-          {% set l = states.light | selectattr('name', 'search', '(?i)gesims|\\b(licht|lampe)\\s*0?(7|8|9|10|11|12|20|21|22|23|24)\\b')
-             | rejectattr('attributes.entity_id', 'defined') | list %}
+          {% set l = states.light | selectattr('name', 'search', '(?i)gesims|\\b(licht|lampe)\\s*0?(7|8|9|10|11|12|20|21|22|23|24)\\b') | list %}
           {{ (('bereit' if m and l else ('Sensor fehlt' if not m else 'Lampe fehlt'))
              ~ ' – ' ~ m | count ~ ' Sensoren, ' ~ l | count ~ ' Lampen') }}
         attributes:
@@ -143,9 +142,15 @@ automation:
              and (trigger.event.data.new_state.attributes.friendly_name | default('')) is search('(?i)giebel|hinten|heini|renate|gesims') }}
     actions:
       - variables:
+          # einzelne Lampen (Name mit Gesims / Licht 7–12 / Licht 20–24) + Mitglieder einer Lichtgruppe "Gesimse"
           lampen: >-
-            {{ states.light | selectattr('name', 'search', '(?i)gesims|\\b(licht|lampe)\\s*0?(7|8|9|10|11|12|20|21|22|23|24)\\b')
-               | rejectattr('attributes.entity_id', 'defined') | map(attribute='entity_id') | list }}
+            {% set einzeln = states.light | selectattr('name', 'search', '(?i)gesims|\\b(licht|lampe)\\s*0?(7|8|9|10|11|12|20|21|22|23|24)\\b')
+               | rejectattr('attributes.entity_id', 'defined') | map(attribute='entity_id') | list %}
+            {% set gruppen = states.light | selectattr('name', 'search', '(?i)gesims')
+               | selectattr('attributes.entity_id', 'defined') | map(attribute='entity_id') | list %}
+            {% set ns = namespace(l=einzeln) %}
+            {% for g in gruppen %}{% set ns.l = ns.l + (expand(g) | map(attribute='entity_id') | list) %}{% endfor %}
+            {{ ns.l | unique | list }}
           bewegung: >-
             {{ states.binary_sensor | selectattr('attributes.device_class', 'defined')
                | selectattr('attributes.device_class', 'in', ['motion', 'occupancy', 'presence'])
