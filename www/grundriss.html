@@ -927,8 +927,14 @@ function kameraZeigen(h, l) {
   const img = f.querySelector("#k-bild");
   const standbild = () => { const s = hass().states[l.entity]; if (s && s.attributes.entity_picture) img.src = s.attributes.entity_picture + "&t=" + Date.now(); };
   const live = /^draussen_/.test(name) || name === "hoftor_klingel";
-  img.onerror = () => { if (!kameraTimer) { standbild(); kameraTimer = setInterval(standbild, 2000); } };
-  if (live) img.src = `http://localhost:1984/api/stream.mjpeg?src=${name}`; else img.onerror();
+  // erst das scharfe Hauptbild (HD), sonst das kleine Bild, zuletzt Standbilder alle 2 Sekunden
+  const quellen = live ? [`${name}_hd`, name].map(n => `http://localhost:1984/api/stream.mjpeg?src=${n}`) : [];
+  img.onerror = () => {
+    const q = quellen.shift();
+    if (q) { img.src = q; return; }
+    if (!kameraTimer) { standbild(); kameraTimer = setInterval(standbild, 2000); }
+  };
+  img.onerror();
   f.querySelector("#k-zu").onclick = kameraSchliessen;
   const g = f.querySelector("#k-gross");
   if (g) g.onclick = () => {

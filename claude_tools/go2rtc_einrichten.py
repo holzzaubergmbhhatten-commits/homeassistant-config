@@ -53,10 +53,11 @@ def main():
         url = mit_zugang(quelle, o.get("username"), o.get("password"))
         # Zweite Quelle: Umwandlung nach MJPEG (das kann der Browser auf dem Monitor anzeigen),
         # per Prozessor (Grafikkarte klappt auf diesem Mini-PC nicht) – läuft nur, wenn jemand zuschaut
-        streams[name] = [url, f"ffmpeg:{name}#video=mjpeg"]
+        # -q:v 3 = gute JPEG-Qualität (ohne Angabe nimmt ffmpeg eine sehr niedrige Bitrate → matschiges Bild)
+        streams[name] = [url, f"ffmpeg:{name}#video=mjpeg#raw=-q:v 3"]
         if re.search(r"/stream2$", url):
             streams[name + "_hd"] = [re.sub(r"/stream2$", "/stream1", url),
-                                     f"ffmpeg:{name}_hd#video=mjpeg#width=1920"]
+                                     f"ffmpeg:{name}_hd#video=mjpeg#width=1920#raw=-q:v 3"]
 
     alt = {}
     if os.path.exists(ZIEL):
