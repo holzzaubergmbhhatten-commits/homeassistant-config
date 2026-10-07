@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Infos</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #F2F2F7; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: #1C1C1E; }
+  iframe { border: 0; width: 100%; height: 100%; display: block; background: #fff; }
+  .hinweis { max-width: 640px; margin: 8vh auto; padding: 24px 28px; background: #fff; border-radius: 18px; box-shadow: 0 2px 12px rgba(0,0,0,.06); line-height: 1.5; }
+  .hinweis h2 { margin: 0 0 8px; font-size: 22px; }
+  .hinweis ol { padding-left: 20px; margin: 8px 0 0; }
+</style>
+</head>
+<body>
+<div id="inhalt"></div>
+<script>
+// Link kommt aus input_text.zuhause_seite_link (steht nicht im öffentlichen Repository)
+const HELFER = "input_text.zuhause_seite_link";
+let gezeigt = "";
+function hass() {
+  try { const ha = window.parent.document.querySelector("home-assistant"); return ha && ha.hass; } catch (e) { return null; }
+}
+function zeigen() {
+  const h = hass();
+  if (!h) { setTimeout(zeigen, 500); return; }
+  const s = h.states[HELFER], link = s ? String(s.state || "").trim() : "";
+  const ok = /^https?:\/\//i.test(link);
+  if ((ok ? link : "-") === gezeigt) return;
+  gezeigt = ok ? link : "-";
+  const el = document.getElementById("inhalt");
+  if (ok) {
+    el.innerHTML = "";
+    const f = document.createElement("iframe");
+    f.src = link; f.style.height = "100vh";
+    f.setAttribute("allow", "fullscreen; clipboard-write");
+    el.appendChild(f);
+  } else {
+    el.innerHTML = `<div class="hinweis"><h2>Infos-Seite: Link fehlt noch</h2>
+      Einmal in Home Assistant eintragen:
+      <ol><li>Einstellungen → Geräte &amp; Dienste → Entitäten</li>
+      <li>„Infos-Seite Link“ suchen und antippen</li>
+      <li>Link einfügen und mit Enter bestätigen</li></ol></div>`;
+  }
+}
+zeigen();
+setInterval(zeigen, 5000);
+</script>
+</body>
+</html>

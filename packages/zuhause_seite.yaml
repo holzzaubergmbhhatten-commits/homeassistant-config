@@ -1,0 +1,9 @@
+# Eigene Webseite mit Infos für daheim als Reiter "Infos" im Flur-Dashboard.
+# Der Link steht NICHT im (öffentlichen) Repository, sondern nur im Helfer
+# input_text.zuhause_seite_link (einmal in Home Assistant eintragen). www/zuhause.html
+# liest ihn und zeigt die Seite an.
+input_text:
+  zuhause_seite_link:
+    name: Infos-Seite Link
+    icon: mdi:link-variant
+    max: 255
