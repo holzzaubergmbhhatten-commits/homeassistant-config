@@ -1,0 +1,59 @@
+# Garten: Pflanzplan für Gewächshaus (Hochbeete) und Gemüsegarten (Erdstreifen) als Reiter "Garten"
+# im Flur-Dashboard (www/garten.html) – am Monitor und im Handy-App.
+# - Plan, Pflanzenwahl und Fotos liegen lokal in /config/www/garten_daten.json (nicht im Repository).
+# - Pflegehinweise rechnet die Seite aus dem Wetter (weather.touchmonitor_home).
+# - Foto-Check und Fragen beantwortet Claude über claude_tools/garten_ki.py (Schlüssel aus der
+#   Anthropic-Integration, nicht im Repository).
+shell_command:
+  # lange Texte kommen in Stücken (ein einzelnes Argument darf nicht beliebig lang sein)
+  garten_schreiben: python3 /config/claude_tools/garten_speichern.py {{ b64 }}
+  garten_ki_befehl: python3 /config/claude_tools/garten_ki.py {{ auftrag }} {{ bild }}
+
+script:
+  garten_speichern:
+    alias: Gartenplan speichern
+    mode: queued
+    fields:
+      daten:
+        description: Inhalt als JSON-Text
+    sequence:
+      - action: shell_command.garten_schreiben
+        data:
+          b64: >-
+            {% set s = (daten if daten is string else (daten | to_json)) | base64_encode %}
+            {% for i in range(0, s | length, 100000) %}{{ s[i:i + 100000] }} {% endfor %}
+        response_variable: ergebnis
+      - variables:
+          antwort:
+            ok: "{{ (ergebnis.stdout | default('') | trim).startswith('ok') }}"
+            text: "{{ ergebnis.stdout | default('keine Antwort') }}"
+      - if: "{{ not antwort.ok }}"
+        then:
+          - action: persistent_notification.create
+            data:
+              notification_id: garten
+              title: Gartenplan speichern
+              message: "{{ antwort.text }}"
+      - stop: fertig
+        response_variable: antwort
+
+  garten_ki:
+    alias: "Garten: Claude fragen / Foto prüfen"
+    mode: parallel
+    fields:
+      auftrag:
+        description: JSON mit art (foto/frage), frage, pflanze, beet, wetter …
+      bild:
+        description: Foto als Base64-JPEG (Stücke mit Leerzeichen getrennt), leer bei reinen Fragen
+    sequence:
+      - action: shell_command.garten_ki_befehl
+        continue_on_error: true
+        data:
+          auftrag: "{{ (auftrag if auftrag is string else (auftrag | to_json)) | base64_encode }}"
+          bild: "{{ bild | default('', true) }}"
+        response_variable: ergebnis
+      - variables:
+          antwort:
+            stdout: "{{ ergebnis.stdout | default('') if ergebnis is defined and ergebnis is mapping else '' }}"
+      - stop: fertig
+        response_variable: antwort

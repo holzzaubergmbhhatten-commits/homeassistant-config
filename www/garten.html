@@ -1,0 +1,875 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Garten</title>
+<!--
+  Garten-Seite (im Flur-Dashboard als Vollbild-iframe, am Monitor und im Handy-App):
+  - Plan: Gewächshaus (Hochbeete) und Gemüsegarten (Erdstreifen) in cm, Beete verschieben/ändern
+  - Pflanzen: auswählen, was wachsen soll → Pflanzplan nach Mischkultur, Höhe (Schatten), Fruchtfolge, Platz
+  - Heute: Gießen, Lüften, Frost, Düngen nach Wetter (weather.touchmonitor_home) und Pflanzkalender
+  - Foto-Check / Fragen: Claude (script.garten_ki)
+  Daten: /local/garten_daten.json, gespeichert über script.garten_speichern.
+  Der Monitor-Browser hat keine Emoji-Schrift → nur eingebaute SVG-Symbole und Farbpunkte.
+-->
+<style>
+  :root {
+    --bg: #F2F2F7; --karte: #FFFFFF; --text: #1C1C1E; --grau: #8E8E93; --linie: #E5E5EA; --akzent: #34A853; --blau: #007AFF;
+    --rot: #FF3B30; --orange: #FF9500; --holz: #D9B98C; --holz-rand: #A8834F; --erde: #6B4A2E; --erde-hell: #8A6644;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "SF Pro Text", Roboto, "Helvetica Neue", system-ui, sans-serif; }
+  body { display: flex; flex-direction: column; overflow: hidden; touch-action: manipulation; }
+  button { font: inherit; border: 0; background: none; color: inherit; cursor: pointer; padding: 0; }
+  .ic { width: 20px; height: 20px; fill: currentColor; flex: none; vertical-align: -4px; }
+  .kopf { display: flex; align-items: center; gap: 10px; padding: 10px 14px 0; flex-wrap: wrap; }
+  .kopf h1 { margin: 0; font-size: 24px; letter-spacing: -0.3px; }
+  .reiter { display: flex; background: #E3E3E8; border-radius: 12px; padding: 3px; gap: 2px; overflow-x: auto; max-width: 100%; }
+  .reiter button { padding: 8px 14px; border-radius: 9px; font-size: 15px; font-weight: 600; white-space: nowrap; }
+  .reiter button.an { background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .luecke { flex: 1; }
+  .speicher { font-size: 12px; color: var(--grau); }
+  main { flex: 1; overflow: auto; padding: 12px 14px 90px; -webkit-overflow-scrolling: touch; }
+  .karte { background: var(--karte); border-radius: 16px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); margin-bottom: 12px; }
+  .karte h2 { margin: 0 0 8px; font-size: 18px; }
+  .karte h3 { margin: 12px 0 6px; font-size: 15px; }
+  .klein { font-size: 13px; color: var(--grau); line-height: 1.4; }
+  .zeile { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .knopf { padding: 10px 14px; border-radius: 12px; background: var(--bg); font-weight: 600; font-size: 15px; display: inline-flex; align-items: center; gap: 6px; }
+  .knopf.voll { background: var(--akzent); color: #fff; }
+  .knopf.blau { background: var(--blau); color: #fff; }
+  .knopf.rot { color: var(--rot); }
+  .knopf.klein-k { padding: 7px 10px; font-size: 13px; }
+  .segment { display: inline-flex; background: #E3E3E8; border-radius: 10px; padding: 2px; }
+  .segment button { padding: 6px 12px; border-radius: 8px; font-size: 14px; font-weight: 600; }
+  .segment button.an { background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  /* Plan */
+  .planbox { background: #DCE8CF; border-radius: 14px; overflow: hidden; position: relative; touch-action: none; }
+  .planbox svg { width: 100%; display: block; }
+  .legende { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 8px; font-size: 13px; }
+  .legende span { display: inline-flex; align-items: center; gap: 5px; }
+  .punkt { width: 12px; height: 12px; border-radius: 50%; display: inline-block; flex: none; }
+  /* Pflanzenliste */
+  .pliste { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; }
+  .pflanze { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 12px; background: var(--bg); }
+  .pflanze.gewaehlt { background: #E3F4E6; box-shadow: inset 0 0 0 2px var(--akzent); }
+  .pflanze .name { font-weight: 600; font-size: 15px; }
+  .pflanze .info { font-size: 12px; color: var(--grau); }
+  .pflanze .mitte { flex: 1; min-width: 0; }
+  .zahl { display: inline-flex; align-items: center; gap: 4px; }
+  .zahl button { width: 32px; height: 32px; border-radius: 9px; background: #fff; font-size: 20px; font-weight: 700; color: var(--akzent); }
+  .zahl b { min-width: 26px; text-align: center; }
+  .marke { font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 6px; background: #FFF3D6; color: #9A6200; white-space: nowrap; }
+  .marke.gruen { background: #E3F4E6; color: #1E7A35; }
+  /* Aufgaben */
+  .aufgabe { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--linie); }
+  .aufgabe:last-child { border-bottom: 0; }
+  .aufgabe .sym { width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex: none; color: #fff; }
+  .aufgabe b { display: block; font-size: 15px; }
+  .aufgabe span { font-size: 14px; color: #3C3C43; line-height: 1.4; }
+  .wetter { display: flex; gap: 8px; overflow-x: auto; }
+  .tag { min-width: 74px; text-align: center; background: var(--bg); border-radius: 12px; padding: 8px 6px; font-size: 13px; }
+  .tag b { display: block; font-size: 16px; }
+  /* Foto */
+  .vorschau { max-width: 100%; max-height: 320px; border-radius: 12px; display: block; margin: 8px 0; }
+  .antwort { white-space: pre-wrap; line-height: 1.5; font-size: 15px; }
+  .verlauf-foto { display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid var(--linie); }
+  .verlauf-foto img { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; flex: none; }
+  textarea, input[type=text], input[type=number], select { width: 100%; font: inherit; font-size: 16px; padding: 10px 12px; border: 1px solid var(--linie); border-radius: 12px; background: var(--bg); color: var(--text); }
+  textarea { min-height: 70px; resize: vertical; }
+  label.f { display: block; font-size: 13px; color: var(--grau); font-weight: 600; margin: 10px 0 4px; }
+  /* Fenster */
+  .schleier { position: fixed; inset: 0; background: rgba(0,0,0,.3); display: none; z-index: 10; }
+  .schleier.offen { display: block; }
+  .blatt { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); width: min(640px, 100%); background: #fff; border-radius: 20px 20px 0 0;
+    padding: 16px 16px calc(18px + env(safe-area-inset-bottom, 0px)); max-height: 88%; overflow: auto; box-shadow: 0 -6px 30px rgba(0,0,0,.2); }
+  .blatt h3 { margin: 0 0 6px; font-size: 19px; }
+  .zwei { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+  .meldung { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); background: rgba(28,28,30,.92); color: #fff; padding: 9px 16px;
+    border-radius: 12px; font-size: 14px; display: none; z-index: 20; max-width: 92%; text-align: center; }
+  .warten { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.5); border-top-color: #fff; border-radius: 50%; animation: dreh 0.8s linear infinite; vertical-align: -3px; }
+  @keyframes dreh { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="kopf">
+  <h1>Garten</h1>
+  <div class="reiter" id="reiter">
+    <button data-a="reiter" data-w="plan" class="an">Plan</button>
+    <button data-a="reiter" data-w="pflanzen">Pflanzen</button>
+    <button data-a="reiter" data-w="heute">Heute</button>
+    <button data-a="reiter" data-w="foto">Foto-Check</button>
+  </div>
+  <span class="luecke"></span>
+  <span class="speicher" id="speicher"></span>
+</div>
+<main id="inhalt"></main>
+<div class="schleier" id="schleier"><div class="blatt" id="blatt"></div></div>
+<div class="meldung" id="meldung"></div>
+
+<script>
+const SEITEN_VERSION = 1;
+const DATEN_URL = "/local/garten_daten.json";
+const WETTER = "weather.touchmonitor_home";
+const $ = id => document.getElementById(id);
+const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
+function meldung(t, ms) { const m = $("meldung"); m.textContent = t; m.style.display = "block"; clearTimeout(meldung.t); meldung.t = setTimeout(() => m.style.display = "none", ms || 3000); }
+const MONATE = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
+const ICON = {
+  tropfen: "M12,20A6,6 0 0,1 6,14C6,10 12,3.25 12,3.25C12,3.25 18,10 18,14A6,6 0 0,1 12,20Z",
+  sonne: "M12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,2L14.39,5.42C13.65,5.15 12.84,5 12,5C11.16,5 10.35,5.15 9.61,5.42L12,2M3.34,7L7.5,6.65C6.9,7.16 6.36,7.78 5.94,8.5C5.5,9.24 5.25,10 5.11,10.79L3.34,7M3.36,17L5.12,13.23C5.26,14 5.53,14.78 5.95,15.5C6.37,16.24 6.91,16.86 7.5,17.37L3.36,17M20.65,7L18.88,10.79C18.74,10 18.47,9.23 18.05,8.5C17.63,7.78 17.1,7.15 16.5,6.64L20.65,7M20.64,17L16.5,17.36C17.09,16.85 17.62,16.22 18.04,15.5C18.46,14.77 18.73,14 18.87,13.21L20.64,17M12,22L9.59,18.56C10.33,18.83 11.14,19 12,19C12.82,19 13.63,18.83 14.37,18.56L12,22Z",
+  frost: "M20.79,13.95L18.46,14.57L16.46,13.44V10.56L18.46,9.43L20.79,10.05L21.31,8.12L19.54,7.65L20,5.88L18.07,5.36L17.45,7.69L15.45,8.82L13,7.38V5.12L14.71,3.41L13.29,2L12,3.29L10.71,2L9.29,3.41L11,5.12V7.38L8.5,8.82L6.5,7.69L5.92,5.36L4,5.88L4.47,7.65L2.7,8.12L3.22,10.05L5.55,9.43L7.55,10.56V13.45L5.55,14.58L3.22,13.96L2.7,15.89L4.47,16.36L4,18.12L5.93,18.64L6.55,16.31L8.55,15.18L11,16.62V18.88L9.29,20.59L10.71,22L12,20.71L13.29,22L14.7,20.59L13,18.88V16.62L15.5,15.17L17.5,16.3L18.12,18.63L20,18.12L19.53,16.35L21.3,15.88L20.79,13.95M9.5,10.56L12,9.11L14.5,10.56V13.44L12,14.89L9.5,13.44V10.56Z",
+  wind: "M4,10A1,1 0 0,1 3,9A1,1 0 0,1 4,8H12A2,2 0 0,0 14,6A2,2 0 0,0 12,4C11.45,4 10.95,4.22 10.59,4.59C10.2,5 9.56,5 9.17,4.59C8.78,4.2 8.78,3.56 9.17,3.17C9.9,2.45 10.9,2 12,2A4,4 0 0,1 16,6A4,4 0 0,1 12,10H4M19,12A1,1 0 0,0 20,11A1,1 0 0,0 19,10C18.72,10 18.47,10.11 18.29,10.29C17.9,10.68 17.27,10.68 16.88,10.29C16.5,9.9 16.5,9.27 16.88,8.88C17.42,8.34 18.17,8 19,8A3,3 0 0,1 22,11A3,3 0 0,1 19,14H5A1,1 0 0,1 4,13A1,1 0 0,1 5,12H19M18,18H4A1,1 0 0,1 3,17A1,1 0 0,1 4,16H18A3,3 0 0,1 21,19A3,3 0 0,1 18,22C17.17,22 16.42,21.66 15.88,21.12C15.5,20.73 15.5,20.1 15.88,19.71C16.27,19.32 16.9,19.32 17.29,19.71C17.47,19.89 17.72,20 18,20A1,1 0 0,0 19,19A1,1 0 0,0 18,18Z",
+  saat: "M2,22V20C2,20 7,18 12,18C17,18 22,20 22,20V22H2M11.3,9.1C10.1,5.2 4,6.1 4,6.1C4,6.1 4.2,13.9 9.9,12.7C9.5,9.8 8,9 8,9C10.8,9 11,12.4 11,12.4V17C11.3,17 11.7,17 12,17C12.3,17 12.7,17 13,17V12.8C13,12.8 13,8.9 16,7.9C16,7.9 14,10.9 14,12.9C21,13.6 21,4 21,4C21,4 12.1,3 11.3,9.1Z",
+  duenger: "M19,3H5C3.89,3 3,3.89 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5C21,3.89 20.1,3 19,3M16.5,16.5L15,15H9L7.5,16.5L6,15L9,12L6,9L7.5,7.5L9,9H15L16.5,7.5L18,9L15,12L18,15L16.5,16.5Z",
+  ernte: "M7,3A1,1 0 0,0 6,4V8.5C6,11 8,13 10.5,13H11V21H13V13H13.5C16,13 18,11 18,8.5V4A1,1 0 0,0 17,3H7M8,5H16V8.5A2.5,2.5 0 0,1 13.5,11H10.5A2.5,2.5 0 0,1 8,8.5V5Z",
+  kamera: "M4,4H7L9,2H15L17,4H20A2,2 0 0,1 22,6V18A2,2 0 0,1 20,20H4A2,2 0 0,1 2,18V6A2,2 0 0,1 4,4M12,7A5,5 0 0,0 7,12A5,5 0 0,0 12,17A5,5 0 0,0 17,12A5,5 0 0,0 12,7M12,9A3,3 0 0,1 15,12A3,3 0 0,1 12,15A3,3 0 0,1 9,12A3,3 0 0,1 12,9Z",
+  stift: "M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z",
+  plus: "M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z",
+  info: "M13,9H11V7H13M13,17H11V11H13M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z",
+  frage: "M10,19H13V22H10V19M12,2C17.35,2.22 19.68,7.62 16.5,11.67C15.67,12.67 14.33,13.33 13.67,14.17C13,15 13,16 13,17H10C10,15.33 10,13.92 10.67,12.92C11.33,11.92 12.67,11.33 13.5,10.67C15.92,8.43 15.32,5.26 12,5A3,3 0 0,0 9,8H6A6,6 0 0,1 12,2Z",
+  zauber: "M7.5,5.6L5,7L6.4,4.5L5,2L7.5,3.4L10,2L8.6,4.5L10,7L7.5,5.6M19.5,15.4L22,14L20.6,16.5L22,19L19.5,17.6L17,19L18.4,16.5L17,14L19.5,15.4M22,2L20.6,4.5L22,7L19.5,5.6L17,7L18.4,4.5L17,2L19.5,3.4L22,2M13.34,12.78L15.78,10.34L13.66,8.22L11.22,10.66L13.34,12.78M14.37,7.29L16.71,9.63C17.1,10 17.1,10.65 16.71,11.04L5.04,22.71C4.65,23.1 4,23.1 3.63,22.71L1.29,20.37C0.9,20 0.9,19.35 1.29,18.96L12.96,7.29C13.35,6.9 14,6.9 14.37,7.29Z",
+};
+const ic = (n, f) => `<svg class="ic" viewBox="0 0 24 24"><path fill="${f || "currentColor"}" d="${ICON[n]}"/></svg>`;
+
+// ================= Pflanzen-Wissen (Norddeutschland) =================
+// fam = Familie (Fruchtfolge), zehrer = Nährstoffbedarf, reihe/abstand = cm, hoehe = cm,
+// gh: "bevorzugt" (gehört ins Gewächshaus) | "geeignet" (beides) | "draussen",
+// vorziehen/draussen/gh = Monate (Aussaat/Pflanzung), ernte = Monate, wasser 1–3, frost = frostempfindlich
+const P = (id, name, fam, zehrer, reihe, abstand, hoehe, gh, vorziehen, draussen, ghm, ernte, wasser, frost, gut, schlecht, duenger, tipp) =>
+  ({ id, name, fam, zehrer, reihe, abstand, hoehe, gh, vorziehen, draussen, ghm, ernte, wasser, frost, gut, schlecht, duenger, tipp });
+const PFLANZEN = [
+  P("tomate", "Tomate", "nacht", "stark", 80, 50, 180, "bevorzugt", [3, 4], [5], [4, 5], [7, 8, 9, 10], 3, true,
+    ["basilikum", "karotte", "petersilie", "salat", "spinat", "zwiebel", "knoblauch", "ringelblume", "kapuzinerkresse", "sellerie", "tagetes", "kohlrabi"],
+    ["kartoffel", "erbse", "fenchel", "gurke"], "Beim Pflanzen 3 l Kompost je Pflanze, ab der ersten Blüte alle 2 Wochen Tomatendünger oder Brennnesseljauche (1:10).",
+    "Geiztriebe jede Woche ausbrechen, nur unten an der Erde gießen, Gewächshaus täglich lüften (gegen Braunfäule)."),
+  P("gurke", "Gurke", "kuerbis", "stark", 100, 50, 200, "bevorzugt", [4], [5, 6], [4, 5], [6, 7, 8, 9], 3, true,
+    ["dill", "buschbohne", "erbse", "salat", "zwiebel", "kohlrabi", "sellerie", "mais"], ["tomate", "radieschen", "kartoffel"],
+    "Viel Kompost beim Pflanzen, dann alle 2 Wochen organischer Flüssigdünger.", "Mit lauwarmem Wasser gießen, an einer Schnur hochleiten, Seitentriebe nach dem 1. Blatt kappen."),
+  P("paprika", "Paprika", "nacht", "stark", 50, 40, 80, "bevorzugt", [2, 3], [], [5], [7, 8, 9, 10], 2, true,
+    ["basilikum", "karotte", "zwiebel", "tomate", "kohlrabi", "petersilie"], ["buschbohne", "stangenbohne", "erbse", "fenchel"],
+    "Kompost beim Pflanzen, ab Blüte alle 2 Wochen Tomatendünger.", "Braucht die wärmste Ecke, gleichmäßig feucht halten, erste Blüte ausbrechen = mehr Ertrag."),
+  P("chili", "Chili", "nacht", "stark", 50, 40, 70, "bevorzugt", [1, 2, 3], [], [5], [7, 8, 9, 10], 2, true,
+    ["basilikum", "tomate", "karotte", "zwiebel"], ["buschbohne", "fenchel"], "Wie Paprika, etwas sparsamer düngen.", "Mag es heiß und eher trocken zwischen den Gießgängen."),
+  P("aubergine", "Aubergine", "nacht", "stark", 60, 50, 80, "bevorzugt", [2, 3], [], [5], [8, 9], 3, true,
+    ["basilikum", "buschbohne", "spinat", "tagetes"], ["kartoffel", "fenchel"], "Kompost, ab Blüte alle 10 Tage Flüssigdünger.", "Braucht viel Wärme (über 25 °C) – nur im Gewächshaus sinnvoll."),
+  P("melone", "Melone", "kuerbis", "stark", 100, 80, 40, "bevorzugt", [4], [], [5], [8, 9], 2, true,
+    ["mais", "buschbohne", "kapuzinerkresse"], ["gurke", "kartoffel"], "Kompost, ab Fruchtansatz Kalidünger.", "Pro Pflanze nur 3–4 Früchte lassen, Triebe nach 4 Blättern über der Frucht kappen."),
+  P("zucchini", "Zucchini", "kuerbis", "stark", 100, 100, 70, "geeignet", [4], [5, 6], [4, 5], [6, 7, 8, 9], 3, true,
+    ["buschbohne", "zwiebel", "mais", "kapuzinerkresse", "dill", "ringelblume"], ["gurke", "kuerbis", "kartoffel"],
+    "Beim Pflanzen 5 l Kompost, im Sommer alle 2 Wochen Brennnesseljauche.", "Immer klein ernten (20 cm), dann kommen laufend neue. Blätter trocken halten (Mehltau)."),
+  P("kuerbis", "Kürbis", "kuerbis", "stark", 150, 150, 60, "geeignet", [4], [5, 6], [5], [9, 10], 3, true,
+    ["buschbohne", "stangenbohne", "mais", "zwiebel", "kapuzinerkresse"], ["kartoffel", "gurke", "zucchini"],
+    "Viel Kompost oder Mist, im Sommer alle 2 Wochen Jauche.", "Braucht viel Platz – Ranken dürfen aus dem Beet wachsen."),
+  P("salat", "Pflücksalat", "korb", "schwach", 30, 30, 25, "geeignet", [2, 3], [3, 4, 5, 6, 7, 8], [2, 3, 4, 9], [4, 5, 6, 7, 8, 9, 10], 2, false,
+    ["radieschen", "karotte", "erdbeere", "zwiebel", "gurke", "tomate", "kohlrabi", "buschbohne", "dill"], ["petersilie", "sellerie"],
+    "Kaum Dünger nötig, etwas Kompost reicht.", "Flach pflanzen (Herz nicht eingraben), alle 3–4 Wochen nachsäen."),
+  P("feldsalat", "Feldsalat", "baldrian", "schwach", 10, 5, 10, "geeignet", [], [8, 9], [9, 10], [10, 11, 12, 1, 2, 3], 1, false,
+    ["zwiebel", "radieschen", "erdbeere", "kohlrabi"], [], "Kein Dünger nötig.", "Ideal als Wintersalat nach den Tomaten, verträgt Frost. Erde vor der Aussaat festdrücken."),
+  P("portulak", "Winterportulak", "portulak", "schwach", 15, 10, 15, "geeignet", [], [9], [9, 10, 11], [11, 12, 1, 2, 3, 4], 1, false,
+    ["feldsalat", "spinat"], [], "Kein Dünger nötig.", "Winterhart, im Gewächshaus den ganzen Winter erntbar."),
+  P("asiasalat", "Asia-Salat (Mizuna)", "kreuz", "schwach", 20, 20, 30, "geeignet", [], [8, 9], [8, 9, 10], [9, 10, 11, 12], 2, false,
+    ["salat", "spinat"], [], "Etwas Kompost.", "Wächst schnell, als Babyleaf schon nach 3–4 Wochen ernten."),
+  P("rucola", "Rucola", "kreuz", "schwach", 15, 5, 25, "geeignet", [], [4, 5, 6, 7, 8], [3, 4, 9, 10], [5, 6, 7, 8, 9, 10, 11], 2, false,
+    ["salat", "tomate"], ["kohlrabi", "brokkoli"], "Kein Dünger nötig.", "Im Hochsommer schießt er schnell – lieber im Frühjahr und Herbst säen."),
+  P("radieschen", "Radieschen", "kreuz", "schwach", 10, 4, 15, "geeignet", [], [3, 4, 5, 6, 7, 8, 9], [2, 3, 10], [4, 5, 6, 7, 8, 9, 10, 11], 2, false,
+    ["salat", "karotte", "spinat", "tomate", "erbse", "buschbohne", "kohlrabi"], ["gurke"], "Kein Dünger nötig.", "Gleichmäßig feucht halten, sonst werden sie scharf und holzig."),
+  P("spinat", "Spinat", "gaensefuss", "mittel", 25, 8, 25, "geeignet", [], [3, 4, 8, 9], [2, 3, 9, 10], [4, 5, 6, 10, 11, 12], 2, false,
+    ["radieschen", "kohlrabi", "erdbeere", "tomate", "buschbohne", "kartoffel"], ["rote_bete", "mangold"], "Etwas Kompost.", "Winterspinat im September säen, erntet man bis Dezember und wieder im Frühjahr."),
+  P("mangold", "Mangold", "gaensefuss", "mittel", 40, 30, 50, "draussen", [], [4, 5, 6, 7], [], [6, 7, 8, 9, 10, 11], 2, false,
+    ["buschbohne", "radieschen", "kohlrabi"], ["spinat", "rote_bete"], "Kompost, im Sommer einmal Jauche.", "Immer die äußeren Blätter ernten, dann wächst er monatelang nach."),
+  P("rote_bete", "Rote Bete", "gaensefuss", "mittel", 30, 10, 30, "draussen", [], [4, 5, 6, 7], [], [7, 8, 9, 10], 2, false,
+    ["zwiebel", "kohlrabi", "salat", "buschbohne", "dill"], ["spinat", "mangold", "kartoffel"], "Etwas Kompost.", "Nach dem Aufgehen auf 10 cm vereinzeln."),
+  P("karotte", "Möhre", "dolden", "mittel", 25, 4, 30, "draussen", [], [3, 4, 5, 6], [], [6, 7, 8, 9, 10], 2, false,
+    ["zwiebel", "lauch", "salat", "radieschen", "erbse", "tomate", "schnittlauch"], ["dill"], "Kein frischer Mist! Nur reifer Kompost.",
+    "Mit Radieschen als Markiersaat mischen, auf 4 cm vereinzeln. Zwiebeln daneben halten die Möhrenfliege fern."),
+  P("pastinake", "Pastinake", "dolden", "mittel", 35, 10, 40, "draussen", [], [3, 4, 5], [], [10, 11, 12, 1, 2], 1, false,
+    ["zwiebel", "salat"], [], "Etwas Kompost.", "Keimt langsam (3–4 Wochen), Frost macht sie süßer."),
+  P("sellerie", "Sellerie", "dolden", "stark", 40, 40, 50, "draussen", [2, 3], [5], [], [9, 10], 3, true,
+    ["lauch", "tomate", "kohlrabi", "buschbohne", "gurke"], ["salat", "kartoffel", "mais"], "Viel Kompost, im Sommer 2× Jauche.", "Flach pflanzen, die Knolle muss oben aus der Erde schauen."),
+  P("fenchel", "Fenchel", "dolden", "mittel", 30, 25, 60, "draussen", [], [6, 7], [], [8, 9, 10], 2, false,
+    ["salat", "gurke", "erbse"], ["tomate", "buschbohne", "stangenbohne", "kohlrabi", "paprika", "chili", "aubergine"], "Kompost.", "Nicht vor Juni säen, sonst schießt er."),
+  P("zwiebel", "Zwiebel", "lauch", "schwach", 20, 10, 40, "draussen", [], [3, 4, 9, 10], [], [7, 8], 1, false,
+    ["karotte", "tomate", "erdbeere", "salat", "gurke", "rote_bete", "dill"], ["buschbohne", "stangenbohne", "erbse", "kohlrabi"],
+    "Kaum Dünger.", "Steckzwiebeln so tief stecken, dass die Spitze herausschaut. Winterzwiebeln im September/Oktober."),
+  P("knoblauch", "Knoblauch", "lauch", "schwach", 25, 15, 50, "draussen", [], [10, 11, 3], [], [6, 7], 1, false,
+    ["tomate", "erdbeere", "karotte", "rote_bete"], ["buschbohne", "stangenbohne", "erbse", "kohlrabi"], "Kein Dünger nötig.",
+    "Zehen im Oktober/November 5 cm tief stecken – Spitze nach oben. Ernten, wenn das Laub zu einem Drittel gelb ist."),
+  P("lauch", "Lauch", "lauch", "stark", 30, 15, 50, "draussen", [2, 3], [5, 6, 7], [], [9, 10, 11, 12, 1, 2], 2, false,
+    ["karotte", "sellerie", "tomate", "salat", "erdbeere"], ["buschbohne", "stangenbohne", "erbse", "rote_bete"], "Kompost, im Juli 1× Jauche.", "Tief pflanzen und anhäufeln, dann bleibt der Schaft weiß."),
+  P("schnittlauch", "Schnittlauch", "lauch", "schwach", 25, 25, 30, "draussen", [], [3, 4, 5], [], [4, 5, 6, 7, 8, 9, 10], 2, false,
+    ["karotte", "tomate", "erdbeere"], ["buschbohne", "erbse"], "Kaum Dünger.", "Mehrjährig – an den Beetrand pflanzen."),
+  P("buschbohne", "Buschbohne", "huelsen", "schwach", 40, 10, 45, "draussen", [], [5, 6, 7], [], [7, 8, 9], 2, true,
+    ["gurke", "salat", "kohlrabi", "sellerie", "radieschen", "erdbeere", "mangold", "rote_bete", "zucchini", "kartoffel"],
+    ["zwiebel", "knoblauch", "lauch", "erbse", "fenchel", "schnittlauch"], "Kein Dünger nötig (holt sich Stickstoff selbst).", "Erst nach den Eisheiligen säen, in Horsten zu 5 Bohnen."),
+  P("stangenbohne", "Stangenbohne", "huelsen", "schwach", 60, 15, 250, "draussen", [], [5, 6], [], [7, 8, 9, 10], 2, true,
+    ["gurke", "salat", "kohlrabi", "mais", "kuerbis", "zucchini"], ["zwiebel", "knoblauch", "lauch", "erbse", "fenchel"], "Kein Dünger nötig.", "Braucht 2,5 m hohe Stangen oder Schnüre."),
+  P("erbse", "Erbse", "huelsen", "schwach", 40, 5, 120, "draussen", [], [3, 4, 5], [], [6, 7], 2, false,
+    ["karotte", "radieschen", "salat", "gurke", "kohlrabi", "zucchini"], ["buschbohne", "stangenbohne", "zwiebel", "knoblauch", "lauch", "tomate", "kartoffel"],
+    "Kein Dünger nötig.", "Reisig oder Netz als Rankhilfe, früh säen (verträgt leichten Frost)."),
+  P("kohlrabi", "Kohlrabi", "kreuz", "mittel", 30, 25, 30, "geeignet", [2, 3], [4, 5, 6, 7, 8], [2, 3], [5, 6, 7, 8, 9, 10], 2, false,
+    ["salat", "spinat", "sellerie", "buschbohne", "erbse", "tomate", "rote_bete", "gurke"], ["zwiebel", "knoblauch", "erdbeere", "fenchel"],
+    "Kompost, nach 4 Wochen 1× Jauche.", "Gleichmäßig gießen, sonst platzen die Knollen."),
+  P("brokkoli", "Brokkoli", "kreuz", "stark", 50, 45, 60, "draussen", [3, 4], [5, 6], [], [7, 8, 9, 10], 2, false,
+    ["sellerie", "salat", "buschbohne", "tomate", "spinat"], ["zwiebel", "erdbeere"], "Viel Kompost, alle 3 Wochen Jauche.", "Kohlnetz gegen Kohlweißling auflegen."),
+  P("gruenkohl", "Grünkohl", "kreuz", "stark", 50, 50, 80, "draussen", [5], [6, 7], [], [11, 12, 1, 2], 2, false,
+    ["sellerie", "spinat", "salat"], ["zwiebel", "erdbeere"], "Kompost, im August 1× Jauche.", "Erst nach dem ersten Frost ernten – dann schmeckt er süßer."),
+  P("kartoffel", "Kartoffel", "nacht", "stark", 65, 35, 60, "draussen", [], [4, 5], [], [7, 8, 9], 2, true,
+    ["buschbohne", "kohlrabi", "spinat", "kapuzinerkresse", "mais"], ["tomate", "gurke", "kuerbis", "zucchini", "erbse", "sellerie", "rote_bete"],
+    "Kompost beim Pflanzen.", "Anhäufeln, sobald das Kraut 20 cm hoch ist – passt gut auf die Erdstreifen."),
+  P("mais", "Zuckermais", "gras", "stark", 60, 30, 200, "draussen", [4], [5], [], [8, 9], 2, true,
+    ["buschbohne", "stangenbohne", "kuerbis", "gurke", "zucchini", "melone"], ["sellerie"], "Viel Kompost, im Juni 1× Jauche.", "Im Block pflanzen (nicht einzeln in einer Reihe), sonst werden die Kolben nicht bestäubt."),
+  P("erdbeere", "Erdbeere", "rosen", "mittel", 40, 30, 25, "draussen", [], [4, 8], [], [6, 7], 2, false,
+    ["knoblauch", "zwiebel", "schnittlauch", "salat", "spinat", "buschbohne", "lauch"], ["kohlrabi", "brokkoli", "gruenkohl"], "Nach der Ernte Beerendünger oder Kompost.", "Stroh unter die Früchte legen, Ausläufer abschneiden."),
+  P("basilikum", "Basilikum", "lippen", "schwach", 25, 25, 40, "bevorzugt", [3, 4], [6], [5], [6, 7, 8, 9], 2, true,
+    ["tomate", "paprika", "chili", "gurke", "aubergine"], [], "Etwas Kompost.", "Nur morgens gießen, Triebspitzen abknipsen statt einzelner Blätter."),
+  P("petersilie", "Petersilie", "dolden", "schwach", 25, 15, 30, "geeignet", [], [3, 4, 5, 6, 7], [3, 9], [5, 6, 7, 8, 9, 10, 11], 2, false,
+    ["tomate", "zwiebel", "radieschen"], ["salat"], "Etwas Kompost.", "Keimt langsam (bis 4 Wochen) – Saat vorher einweichen."),
+  P("dill", "Dill", "dolden", "schwach", 25, 10, 80, "draussen", [], [4, 5, 6, 7], [], [6, 7, 8, 9], 2, false,
+    ["gurke", "salat", "zwiebel", "kohlrabi", "rote_bete"], ["fenchel", "karotte"], "Kein Dünger.", "Zwischen die Gurken säen – fördert sie."),
+  P("ringelblume", "Ringelblume", "korb", "schwach", 30, 30, 50, "geeignet", [], [4, 5], [4], [6, 7, 8, 9, 10], 1, false,
+    ["tomate", "zucchini", "kohlrabi"], [], "Kein Dünger.", "Lockt Nützlinge an und hält Fadenwürmer fern – gern an die Beetecken."),
+  P("kapuzinerkresse", "Kapuzinerkresse", "kresse", "schwach", 40, 40, 30, "draussen", [], [5], [], [6, 7, 8, 9, 10], 1, true,
+    ["tomate", "zucchini", "kuerbis", "kartoffel", "melone"], [], "Kein Dünger.", "Lockt Läuse von den Gemüsepflanzen weg, Blüten sind essbar."),
+  P("tagetes", "Tagetes", "korb", "schwach", 25, 25, 30, "geeignet", [3], [5], [5], [7, 8, 9], 1, true,
+    ["tomate", "aubergine", "kartoffel"], [], "Kein Dünger.", "Hält Fadenwürmer und Weiße Fliege fern – zwischen die Tomaten."),
+  P("roggen", "Gründüngung (Winterroggen)", "gras", "schwach", 15, 3, 40, "draussen", [], [9, 10], [], [], 1, false,
+    [], [], "Kein Dünger.", "Über den Winter auf freie Erdstreifen säen, im April abmähen und flach einarbeiten – lockert und düngt den Boden."),
+];
+const PF = Object.fromEntries(PFLANZEN.map(p => [p.id, p]));
+const FAMILIE = { nacht: "Nachtschatten", kuerbis: "Kürbisgewächse", korb: "Korbblütler", baldrian: "Baldriangewächse", portulak: "Portulak", kreuz: "Kreuzblütler (Kohl)",
+  gaensefuss: "Gänsefuß", dolden: "Doldenblütler", lauch: "Lauch/Zwiebel", huelsen: "Hülsenfrüchte", gras: "Gräser", rosen: "Rosengewächse", lippen: "Lippenblütler", kresse: "Kresse" };
+const FARBE = { nacht: "#E5534B", kuerbis: "#F2A33A", korb: "#8BC34A", baldrian: "#6FBF73", portulak: "#4DB6AC", kreuz: "#7E9CD8", gaensefuss: "#C2185B",
+  dolden: "#FF8A3D", lauch: "#B39DDB", huelsen: "#43A047", gras: "#D4B106", rosen: "#EC407A", lippen: "#26A69A", kresse: "#FFB300" };
+const anzeigeName = id => (PF[id] || { name: id }).name;
+function nachbarn(a, b) {
+  const A = PF[a], B = PF[b]; if (!A || !B || a === b) return 0;
+  if (A.schlecht.includes(b) || B.schlecht.includes(a)) return -1;
+  if (A.gut.includes(b) || B.gut.includes(a)) return 1;
+  return 0;
+}
+
+// ================= Daten =================
+const VORLAGE = {
+  version: 1,
+  bereiche: [
+    { id: "gh", name: "Gewächshaus", w: 600, h: 400, sued: "unten" },
+    { id: "garten", name: "Gemüsegarten", w: 420, h: 640, sued: "unten" },
+  ],
+  beete: [
+    { id: "gh1", bereich: "gh", name: "Hochbeet links", art: "hochbeet", x: 0, y: 0, w: 80, h: 400, wasser: true },
+    { id: "gh2", bereich: "gh", name: "Hochbeet hinten", art: "hochbeet", x: 80, y: 0, w: 440, h: 80, wasser: true },
+    { id: "gh3", bereich: "gh", name: "Hochbeet rechts", art: "hochbeet", x: 520, y: 0, w: 80, h: 250, wasser: true },
+    { id: "gh4", bereich: "gh", name: "Kasten Mitte", art: "kasten", x: 250, y: 170, w: 100, h: 60, wasser: false },
+    { id: "ga1", bereich: "garten", name: "Erdstreifen 1", art: "erdstreifen", x: 50, y: 40, w: 60, h: 560, wasser: false },
+    { id: "ga2", bereich: "garten", name: "Erdstreifen 2", art: "erdstreifen", x: 180, y: 40, w: 60, h: 560, wasser: false },
+    { id: "ga3", bereich: "garten", name: "Erdstreifen 3", art: "erdstreifen", x: 310, y: 40, w: 60, h: 560, wasser: false },
+  ],
+  pflanzungen: [],   // {id, beet, pflanze, anzahl, start, laenge, saison}
+  wunsch: {},        // {pflanze: anzahl}
+  historie: [],      // {saison, beet, fam}
+  fotos: [],         // {datum, pflanze, beet, frage, text, bild}
+};
+let daten = JSON.parse(JSON.stringify(VORLAGE));
+let reiter = "plan", bereichWahl = "gh", bearbeiten = false, filter = "jetzt";
+let wetterTage = [], wetterGeladen = 0;
+const saison = () => new Date().getFullYear();
+const monat = () => new Date().getMonth() + 1;
+const beet = id => daten.beete.find(b => b.id === id);
+const bereich = id => daten.bereiche.find(b => b.id === id);
+const lang = b => Math.max(b.w, b.h), breit = b => Math.min(b.w, b.h);
+
+// ================= Speichern / Laden =================
+let speicherTimer = 0, letzterText = "";
+function geaendert() { $("speicher").textContent = "…"; clearTimeout(speicherTimer); speicherTimer = setTimeout(speichern, 1200); }
+async function speichern() {
+  const h = hass(); if (!h) return;
+  const text = JSON.stringify(daten);
+  try {
+    const r = await h.callWS({ type: "call_service", domain: "script", service: "garten_speichern", service_data: { daten: text }, return_response: true });
+    const a = (r && r.response) || {};
+    if (a.ok === false || a.ok === "False") throw new Error(typeof a.text === "string" ? a.text : "Fehler");
+    letzterText = text; $("speicher").textContent = "gespeichert";
+  } catch (e) {
+    $("speicher").textContent = "nicht gespeichert";
+    meldung("Speichern hat nicht geklappt: " + (e && e.message || e));
+  }
+}
+async function laden() {
+  if (!hass()) { setTimeout(laden, 400); return; }
+  try {
+    const r = await fetch(DATEN_URL + "?t=" + Date.now(), { cache: "no-store" });
+    if (r.ok) { const d = await r.json(); if (d && Array.isArray(d.beete)) { daten = { ...JSON.parse(JSON.stringify(VORLAGE)), ...d }; letzterText = JSON.stringify(daten); } }
+  } catch (e) { /* noch nichts gespeichert */ }
+  zeichnen();
+  wetterLaden();
+}
+// Änderungen von anderen Geräten übernehmen
+setInterval(async () => {
+  if (bearbeiten || $("schleier").classList.contains("offen") || speicherTimer && $("speicher").textContent === "…") return;
+  try {
+    const r = await fetch(DATEN_URL + "?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) return;
+    const t = await r.text();
+    if (t && t !== letzterText) { const d = JSON.parse(t); if (d && Array.isArray(d.beete)) { daten = { ...JSON.parse(JSON.stringify(VORLAGE)), ...d }; letzterText = t; zeichnen(); } }
+  } catch (e) { /* später */ }
+}, 20000);
+
+// ================= Wetter =================
+async function wetterLaden() {
+  const h = hass(); if (!h) return;
+  const id = h.states[WETTER] ? WETTER : Object.keys(h.states).find(e => e.startsWith("weather."));
+  if (!id) return;
+  try {
+    const r = await h.callWS({ type: "call_service", domain: "weather", service: "get_forecasts", service_data: { type: "daily" }, target: { entity_id: id }, return_response: true });
+    wetterTage = ((r.response || {})[id] || {}).forecast || [];
+    wetterGeladen = Date.now();
+    if (reiter === "heute") zeichnen();
+  } catch (e) { wetterTage = []; }
+}
+function wetterJetzt() {
+  const h = hass(); if (!h) return null;
+  const id = h.states[WETTER] ? WETTER : Object.keys(h.states).find(e => e.startsWith("weather."));
+  return id ? h.states[id] : null;
+}
+function wetterText() {
+  const w = wetterJetzt(), t = wetterTage.slice(0, 4);
+  let s = w ? `jetzt ${w.attributes.temperature} °C, ${w.state}` : "";
+  if (t.length) s += "; nächste Tage: " + t.map(d => `${new Date(d.datetime).toLocaleDateString("de-DE", { weekday: "short" })} ${Math.round(d.templow ?? d.temperature)}–${Math.round(d.temperature)} °C, ${d.precipitation ?? 0} mm`).join("; ");
+  return s;
+}
+
+// ================= Pflanzplan berechnen =================
+// Platzbedarf: Reihen quer zum Beet, Länge entlang des Beets
+function bedarf(pf, anzahl, b) {
+  const reihen = Math.max(1, Math.floor(breit(b) / pf.reihe));
+  return Math.ceil(anzahl / reihen) * pf.abstand;
+}
+// Norden = Rückseite: hohe Pflanzen dort, damit sie nichts beschatten
+function nordWert(b) {
+  const ber = bereich(b.bereich), cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+  return { unten: 1 - cy / ber.h, oben: cy / ber.h, links: cx / ber.w, rechts: 1 - cx / ber.w }[ber.sued || "unten"];
+}
+function passtInsBeet(pf, b, m) {
+  const ber = b.bereich === "gh";
+  if (pf.gh === "bevorzugt") return ber ? 3 : (pf.draussen.length ? -1 : -9);
+  if (pf.gh === "draussen") return ber ? -6 : 2;
+  // große Pflanzen (Kürbis, Zucchini) lieber draußen – sie nehmen im Gewächshaus zu viel Platz weg
+  if (pf.abstand >= 80) return ber ? -1 : 2;
+  // geeignet: im Winterhalbjahr lieber ins Gewächshaus, im Sommer lieber draußen
+  const winter = m >= 9 || m <= 3;
+  return ber ? (winter ? 2 : 0) : (winter ? 0 : 1);
+}
+function planErstellen() {
+  const m = monat(), jahr = saison();
+  const wunsch = Object.entries(daten.wunsch).filter(([id, n]) => PF[id] && n > 0);
+  if (!wunsch.length) { meldung("Erst unter „Pflanzen“ auswählen, was wachsen soll"); return; }
+  // vorherige Saison merken (Fruchtfolge)
+  for (const p of daten.pflanzungen) {
+    if (p.saison && p.saison < jahr && !daten.historie.some(h => h.saison === p.saison && h.beet === p.beet && h.fam === PF[p.pflanze]?.fam))
+      daten.historie.push({ saison: p.saison, beet: p.beet, fam: PF[p.pflanze]?.fam });
+  }
+  const beete = daten.beete.filter(b => b.art !== "weg");
+  const frei = Object.fromEntries(beete.map(b => [b.id, lang(b)]));
+  const inhalt = Object.fromEntries(beete.map(b => [b.id, []]));
+  const hinweise = [];
+  // große/hohe und anspruchsvolle zuerst verteilen
+  const liste = wunsch.map(([id, n]) => ({ pf: PF[id], n })).sort((a, b) => (b.pf.hoehe * (b.pf.gh === "bevorzugt" ? 2 : 1)) - (a.pf.hoehe * (a.pf.gh === "bevorzugt" ? 2 : 1)));
+  for (const { pf, n } of liste) {
+    let rest = n;
+    while (rest > 0) {
+      let best = null;
+      for (const b of beete) {
+        const lage = passtInsBeet(pf, b, m); if (lage < -5) continue;
+        const braucht = bedarf(pf, rest, b);
+        const platz = frei[b.id]; if (platz < pf.abstand) continue;
+        let s = lage * 3;
+        const drin = inhalt[b.id];
+        if (drin.length) s += nachbarn(pf.id, drin[drin.length - 1].pflanze) * 4;
+        for (const x of drin) if (nachbarn(pf.id, x.pflanze) < 0) s -= 3;
+        // hohe Pflanzen an die Nordseite, niedrige nach Süden
+        const nw = nordWert(b); s += (pf.hoehe >= 100 ? nw : pf.hoehe <= 40 ? 1 - nw : 0.5) * 3;
+        if (daten.historie.some(h => h.beet === b.id && h.fam === pf.fam && h.saison === jahr - 1)) s -= 4;
+        if (pf.zehrer === "stark" && b.art === "hochbeet") s += 1;
+        if (pf.wasser === 3 && b.wasser) s += 1;
+        s += Math.min(braucht, platz) / Math.max(1, braucht);  // lieber dorthin, wo alles hinpasst
+        if (!best || s > best.s) best = { b, s };
+      }
+      if (!best) { hinweise.push(`${pf.name}: ${rest} Stück passen nicht mehr`); break; }
+      const reihen = Math.max(1, Math.floor(breit(best.b) / pf.reihe));
+      const passen = Math.min(rest, Math.floor(frei[best.b.id] / pf.abstand) * reihen);
+      if (passen <= 0) { hinweise.push(`${pf.name}: ${rest} Stück passen nicht mehr`); break; }
+      const laenge = Math.ceil(passen / reihen) * pf.abstand;
+      inhalt[best.b.id].push({ pflanze: pf.id, anzahl: passen, laenge });
+      frei[best.b.id] -= laenge; rest -= passen;
+    }
+  }
+  // Reihenfolge im Beet: gute Nachbarn nebeneinander, hohe Pflanzen ans Nordende
+  const neu = [];
+  for (const b of beete) {
+    let r = ordnen(inhalt[b.id]);
+    const ber = bereich(b.bereich), senkrecht = b.h >= b.w;
+    const nordAmAnfang = senkrecht ? ber.sued === "unten" : ber.sued === "rechts";
+    if (r.length > 1) {
+      const hoeheAnfang = PF[r[0].pflanze].hoehe, hoeheEnde = PF[r[r.length - 1].pflanze].hoehe;
+      if ((nordAmAnfang && hoeheEnde > hoeheAnfang) || (!nordAmAnfang && hoeheAnfang > hoeheEnde)) r = r.reverse();
+    }
+    let pos = 0;
+    for (const x of r) { neu.push({ id: Math.random().toString(36).slice(2, 9), beet: b.id, pflanze: x.pflanze, anzahl: x.anzahl, start: pos, laenge: x.laenge, saison: jahr }); pos += x.laenge; }
+  }
+  daten.pflanzungen = neu;
+  geaendert(); reiter = "plan";
+  const gh = neu.filter(p => beet(p.beet).bereich === "gh").length, ga = neu.length - gh;
+  if (gh && !ga) bereichWahl = "gh"; else if (ga && !gh) bereichWahl = "garten";
+  zeichnen();
+  meldung(hinweise.length ? "Plan erstellt – " + hinweise.join(", ") : "Pflanzplan erstellt", hinweise.length ? 6000 : 3000);
+}
+function wertung(r) { let s = 0; for (let i = 1; i < r.length; i++) s += nachbarn(r[i - 1].pflanze, r[i].pflanze); return s; }
+function ordnen(r) {
+  if (r.length < 3) return r.slice();
+  let best = r.slice(), bw = wertung(best);
+  for (let runde = 0; runde < 200; runde++) {
+    const i = Math.floor(Math.random() * r.length), j = Math.floor(Math.random() * r.length);
+    const t = best.slice(); [t[i], t[j]] = [t[j], t[i]];
+    const w = wertung(t); if (w > bw) { best = t; bw = w; }
+  }
+  return best;
+}
+
+// ================= Zeichnen =================
+function zeichnen() {
+  document.querySelectorAll("#reiter button").forEach(b => b.classList.toggle("an", b.dataset.w === reiter));
+  const f = { plan: zeichnePlan, pflanzen: zeichnePflanzen, heute: zeichneHeute, foto: zeichneFoto }[reiter];
+  f();
+}
+
+function zeichnePlan() {
+  const ber = bereich(bereichWahl), rand = 30;
+  const beete = daten.beete.filter(b => b.bereich === ber.id);
+  let svg = `<svg id="plansvg" viewBox="${-rand} ${-rand} ${ber.w + 2 * rand} ${ber.h + 2 * rand}" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, Roboto, Helvetica, Arial, sans-serif">`;
+  svg += `<rect x="0" y="0" width="${ber.w}" height="${ber.h}" fill="${ber.id === "gh" ? "#C9B79C" : "#B9D39E"}" rx="4"/>`;
+  if (ber.id === "gh") svg += `<rect x="0" y="0" width="${ber.w}" height="${ber.h}" fill="none" stroke="#8B6F4E" stroke-width="6" rx="4"/>`;
+  // Himmelsrichtung
+  const pfeil = { unten: [ber.w / 2, ber.h + 22], oben: [ber.w / 2, -10], links: [-14, ber.h / 2], rechts: [ber.w + 14, ber.h / 2] }[ber.sued || "unten"];
+  svg += `<text x="${pfeil[0]}" y="${pfeil[1]}" text-anchor="middle" font-size="16" font-weight="700" fill="#E08A00">S</text>`;
+  for (const b of beete) {
+    const farbeBeet = b.art === "hochbeet" ? "#D9B98C" : b.art === "kasten" ? "#B0A99F" : "#6B4A2E";
+    const rand2 = b.art === "erdstreifen" ? "#4E3420" : "#A8834F";
+    svg += `<g data-beet="${b.id}"><rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="${farbeBeet}" stroke="${bearbeiten ? "#007AFF" : rand2}" stroke-width="${bearbeiten ? 4 : 3}" rx="3"/>`;
+    const innen = 6, senkrecht = b.h >= b.w;
+    svg += `<rect x="${b.x + innen}" y="${b.y + innen}" width="${b.w - 2 * innen}" height="${b.h - 2 * innen}" fill="${b.art === "erdstreifen" ? "#7A5636" : "#5B4130"}" rx="2"/>`;
+    for (const p of daten.pflanzungen.filter(p => p.beet === b.id)) {
+      const pf = PF[p.pflanze]; if (!pf) continue;
+      const L = lang(b) - 2 * innen;
+      const a = Math.min(p.start, L), l = Math.max(4, Math.min(p.laenge, L - a));
+      const r = senkrecht ? { x: b.x + innen, y: b.y + innen + a, w: b.w - 2 * innen, h: l } : { x: b.x + innen + a, y: b.y + innen, w: l, h: b.h - 2 * innen };
+      svg += `<g data-pflanzung="${p.id}"><rect x="${r.x + 1}" y="${r.y + 1}" width="${r.w - 2}" height="${r.h - 2}" fill="${FARBE[pf.fam] || "#8BC34A"}" rx="4" opacity="0.92"/>`;
+      const kurz = Math.min(r.w, r.h), schrift = Math.max(9, Math.min(16, kurz * 0.28)), drehen = senkrecht && r.h > r.w * 1.6;
+      const mx = r.x + r.w / 2, my = r.y + r.h / 2;
+      svg += `<text x="${mx}" y="${my}" text-anchor="middle" dominant-baseline="middle" font-size="${schrift}" font-weight="700" fill="#fff" stroke="rgba(0,0,0,.35)" stroke-width="${schrift * 0.12}" paint-order="stroke" ${drehen ? `transform="rotate(-90 ${mx} ${my})"` : ""}>${esc(pf.name)} ${p.anzahl}×</text></g>`;
+    }
+    // Nummer am Beet, Namen stehen unter dem Plan (lange Beschriftungen würden sich überlappen)
+    const nr = beete.indexOf(b) + 1;
+    svg += `<circle cx="${b.x + 14}" cy="${b.y + 14}" r="12" fill="#fff" stroke="#3A3A3C" stroke-width="2"/><text x="${b.x + 14}" y="${b.y + 15}" text-anchor="middle" dominant-baseline="middle" font-size="14" font-weight="800" fill="#1C1C1E">${nr}</text>`;
+    if (bearbeiten) svg += `<circle cx="${b.x + b.w}" cy="${b.y + b.h}" r="11" fill="#007AFF" stroke="#fff" stroke-width="3" data-griff="${b.id}"/>`;
+    svg += `</g>`;
+  }
+  svg += `</svg>`;
+  const belegt = daten.pflanzungen.filter(p => beete.some(b => b.id === p.beet));
+  const fams = [...new Set(belegt.map(p => PF[p.pflanze]?.fam).filter(Boolean))];
+  $("inhalt").innerHTML = `
+    <div class="karte">
+      <div class="zeile" style="margin-bottom:10px">
+        <div class="segment">${daten.bereiche.map(b => `<button data-a="bereich" data-w="${b.id}" class="${b.id === bereichWahl ? "an" : ""}">${esc(b.name)}</button>`).join("")}</div>
+        <span class="luecke"></span>
+        ${bearbeiten ? `<button class="knopf klein-k" data-a="beet-neu">${ic("plus")} Beet</button><button class="knopf klein-k" data-a="bereich-mass">Größe & Süden</button>` : ""}
+        <button class="knopf klein-k ${bearbeiten ? "blau" : ""}" data-a="bearbeiten">${ic("stift")} ${bearbeiten ? "Fertig" : "Beete ändern"}</button>
+      </div>
+      <div class="planbox" id="planbox">${svg}</div>
+      <div class="legende">${beete.map((b, i) => `<span><b>${i + 1}</b> ${esc(b.name)} <span class="klein">${b.w}×${b.h} cm</span></span>`).join("")}</div>
+      <div class="legende">${fams.map(f => `<span><i class="punkt" style="background:${FARBE[f]}"></i>${FAMILIE[f]}</span>`).join("")}</div>
+      <p class="klein">${bearbeiten ? "Beet ziehen = verschieben (10-cm-Schritte), blauer Punkt = Größe ändern, Beet antippen = Name, Maße, Art. Maße bitte nachmessen und eintragen." :
+        belegt.length ? "Pflanze antippen = Infos, Anzahl ändern, in ein anderes Beet verschieben." : "Noch nichts geplant – unter „Pflanzen“ auswählen und „Pflanzplan erstellen“ tippen."}</p>
+    </div>
+    ${belegt.length ? `<div class="karte"><h2>Was wohin – ${esc(ber.name)}</h2>${beete.map(b => {
+      const ps = daten.pflanzungen.filter(p => p.beet === b.id).sort((x, y) => x.start - y.start);
+      return ps.length ? `<h3>${esc(b.name)}</h3><div class="klein">${ps.map(p => `<b style="color:#1C1C1E">${esc(anzeigeName(p.pflanze))}</b> ${p.anzahl} Stück auf ${Math.round(p.laenge)} cm (ab ${Math.round(p.start)} cm)`).join(" · ")}</div>` : "";
+    }).join("")}</div>` : ""}`;
+  planGesten();
+}
+
+// Beete verschieben / Größe ändern (Bearbeiten-Modus), Pflanzung/Beet antippen
+function planGesten() {
+  const svg = $("plansvg"); if (!svg) return;
+  let zug = null;
+  const punkt = ev => { const p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY; return p.matrixTransform(svg.getScreenCTM().inverse()); };
+  svg.addEventListener("pointerdown", ev => {
+    const griff = ev.target.closest("[data-griff]"), g = ev.target.closest("[data-beet]"), pfl = ev.target.closest("[data-pflanzung]");
+    const p = punkt(ev);
+    zug = { sx: ev.clientX, sy: ev.clientY, p, griff: griff && griff.dataset.griff, beet: g && g.dataset.beet, pfl: pfl && pfl.dataset.pflanzung, bewegt: false };
+    if (bearbeiten && (zug.griff || zug.beet)) { const b = beet(zug.griff || zug.beet); zug.start = { ...b }; svg.setPointerCapture(ev.pointerId); ev.preventDefault(); }
+  });
+  svg.addEventListener("pointermove", ev => {
+    if (!zug || !bearbeiten || !zug.start) return;
+    if (Math.hypot(ev.clientX - zug.sx, ev.clientY - zug.sy) > 6) zug.bewegt = true;
+    if (!zug.bewegt) return;
+    const p = punkt(ev), dx = Math.round((p.x - zug.p.x) / 10) * 10, dy = Math.round((p.y - zug.p.y) / 10) * 10;
+    const b = beet(zug.griff || zug.beet), ber = bereich(b.bereich);
+    if (zug.griff) { b.w = Math.max(20, zug.start.w + dx); b.h = Math.max(20, zug.start.h + dy); }
+    else { b.x = Math.max(0, Math.min(ber.w - b.w, zug.start.x + dx)); b.y = Math.max(0, Math.min(ber.h - b.h, zug.start.y + dy)); }
+    const gr = svg.querySelector(`[data-beet="${b.id}"]`);
+    if (gr) { const r = gr.querySelector("rect"); r.setAttribute("x", b.x); r.setAttribute("y", b.y); r.setAttribute("width", b.w); r.setAttribute("height", b.h); }
+  });
+  const ende = ev => {
+    if (!zug) return;
+    const z = zug; zug = null;
+    if (z.bewegt && bearbeiten) { geaendert(); zeichnePlan(); return; }
+    if (Math.hypot(ev.clientX - z.sx, ev.clientY - z.sy) > 10) return;
+    if (!tippErlaubt()) return;
+    if (bearbeiten && z.beet) beetBearbeiten(z.beet);
+    else if (z.pfl) pflanzungZeigen(z.pfl);
+    else if (z.beet) beetZeigen(z.beet);
+  };
+  svg.addEventListener("pointerup", ende);
+  svg.addEventListener("pointercancel", () => { zug = null; });
+}
+
+function zeichnePflanzen() {
+  const m = monat();
+  const jetztPassend = pf => [...pf.vorziehen, ...pf.draussen, ...pf.ghm].some(x => x === m || x === (m % 12) + 1);
+  const liste = PFLANZEN.filter(pf => filter === "alle" || (filter === "jetzt" ? jetztPassend(pf) : filter === "gh" ? pf.gh !== "draussen" : pf.gh !== "bevorzugt"));
+  const gewaehlt = Object.entries(daten.wunsch).filter(([id, n]) => n > 0 && PF[id]);
+  $("inhalt").innerHTML = `
+    <div class="karte">
+      <h2>Was soll wachsen?</h2>
+      <p class="klein">Antippen = auswählen, mit + und − die Stückzahl. Dann „Pflanzplan erstellen“: Ich verteile alles auf die Beete –
+        gute Nachbarn nebeneinander, hohe Pflanzen an die Nordseite, Wärmeliebende ins Gewächshaus, kein Platz für dieselbe Familie wie letztes Jahr.</p>
+      <div class="zeile" style="margin:8px 0">
+        <div class="segment">${[["jetzt", "Jetzt passend"], ["gh", "Gewächshaus"], ["draussen", "Draußen"], ["alle", "Alle"]].map(([w, t]) =>
+          `<button data-a="filter" data-w="${w}" class="${w === filter ? "an" : ""}">${t}</button>`).join("")}</div>
+        <span class="luecke"></span>
+        <button class="knopf voll" data-a="plan-erstellen">${ic("zauber")} Pflanzplan erstellen${gewaehlt.length ? ` (${gewaehlt.length})` : ""}</button>
+      </div>
+      <div class="pliste">${liste.map(pf => {
+        const n = daten.wunsch[pf.id] || 0;
+        const wo = pf.gh === "bevorzugt" ? "Gewächshaus" : pf.gh === "draussen" ? "Draußen" : "Beides";
+        const jetzt = [];
+        if (pf.vorziehen.includes(m)) jetzt.push("vorziehen");
+        if (pf.ghm.includes(m)) jetzt.push("ins Gewächshaus");
+        if (pf.draussen.includes(m)) jetzt.push("draußen säen/pflanzen");
+        return `<div class="pflanze ${n ? "gewaehlt" : ""}">
+          <i class="punkt" style="background:${FARBE[pf.fam]}"></i>
+          <div class="mitte" data-a="pflanze-info" data-w="${pf.id}"><div class="name">${esc(pf.name)}</div>
+            <div class="info">${wo} · ${pf.reihe}×${pf.abstand} cm${jetzt.length ? ` · <span class="marke gruen">jetzt: ${jetzt.join(", ")}</span>` : ""}</div></div>
+          <div class="zahl"><button data-a="minus" data-w="${pf.id}">−</button><b>${n || ""}</b><button data-a="plus" data-w="${pf.id}">+</button></div>
+        </div>`;
+      }).join("")}</div>
+    </div>`;
+}
+function vorschlag(pf) { return pf.abstand <= 10 ? 20 : pf.abstand <= 30 ? 6 : pf.abstand <= 50 ? 4 : 2; }
+
+function zeichneHeute() {
+  const m = monat(), w = wetterJetzt(), tage = wetterTage.slice(0, 5);
+  const heute = tage[0] || {}, morgen = tage[1] || {};
+  const tmax = Math.max(...tage.slice(0, 2).map(d => d.temperature ?? -99), w ? w.attributes.temperature : -99);
+  const tmin = Math.min(...tage.slice(0, 3).map(d => d.templow ?? 99));
+  const regen2 = tage.slice(0, 2).reduce((s, d) => s + (d.precipitation || 0), 0);
+  const aufgaben = [];
+  const plaene = daten.pflanzungen.map(p => ({ ...p, pf: PF[p.pflanze], b: beet(p.beet) })).filter(p => p.pf && p.b);
+  const imGh = plaene.filter(p => p.b.bereich === "gh"), draussen = plaene.filter(p => p.b.bereich !== "gh");
+  // Frost
+  if (tmin < 2 && tmin !== 99) {
+    const empf = draussen.filter(p => p.pf.frost).map(p => p.pf.name);
+    aufgaben.push(["frost", "#5AC8FA", `Frost möglich (bis ${Math.round(tmin)} °C)`,
+      (empf.length ? `Draußen abdecken (Vlies): ${[...new Set(empf)].join(", ")}. ` : "") + "Gewächshaus abends schließen" + (tmin < -2 ? ", empfindliche Pflanzen zusätzlich mit Vlies abdecken." : ".")]);
+  }
+  // Gewächshaus lüften / Bewässerung
+  if (daten.beete.some(b => b.bereich === "gh")) {
+    if (tmax >= 22) aufgaben.push(["wind", "#34C759", "Gewächshaus lüften", `Bis ${Math.round(tmax)} °C erwartet – Tür tagsüber ganz öffnen, sonst wird es drinnen über 35 °C. Abends schließen, wenn die Nacht unter 10 °C geht.`]);
+    else if (tmax >= 14) aufgaben.push(["wind", "#34C759", "Gewächshaus mittags lüften", "Tür 2–3 Stunden öffnen, damit die Luftfeuchte raus kann (beugt Pilzkrankheiten vor)."]);
+    else aufgaben.push(["wind", "#8E8E93", "Gewächshaus geschlossen lassen", "Nur kurz an sonnigen Mittagen lüften, damit es nachts warm bleibt."]);
+    const tropf = daten.beete.some(b => b.bereich === "gh" && b.wasser);
+    const takt = tmax >= 28 ? "2× täglich (morgens und nachmittags) je ca. 15 Minuten" : tmax >= 20 ? "1× täglich morgens ca. 15 Minuten" : tmax >= 12 ? "alle 2 Tage morgens ca. 10–15 Minuten" : "nur alle 3–4 Tage, wenn die Erde 2 cm tief trocken ist";
+    aufgaben.push(["tropfen", "#007AFF", "Gießen im Gewächshaus", (tropf ? `Tropfbewässerung ${takt}. ` : `${takt.replace("Minuten", "Minuten gießen")}. `) +
+      "Fingerprobe: 3 cm tief muss die Erde feucht sein. Faustregel: Tomate/Gurke im Sommer 2–3 l pro Pflanze und Tag." + (tropf ? " (Laufzeiten an euren Tropfschlauch anpassen.)" : "")]);
+  }
+  // Draußen gießen
+  if (draussen.length || daten.beete.some(b => b.bereich !== "gh")) {
+    if (regen2 >= 5) aufgaben.push(["tropfen", "#8E8E93", "Draußen nicht gießen", `In den nächsten 2 Tagen kommen ca. ${Math.round(regen2)} mm Regen.`]);
+    else if (tmax >= 25) aufgaben.push(["tropfen", "#007AFF", "Erdstreifen kräftig gießen", "Früh morgens ca. 15–20 l pro Meter Erdstreifen, lieber selten und durchdringend als täglich ein bisschen. Danach mulchen (Rasenschnitt) hält die Feuchte."]);
+    else if (tmax >= 15) aufgaben.push(["tropfen", "#007AFF", "Erdstreifen gießen, wenn trocken", "Alle 2–3 Tage ca. 10 l pro Meter, Keimlinge und frische Saat täglich mit feiner Brause."]);
+    else if (draussen.length) aufgaben.push(["tropfen", "#8E8E93", "Draußen kaum gießen", "Bei der Kühle reicht meist der Regen – nur frische Aussaaten feucht halten."]);
+  }
+  // Düngen (Starkzehrer im Sommer)
+  if (m >= 6 && m <= 8) {
+    const stark = [...new Set(plaene.filter(p => p.pf.zehrer === "stark").map(p => p.pf.name))];
+    if (stark.length) aufgaben.push(["duenger", "#A0522D", "Alle 2 Wochen düngen", `${stark.join(", ")}: Flüssigdünger oder Brennnesseljauche (1:10) zum Gießwasser.`]);
+  }
+  // Pflanzkalender für die ausgewählten Pflanzen
+  const ausgewaehlt = Object.entries(daten.wunsch).filter(([id, n]) => n > 0 && PF[id]).map(([id]) => PF[id]);
+  const jetzt = [];
+  for (const pf of ausgewaehlt) {
+    if (pf.vorziehen.includes(m)) jetzt.push(`${pf.name} auf der Fensterbank vorziehen`);
+    if (pf.ghm.includes(m)) jetzt.push(`${pf.name} ins Gewächshaus`);
+    if (pf.draussen.includes(m)) jetzt.push(`${pf.name} draußen säen/pflanzen`);
+  }
+  if (jetzt.length) aufgaben.push(["saat", "#34A853", "Diesen Monat säen/pflanzen", jetzt.join(" · ")]);
+  const ernte = [...new Set(plaene.filter(p => p.pf.ernte.includes(m)).map(p => p.pf.name))];
+  if (ernte.length) aufgaben.push(["ernte", "#FF9500", "Erntezeit", ernte.join(", ")]);
+  // Jahreszeit
+  if (m === 10 || m === 11) aufgaben.push(["info", "#8E8E93", "Herbst-Arbeiten", "Abgeerntete Tomaten/Gurken raus (kranke Blätter in den Restmüll, nicht auf den Kompost), Hochbeete mit 3–5 cm Kompost auffüllen, freie Erdstreifen mit Laub mulchen oder Winterroggen säen. Feldsalat, Winterportulak und Asia-Salat gehen jetzt noch ins Gewächshaus, Knoblauch nach draußen."]);
+  if (m === 2 || m === 3) aufgaben.push(["info", "#8E8E93", "Frühjahr vorbereiten", "Hochbeete mit Kompost auffrischen, Tomaten/Paprika auf der Fensterbank vorziehen, ab März Salat, Radieschen und Kohlrabi ins Gewächshaus."]);
+
+  $("inhalt").innerHTML = `
+    <div class="karte"><h2>Wetter</h2>
+      ${tage.length ? `<div class="wetter">${tage.map(d => `<div class="tag">${new Date(d.datetime).toLocaleDateString("de-DE", { weekday: "short" })}<b>${Math.round(d.temperature)}°</b>${d.templow != null ? Math.round(d.templow) + "° · " : ""}${d.precipitation ?? 0} mm</div>`).join("")}</div>`
+        : `<p class="klein">Wettervorhersage wird geladen …</p>`}
+    </div>
+    <div class="karte"><h2>Heute im Garten</h2>
+      ${aufgaben.map(([sym, f, titel, text]) => `<div class="aufgabe"><div class="sym" style="background:${f}">${ic(sym, "#fff")}</div><div><b>${esc(titel)}</b><span>${esc(text)}</span></div></div>`).join("") || `<p class="klein">Nichts zu tun.</p>`}
+    </div>
+    <div class="karte"><h2>${ic("frage")} Claude fragen</h2>
+      <p class="klein">z. B. „Was kann ich jetzt noch ins Gewächshaus pflanzen?“ oder „Warum werden die Gurkenblätter gelb?“ – Claude kennt euren Plan und das Wetter.</p>
+      <textarea id="ki-frage" placeholder="Deine Frage …"></textarea>
+      <div class="zeile" style="margin-top:8px"><button class="knopf voll" data-a="ki-frage">Fragen</button></div>
+      <div id="ki-antwort" class="antwort" style="margin-top:10px"></div>
+    </div>`;
+  if (!tage.length && Date.now() - wetterGeladen > 60000) wetterLaden();
+}
+
+let fotoDaten = null;
+function zeichneFoto() {
+  const optionen = daten.pflanzungen.map(p => `<option value="${p.id}">${esc(anzeigeName(p.pflanze))} – ${esc(beet(p.beet)?.name || "")}</option>`).join("");
+  $("inhalt").innerHTML = `
+    <div class="karte"><h2>${ic("kamera")} Foto-Check</h2>
+      <p class="klein">Foto von einer Pflanze machen – Claude schaut, ob es ihr gut geht, und sagt, was zu tun ist.</p>
+      <label class="knopf blau" style="cursor:pointer">${ic("kamera", "#fff")} Foto machen / auswählen
+        <input type="file" id="foto-datei" accept="image/*" capture="environment" style="display:none"></label>
+      ${fotoDaten ? `<img class="vorschau" src="data:image/jpeg;base64,${fotoDaten.b64}">` : ""}
+      <label class="f">Welche Pflanze? (optional)</label>
+      <select id="foto-pflanze"><option value="">– weiß ich nicht / egal –</option>${optionen}</select>
+      <label class="f">Frage (optional)</label>
+      <textarea id="foto-frage" placeholder="z. B. Warum hat die Tomate braune Flecken?"></textarea>
+      <div class="zeile" style="margin-top:10px"><button class="knopf voll" data-a="foto-pruefen" ${fotoDaten ? "" : "disabled style='opacity:.5'"}>Prüfen lassen</button></div>
+      <div id="foto-antwort" class="antwort" style="margin-top:12px"></div>
+    </div>
+    ${daten.fotos.length ? `<div class="karte"><h2>Letzte Checks</h2>${daten.fotos.slice().reverse().map((f, i) => `
+      <div class="verlauf-foto" data-a="foto-alt" data-w="${daten.fotos.length - 1 - i}">${f.bild ? `<img src="data:image/jpeg;base64,${f.bild}">` : ""}
+        <div><b>${esc(f.pflanze || "Foto")}</b> <span class="klein">${esc(f.datum)}</span><div class="klein">${esc((f.text || "").slice(0, 140))}…</div></div></div>`).join("")}</div>` : ""}`;
+  const inp = $("foto-datei");
+  if (inp) inp.addEventListener("change", async () => {
+    const datei = inp.files && inp.files[0]; if (!datei) return;
+    try { fotoDaten = await bildVerkleinern(datei); zeichneFoto(); } catch (e) { meldung("Foto konnte nicht gelesen werden"); }
+  });
+}
+// Foto verkleinern: max. 1000 px und so stark komprimiert, dass es durch Home Assistant passt (< 150 000 Zeichen)
+function bildVerkleinern(datei) {
+  return new Promise((ok, fehler) => {
+    const url = URL.createObjectURL(datei), img = new Image();
+    img.onload = () => {
+      const machen = (max, q) => {
+        const f = Math.min(1, max / Math.max(img.width, img.height)), c = document.createElement("canvas");
+        c.width = Math.round(img.width * f); c.height = Math.round(img.height * f);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        return c.toDataURL("image/jpeg", q).split(",")[1];
+      };
+      let b64 = null;
+      for (const [max, q] of [[1000, 0.8], [1000, 0.65], [900, 0.6], [800, 0.55], [700, 0.5], [600, 0.45]]) { b64 = machen(max, q); if (b64.length < 150000) break; }
+      URL.revokeObjectURL(url);
+      ok({ b64, klein: machen(140, 0.55) });
+    };
+    img.onerror = fehler; img.src = url;
+  });
+}
+function kiAntwortLesen(r) {
+  let a = r && r.response; if (a && a.stdout !== undefined) a = a.stdout;
+  if (typeof a === "string") { try { a = JSON.parse(a); } catch (e) { a = a ? { ok: false, fehler: a } : null; } }
+  if (!a) return { ok: false, fehler: "Keine Antwort – vielleicht hat es zu lange gedauert. Bitte nochmal versuchen." };
+  return a;
+}
+function planKurz() {
+  return daten.pflanzungen.map(p => `${beet(p.beet)?.name}: ${anzeigeName(p.pflanze)} ${p.anzahl}×`).join("; ").slice(0, 1500) || "noch nichts gepflanzt";
+}
+async function kiFragen(auftrag, bild) {
+  const h = hass(); if (!h) throw new Error("Home Assistant nicht erreichbar");
+  const teile = bild ? bild.match(/.{1,60000}/g).join(" ") : "";
+  const r = await h.callWS({ type: "call_service", domain: "script", service: "garten_ki", service_data: { auftrag: JSON.stringify(auftrag), bild: teile }, return_response: true });
+  return kiAntwortLesen(r);
+}
+
+// ================= Fenster =================
+function blatt(html, aufbau) { $("blatt").innerHTML = html; $("schleier").classList.add("offen"); if (aufbau) aufbau($("blatt")); }
+function blattZu() { $("schleier").classList.remove("offen"); $("blatt").innerHTML = ""; }
+function pflanzeInfo(id) {
+  const pf = PF[id]; if (!pf) return;
+  const mon = a => a.length ? a.map(x => MONATE[x - 1]).join(", ") : "–";
+  const namen = a => a.map(anzeigeName).join(", ") || "–";
+  blatt(`<h3><i class="punkt" style="background:${FARBE[pf.fam]}"></i> ${esc(pf.name)}</h3>
+    <p class="klein">${FAMILIE[pf.fam]} · ${pf.zehrer === "stark" ? "Starkzehrer" : pf.zehrer === "mittel" ? "Mittelzehrer" : "Schwachzehrer"} · Abstand ${pf.reihe} × ${pf.abstand} cm · Höhe ca. ${pf.hoehe} cm · Wasser ${["", "wenig", "mittel", "viel"][pf.wasser]}${pf.frost ? " · frostempfindlich" : ""}</p>
+    <p><b>Vorziehen:</b> ${mon(pf.vorziehen)}<br><b>Gewächshaus:</b> ${mon(pf.ghm)}<br><b>Draußen:</b> ${mon(pf.draussen)}<br><b>Ernte:</b> ${mon(pf.ernte)}</p>
+    <p><b>Gute Nachbarn:</b> ${esc(namen(pf.gut))}<br><b>Nicht daneben:</b> ${esc(namen(pf.schlecht))}</p>
+    <p><b>Dünger:</b> ${esc(pf.duenger)}</p><p><b>Tipp:</b> ${esc(pf.tipp)}</p>
+    <div class="zeile"><button class="knopf voll" data-a="zu">Schließen</button></div>`);
+}
+function pflanzungZeigen(id) {
+  const p = daten.pflanzungen.find(x => x.id === id); if (!p) return;
+  const pf = PF[p.pflanze], b = beet(p.beet);
+  const nb = daten.pflanzungen.filter(x => x.beet === p.beet && x.id !== p.id && Math.abs((x.start + x.laenge / 2) - (p.start + p.laenge / 2)) <= (x.laenge + p.laenge) / 2 + 5);
+  blatt(`<h3><i class="punkt" style="background:${FARBE[pf.fam]}"></i> ${esc(pf.name)} – ${esc(b.name)}</h3>
+    <p class="klein">${p.anzahl} Stück auf ${Math.round(p.laenge)} cm, Abstand ${pf.reihe} × ${pf.abstand} cm.
+      ${nb.map(x => `Neben ${esc(anzeigeName(x.pflanze))}: ${nachbarn(p.pflanze, x.pflanze) > 0 ? "gute Nachbarn" : nachbarn(p.pflanze, x.pflanze) < 0 ? "<b style='color:#FF3B30'>schlechte Nachbarn</b>" : "neutral"}.`).join(" ")}</p>
+    <p><b>Dünger:</b> ${esc(pf.duenger)}<br><b>Tipp:</b> ${esc(pf.tipp)}</p>
+    <label class="f">Anzahl</label><input type="number" id="pl-anzahl" min="1" value="${p.anzahl}">
+    <label class="f">Beet</label><select id="pl-beet">${daten.beete.map(x => `<option value="${x.id}" ${x.id === p.beet ? "selected" : ""}>${esc(bereich(x.bereich).name)} – ${esc(x.name)}</option>`).join("")}</select>
+    <div class="zeile" style="margin-top:14px"><button class="knopf rot" data-a="pl-weg" data-w="${p.id}">Entfernen</button><span class="luecke"></span>
+      <button class="knopf" data-a="zu">Abbrechen</button><button class="knopf voll" data-a="pl-ok" data-w="${p.id}">Übernehmen</button></div>`);
+}
+function beetZeigen(id) {
+  const b = beet(id), ps = daten.pflanzungen.filter(p => p.beet === id);
+  blatt(`<h3>${esc(b.name)}</h3><p class="klein">${b.w} × ${b.h} cm · ${{ hochbeet: "Hochbeet", erdstreifen: "Erdstreifen", kasten: "Kasten/Kübel" }[b.art] || b.art}${b.wasser ? " · mit Tropfbewässerung" : ""}</p>
+    ${ps.length ? `<p>${ps.map(p => `${esc(anzeigeName(p.pflanze))} ${p.anzahl}×`).join(", ")}</p>` : `<p class="klein">Noch leer.</p>`}
+    ${daten.historie.filter(h => h.beet === id).length ? `<p class="klein">Früher: ${daten.historie.filter(h => h.beet === id).map(h => `${h.saison}: ${FAMILIE[h.fam] || ""}`).join(", ")}</p>` : ""}
+    <div class="zeile"><button class="knopf voll" data-a="zu">Schließen</button></div>`);
+}
+function beetBearbeiten(id) {
+  const b = beet(id);
+  blatt(`<h3>Beet bearbeiten</h3>
+    <label class="f">Name</label><input type="text" id="bt-name" value="${esc(b.name)}">
+    <div class="zwei"><div><label class="f">Breite (cm, waagrecht)</label><input type="number" id="bt-w" value="${b.w}"></div>
+      <div><label class="f">Länge (cm, senkrecht)</label><input type="number" id="bt-h" value="${b.h}"></div></div>
+    <div class="zwei"><div><label class="f">Position links (cm)</label><input type="number" id="bt-x" value="${b.x}"></div>
+      <div><label class="f">Position oben (cm)</label><input type="number" id="bt-y" value="${b.y}"></div></div>
+    <label class="f">Art</label><select id="bt-art">${[["hochbeet", "Hochbeet"], ["erdstreifen", "Erdstreifen"], ["kasten", "Kasten/Kübel"]].map(([v, t]) => `<option value="${v}" ${b.art === v ? "selected" : ""}>${t}</option>`).join("")}</select>
+    <label class="f"><input type="checkbox" id="bt-wasser" ${b.wasser ? "checked" : ""}> Tropfbewässerung vorhanden</label>
+    <div class="zeile" style="margin-top:14px"><button class="knopf rot" data-a="bt-weg" data-w="${b.id}">Löschen</button><button class="knopf" data-a="bt-drehen" data-w="${b.id}">Drehen</button>
+      <span class="luecke"></span><button class="knopf voll" data-a="bt-ok" data-w="${b.id}">Fertig</button></div>`);
+}
+function bereichMass() {
+  const ber = bereich(bereichWahl);
+  blatt(`<h3>${esc(ber.name)}: Größe & Himmelsrichtung</h3>
+    <div class="zwei"><div><label class="f">Breite (cm)</label><input type="number" id="br-w" value="${ber.w}"></div>
+      <div><label class="f">Länge (cm)</label><input type="number" id="br-h" value="${ber.h}"></div></div>
+    <label class="f">Wo ist Süden (Sonne) auf dem Plan?</label>
+    <select id="br-sued">${[["unten", "unten"], ["oben", "oben"], ["links", "links"], ["rechts", "rechts"]].map(([v, t]) => `<option value="${v}" ${ber.sued === v ? "selected" : ""}>${t}</option>`).join("")}</select>
+    <p class="klein">Hohe Pflanzen (Tomaten, Gurken, Stangenbohnen) kommen an die Nordseite, damit sie den niedrigen kein Licht wegnehmen.</p>
+    <div class="zeile"><span class="luecke"></span><button class="knopf voll" data-a="br-ok">Fertig</button></div>`);
+}
+
+// ================= Tippen (Monitor: Touch + Geister-Klick abfangen) =================
+let letzterTipp = 0, tippStart = null;
+function tippErlaubt() { if (Date.now() - letzterTipp < 450) return false; letzterTipp = Date.now(); return true; }
+document.addEventListener("pointerdown", ev => { tippStart = { x: ev.clientX, y: ev.clientY }; }, true);
+document.addEventListener("click", ev => {
+  const el = ev.target.closest("[data-a]"); if (!el) { if (ev.target === $("schleier")) blattZu(); return; }
+  if (tippStart && Math.hypot(ev.clientX - tippStart.x, ev.clientY - tippStart.y) > 12) return;
+  if (el.disabled || !tippErlaubt()) return;
+  aktion(el.dataset.a, el.dataset.w, el);
+});
+async function aktion(a, w, el) {
+  const zahlWert = id => { const v = parseInt($(id).value, 10); return isNaN(v) ? 0 : v; };
+  switch (a) {
+    case "reiter": reiter = w; bearbeiten = false; zeichnen(); $("inhalt").scrollTop = 0; break;
+    case "bereich": bereichWahl = w; zeichnePlan(); break;
+    case "bearbeiten": bearbeiten = !bearbeiten; zeichnePlan(); break;
+    case "filter": filter = w; zeichnePflanzen(); break;
+    case "plus": daten.wunsch[w] = (daten.wunsch[w] || 0) ? daten.wunsch[w] + 1 : vorschlag(PF[w]); geaendert(); zeichnePflanzen(); break;
+    case "minus": daten.wunsch[w] = Math.max(0, (daten.wunsch[w] || 0) - 1); if (!daten.wunsch[w]) delete daten.wunsch[w]; geaendert(); zeichnePflanzen(); break;
+    case "pflanze-info":
+      if (!daten.wunsch[w]) { daten.wunsch[w] = vorschlag(PF[w]); geaendert(); zeichnePflanzen(); }
+      else pflanzeInfo(w);
+      break;
+    case "plan-erstellen": planErstellen(); break;
+    case "zu": blattZu(); break;
+    case "beet-neu": {
+      const ber = bereich(bereichWahl), id = "b" + Date.now().toString(36);
+      daten.beete.push({ id, bereich: ber.id, name: "Neues Beet", art: ber.id === "gh" ? "hochbeet" : "erdstreifen", x: 20, y: 20, w: 60, h: 200, wasser: false });
+      geaendert(); zeichnePlan(); beetBearbeiten(id); break;
+    }
+    case "bereich-mass": bereichMass(); break;
+    case "br-ok": {
+      const ber = bereich(bereichWahl);
+      ber.w = Math.max(100, zahlWert("br-w")); ber.h = Math.max(100, zahlWert("br-h")); ber.sued = $("br-sued").value;
+      geaendert(); blattZu(); zeichnePlan(); break;
+    }
+    case "bt-ok": {
+      const b = beet(w);
+      b.name = $("bt-name").value.trim() || b.name; b.w = Math.max(20, zahlWert("bt-w")); b.h = Math.max(20, zahlWert("bt-h"));
+      b.x = Math.max(0, zahlWert("bt-x")); b.y = Math.max(0, zahlWert("bt-y")); b.art = $("bt-art").value; b.wasser = $("bt-wasser").checked;
+      geaendert(); blattZu(); zeichnePlan(); break;
+    }
+    case "bt-drehen": { const b = beet(w); [b.w, b.h] = [b.h, b.w]; geaendert(); blattZu(); zeichnePlan(); break; }
+    case "bt-weg": {
+      if (el.dataset.scharf !== "1") { el.dataset.scharf = "1"; el.textContent = "Wirklich löschen?"; return; }
+      daten.beete = daten.beete.filter(b => b.id !== w); daten.pflanzungen = daten.pflanzungen.filter(p => p.beet !== w);
+      geaendert(); blattZu(); zeichnePlan(); break;
+    }
+    case "pl-ok": {
+      const p = daten.pflanzungen.find(x => x.id === w), pf = PF[p.pflanze];
+      const neuBeet = $("pl-beet").value, anzahl = Math.max(1, zahlWert("pl-anzahl"));
+      if (neuBeet !== p.beet) {
+        const ziel = daten.pflanzungen.filter(x => x.beet === neuBeet);
+        p.beet = neuBeet; p.start = ziel.reduce((s, x) => Math.max(s, x.start + x.laenge), 0);
+      }
+      p.anzahl = anzahl; p.laenge = bedarf(pf, anzahl, beet(p.beet));
+      bereichWahl = beet(p.beet).bereich;
+      geaendert(); blattZu(); zeichnePlan();
+      if (p.start + p.laenge > lang(beet(p.beet))) meldung("Achtung: passt nicht ganz ins Beet – Anzahl verringern oder anderes Beet wählen", 5000);
+      break;
+    }
+    case "pl-weg": {
+      if (el.dataset.scharf !== "1") { el.dataset.scharf = "1"; el.textContent = "Wirklich entfernen?"; return; }
+      daten.pflanzungen = daten.pflanzungen.filter(x => x.id !== w); geaendert(); blattZu(); zeichnePlan(); break;
+    }
+    case "ki-frage": {
+      const frage = $("ki-frage").value.trim(); if (!frage) return meldung("Bitte eine Frage eintippen");
+      el.innerHTML = `<span class="warten"></span> Claude denkt …`; el.disabled = true; $("ki-antwort").textContent = "";
+      try {
+        const a = await kiFragen({ art: "frage", frage, wetter: wetterText(), plan: planKurz(), datum: new Date().toLocaleDateString("de-DE") });
+        $("ki-antwort").textContent = a.ok ? a.text : "Hat nicht geklappt: " + (a.fehler || "unbekannt");
+      } catch (e) { $("ki-antwort").textContent = "Hat nicht geklappt: " + (e && e.message || e); }
+      el.textContent = "Fragen"; el.disabled = false; break;
+    }
+    case "foto-pruefen": {
+      if (!fotoDaten) return;
+      const pid = $("foto-pflanze").value, p = daten.pflanzungen.find(x => x.id === pid), frage = $("foto-frage").value.trim();
+      el.innerHTML = `<span class="warten"></span> Claude schaut …`; el.disabled = true; $("foto-antwort").textContent = "";
+      try {
+        const a = await kiFragen({ art: "foto", frage, pflanze: p ? anzeigeName(p.pflanze) : "", beet: p ? beet(p.beet)?.name : "",
+          bereich: p ? bereich(beet(p.beet).bereich).name : "", wetter: wetterText(), datum: new Date().toLocaleDateString("de-DE") }, fotoDaten.b64);
+        $("foto-antwort").textContent = a.ok ? a.text : "Hat nicht geklappt: " + (a.fehler || "unbekannt");
+        if (a.ok) {
+          daten.fotos.push({ datum: new Date().toLocaleDateString("de-DE"), pflanze: p ? anzeigeName(p.pflanze) : "", beet: p ? beet(p.beet)?.name : "", frage, text: a.text, bild: fotoDaten.klein });
+          daten.fotos = daten.fotos.slice(-20); geaendert();
+        }
+      } catch (e) { $("foto-antwort").textContent = "Hat nicht geklappt: " + (e && e.message || e); }
+      el.textContent = "Prüfen lassen"; el.disabled = false; break;
+    }
+    case "foto-alt": {
+      const f = daten.fotos[+w]; if (!f) return;
+      blatt(`<h3>${esc(f.pflanze || "Foto")} – ${esc(f.datum)}</h3>${f.bild ? `<img class="vorschau" src="data:image/jpeg;base64,${f.bild}" style="width:140px">` : ""}
+        ${f.frage ? `<p><b>Frage:</b> ${esc(f.frage)}</p>` : ""}<div class="antwort">${esc(f.text)}</div>
+        <div class="zeile" style="margin-top:12px"><button class="knopf voll" data-a="zu">Schließen</button></div>`);
+      break;
+    }
+  }
+}
+
+laden();
+// Wetter alle 30 Minuten neu
+setInterval(() => { wetterLaden(); }, 1800000);
+// Selbst-Aktualisierung: alle 5 Minuten nachsehen, ob es eine neuere Fassung dieser Seite gibt
+setInterval(async () => {
+  if (bearbeiten || $("schleier").classList.contains("offen")) return;
+  try {
+    const r = await fetch(location.pathname + "?t=" + Date.now(), { cache: "no-store" });
+    const m = (await r.text()).match(/SEITEN_VERSION = (\d+)/);
+    if (m && Number(m[1]) > SEITEN_VERSION) location.replace(location.pathname + "?v=" + m[1] + "&t=" + Date.now());
+  } catch (e) { /* später nochmal */ }
+}, 300000);
+</script>
+</body>
+</html>

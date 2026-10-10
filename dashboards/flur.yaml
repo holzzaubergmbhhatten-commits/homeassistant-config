@@ -1473,6 +1473,14 @@ views:
   - type: iframe
     url: /local/grundriss.html?v=15
     aspect_ratio: 53.3%
+- title: Garten
+  path: garten
+  icon: mdi:sprout
+  type: panel
+  cards:
+  - type: iframe
+    url: /local/garten.html?v=1
+    aspect_ratio: 53.3%
 - title: Infos
   path: infos
   icon: mdi:information-outline
