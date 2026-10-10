@@ -84,6 +84,33 @@ views:
         {%- set sd = as_datetime(e.start) %}{{ '<br>' if not loop.first }}<font color="#8E8E93">●</font> <b>{{ e.titel }}</b> · {{ tage[sd.weekday()] }} {{ sd.strftime('%d.%m.') }}{{ ' · ' ~ sd.strftime('%H:%M') ~ ' Uhr' if 'T' in (e.start | string) else '' }}
         {%- endfor %}
         {%- endif %}
+    # Garten-To-dos aus Pflanzplan + Wetter (sensor.garten_aufgaben, packages/garten.yaml) – Tippen öffnet den Garten
+    - type: heading
+      heading: Garten heute
+      heading_style: title
+      icon: mdi:sprout
+      tap_action:
+        action: navigate
+        navigation_path: /flur-display/garten
+    - type: markdown
+      grid_options:
+        columns: full
+      content: |-
+        {% set a = state_attr('sensor.garten_aufgaben', 'aufgaben') or [] %}
+        {% set b = state_attr('sensor.garten_aufgaben', 'bald') or [] %}
+        {% for t in a %}
+        {{ '<br>' if not loop.first }}<font color="{{ t.farbe }}"><ha-icon icon="{{ t.icon }}"></ha-icon></font> <b>{{ t.titel }}</b>{{ ' – ' ~ t.text if t.text }}
+        {%- endfor %}
+        {%- if not a %}
+        <font color="#34C759"><ha-icon icon="mdi:check-circle"></ha-icon></font> <font color="#8E8E93">Heute nichts Besonderes im Garten</font>
+        {%- endif %}
+        {%- if b %}
+
+        ### <font color="#8E8E93">Die nächsten Tage</font>
+        {% for t in b %}
+        {{ '<br>' if not loop.first }}<font color="#8E8E93"><ha-icon icon="{{ t.icon }}"></ha-icon></font> {{ t.titel }}{{ ' – ' ~ t.text if t.text }}
+        {%- endfor %}
+        {%- endif %}
   - type: grid
     cards:
     - type: heading
@@ -120,33 +147,6 @@ views:
       display_order: none
       grid_options:
         columns: full
-    # Garten-To-dos aus Pflanzplan + Wetter (sensor.garten_aufgaben, packages/garten.yaml) – Tippen öffnet den Garten
-    - type: heading
-      heading: Garten heute
-      heading_style: title
-      icon: mdi:sprout
-      tap_action:
-        action: navigate
-        navigation_path: /flur-display/garten
-    - type: markdown
-      grid_options:
-        columns: full
-      content: |-
-        {% set a = state_attr('sensor.garten_aufgaben', 'aufgaben') or [] %}
-        {% set b = state_attr('sensor.garten_aufgaben', 'bald') or [] %}
-        {% for t in a %}
-        {{ '<br>' if not loop.first }}<font color="{{ t.farbe }}"><ha-icon icon="{{ t.icon }}"></ha-icon></font> <b>{{ t.titel }}</b>{{ ' – ' ~ t.text if t.text }}
-        {%- endfor %}
-        {%- if not a %}
-        <font color="#34C759"><ha-icon icon="mdi:check-circle"></ha-icon></font> <font color="#8E8E93">Heute nichts Besonderes im Garten</font>
-        {%- endif %}
-        {%- if b %}
-
-        ### <font color="#8E8E93">Die nächsten Tage</font>
-        {% for t in b %}
-        {{ '<br>' if not loop.first }}<font color="#8E8E93"><ha-icon icon="{{ t.icon }}"></ha-icon></font> {{ t.titel }}{{ ' – ' ~ t.text if t.text }}
-        {%- endfor %}
-        {%- endif %}
     - type: heading
       heading: Ferienwohnung & Stellplätze
       heading_style: title
