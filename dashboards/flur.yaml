@@ -182,8 +182,8 @@ views:
         show_icon: true
         show_state: true
         tap_action:
-          action: perform-action
-          perform_action: script.stellplaetze_verwalten
+          action: navigate
+          navigation_path: /flur-display/verwaltung
     - type: markdown
       grid_options:
         columns: full
@@ -1557,6 +1557,16 @@ views:
   - type: iframe
     url: /local/zuhause.html?v=1
     aspect_ratio: 53.3%
+# Buchungsportal (Ferienwohnung & Stellplätze) direkt im Dashboard statt im Kiosk-Browser
+- title: Buchungen verwalten
+  path: verwaltung
+  icon: mdi:rv-truck
+  type: panel
+  cards:
+  - type: iframe
+    url: https://urlaub-wie-zuhause.eu/verwaltung.html
+    aspect_ratio: 53.3%
+    allow: fullscreen; clipboard-write
 - title: Es klingelt
   path: klingel
   icon: mdi:doorbell-video
