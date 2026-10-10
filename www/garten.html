@@ -85,6 +85,9 @@
   .zoomknoepfe { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; gap: 6px; }
   .zoomknoepfe button { width: 40px; height: 40px; border-radius: 11px; background: rgba(255,255,255,.95); box-shadow: 0 1px 4px rgba(0,0,0,.2); font-size: 24px; font-weight: 700; color: var(--blau); display: flex; align-items: center; justify-content: center; }
   .suche { margin: 6px 0 8px; }
+  .anbau { background: var(--bg); border-radius: 12px; padding: 9px 11px; margin: 6px 0; }
+  .anbau p { margin: 6px 0 0; line-height: 1.45; font-size: 14px; }
+  .weg { font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 7px; }
   .tipp-waerme { border: 2px solid #FFD08A; }
   .liste-tipps { padding-left: 18px; margin: 6px 0; line-height: 1.5; font-size: 14px; }
   /* Pflanzenliste */
@@ -147,7 +150,7 @@
 <div class="meldung" id="meldung"></div>
 
 <script>
-const SEITEN_VERSION = 9;
+const SEITEN_VERSION = 10;
 const DATEN_URL = "/local/garten_daten.json";
 const WETTER = "weather.touchmonitor_home";
 const $ = id => document.getElementById(id);
@@ -336,6 +339,85 @@ const PFLANZEN = [
     [], [], "Kein Dünger.", "Über den Winter auf freie Erdstreifen säen, im April abmähen und flach einarbeiten – lockert und düngt den Boden."),
 ];
 const PF = Object.fromEntries(PFLANZEN.map(p => [p.id, p]));
+// ================= Anbau: vorziehen, direkt säen, stecken oder Jungpflanzen kaufen? =================
+// weg: direkt | vorziehen | kaufen | stecken | beides – tiefe = Saattiefe, keim = Keimtemperatur und -dauer
+const WEG = { direkt: ["Direkt ins Beet säen", "#34A853"], vorziehen: ["Selbst vorziehen", "#007AFF"], kaufen: ["Jungpflanzen kaufen", "#FF9500"],
+  stecken: ["Stecken / Legen", "#8E5B3A"], beides: ["Vorziehen oder kaufen", "#5856D6"] };
+const A = (weg, tiefe, keim, text) => ({ weg, tiefe, keim, text });
+const ANBAU = {
+  tomate: A("beides", "0,5 cm", "20–25 °C, 7–10 Tage", "Mitte März auf der hellen Fensterbank in Anzuchterde säen, nach 2–3 Wochen einzeln in Töpfe pikieren (tief setzen, der Stängel bildet Wurzeln). Ab Mitte Mai nach draußen bzw. unters Dach. Für den Anfang sind 4–6 gekaufte Jungpflanzen einfacher – kräftig, dunkelgrün, ohne Blüten."),
+  gurke: A("beides", "1–2 cm", "über 20 °C, 5–7 Tage", "Erst Ende April vorziehen (wächst sehr schnell), 2 Samen pro Topf. Nach den Eisheiligen pflanzen. Jungpflanzen kaufen lohnt sich, wenn man nur 2–4 braucht – veredelte Gurken sind robuster."),
+  paprika: A("kaufen", "0,5 cm", "25 °C, 10–14 Tage", "Braucht sehr früh Wärme (Februar) und viel Licht – auf der Fensterbank oft zu dunkel. Jungpflanzen im Mai kaufen ist hier deutlich einfacher."),
+  chili: A("kaufen", "0,5 cm", "25–28 °C, 2–3 Wochen", "Keimt langsam und braucht Wärme ab Januar/Februar. Für Anfänger: Jungpflanzen im Mai kaufen."),
+  aubergine: A("kaufen", "0,5 cm", "25 °C, 2 Wochen", "Sehr wärmebedürftig – Jungpflanzen kaufen und in die wärmste Ecke setzen."),
+  melone: A("beides", "1–2 cm", "25 °C, 5–8 Tage", "Ende April vorziehen oder im Mai Jungpflanzen kaufen (veredelt sind robuster). Nur in der Wärme-Ecke sinnvoll."),
+  zucchini: A("beides", "2 cm", "20 °C, 5–7 Tage", "Mitte April 1 Samen pro Topf vorziehen oder im Mai direkt säen (2–3 Samen pro Stelle, den kräftigsten stehen lassen). 2 Pflanzen reichen für eine Familie!"),
+  kuerbis: A("beides", "2–3 cm", "20 °C, 6–10 Tage", "Mitte April einzeln in Töpfe vorziehen oder ab Mitte Mai direkt säen. Viel Platz lassen."),
+  salat: A("beides", "nur andrücken (Lichtkeimer)", "15–18 °C, 5–7 Tage", "Lichtkeimer: Samen nur andrücken, nicht mit Erde bedecken. Ab März in Schalen vorziehen oder direkt säen. Jungpflanzen im Sechserpack sind günstig und sparen 4 Wochen."),
+  kopfsalat: A("beides", "nur andrücken (Lichtkeimer)", "15–18 °C, 5–7 Tage", "Wie Pflücksalat. Gekaufte Jungpflanzen flach setzen – der Wurzelballen darf oben etwas herausschauen."),
+  eissalat: A("beides", "nur andrücken (Lichtkeimer)", "15–18 °C, 5–7 Tage", "Wie Kopfsalat, keimt bei Hitze über 20 °C schlecht – im Sommer abends säen und feucht halten."),
+  endivie: A("beides", "0,5 cm", "18–20 °C, 5–7 Tage", "Im Juni/Juli in Töpfchen vorziehen oder Jungpflanzen kaufen, im Juli/August pflanzen."),
+  feldsalat: A("direkt", "0,5–1 cm", "unter 20 °C, 1–2 Wochen", "August/September in Reihen säen, Erde vorher festtreten und feucht halten. Keimt bei Hitze schlecht."),
+  portulak: A("direkt", "nur andrücken", "unter 12 °C, 1–2 Wochen", "September/Oktober breitwürfig säen, nur andrücken. Keimt erst, wenn es kühl wird."),
+  asiasalat: A("direkt", "0,5 cm", "10–20 °C, 4–6 Tage", "August bis Oktober direkt säen, wächst sehr schnell. Gegen Erdflöhe mit Vlies abdecken."),
+  rucola: A("direkt", "0,5 cm", "10–20 °C, 4–7 Tage", "Direkt in Reihen säen, alle 3 Wochen nachsäen. Im Hochsommer lieber Pause."),
+  radieschen: A("direkt", "1 cm", "10–20 °C, 4–7 Tage", "Direkt säen, ab März unter Dach, später draußen. Ideal für Kinder – nach 4 Wochen ernten!"),
+  rettich: A("direkt", "1–2 cm", "10–20 °C, 5–7 Tage", "Direkt säen, auf 10 cm vereinzeln, gleichmäßig gießen."),
+  spinat: A("direkt", "2 cm", "unter 20 °C, 1 Woche", "Direkt in Reihen säen – im Frühjahr (März/April) oder für den Winter im September."),
+  mangold: A("direkt", "2 cm", "15–20 °C, 1–2 Wochen", "Die Samenknäuel bringen mehrere Pflänzchen – später auf 30 cm vereinzeln."),
+  rote_bete: A("direkt", "2–3 cm", "15–20 °C, 1–2 Wochen", "Ab Mai direkt säen, wie Mangold auf 10 cm vereinzeln. Samen vorher 1 Tag einweichen."),
+  karotte: A("direkt", "1 cm", "10–20 °C, 2–3 Wochen", "Nur direkt säen (Möhren mögen kein Umpflanzen). Saatband ist am einfachsten. Bis zum Keimen immer feucht halten – keimt langsam."),
+  pastinake: A("direkt", "1–2 cm", "10–15 °C, 3–4 Wochen", "Nur frisches Saatgut verwenden, direkt säen, sehr geduldig sein."),
+  sellerie: A("kaufen", "nur andrücken (Lichtkeimer)", "20 °C, 2–3 Wochen", "Anzucht ist schwierig (Februar, Lichtkeimer, langsam). Jungpflanzen im Mai kaufen."),
+  fenchel: A("beides", "1 cm", "20 °C, 1–2 Wochen", "Im Juni/Juli direkt säen oder in Töpfchen vorziehen – nicht zu früh, sonst schießt er."),
+  zwiebel: A("stecken", "Spitze schaut heraus", "–", "Steckzwiebeln im März/April (Sommer) oder September/Oktober (Winterzwiebeln) in die Erde drücken. Viel einfacher als Säen."),
+  schalotte: A("stecken", "Spitze schaut heraus", "–", "Wie Steckzwiebeln stecken – aus einer Zwiebel werden 6–10."),
+  knoblauch: A("stecken", "5 cm", "–", "Einzelne Zehen (Spitze nach oben) im Oktober/November stecken. Zehen aus dem Supermarkt keimen oft schlecht – Pflanzknoblauch kaufen."),
+  fruehlingszwiebel: A("direkt", "1 cm", "15–20 °C, 1–2 Wochen", "Direkt in Reihen säen, alle 4 Wochen nachsäen."),
+  lauch: A("kaufen", "1 cm", "15–20 °C, 2 Wochen", "Jungpflanzen im Mai/Juni kaufen, in 15 cm tiefe Löcher setzen und nur angießen – füllt sich von selbst mit Erde."),
+  schnittlauch: A("kaufen", "1 cm", "18–20 °C, 2 Wochen", "Am einfachsten einen Topf aus dem Supermarkt in 3–4 Teile teilen und einpflanzen. Mehrjährig."),
+  buschbohne: A("direkt", "3 cm", "über 12 °C Boden, 1 Woche", "Erst nach den Eisheiligen (Mitte Mai) direkt säen, in Horsten zu 5 Bohnen. Kalte Erde lässt die Samen faulen."),
+  stangenbohne: A("direkt", "3 cm", "über 12 °C Boden, 1 Woche", "Ab Mitte Mai: Stangen setzen, um jede Stange 6–8 Bohnen legen."),
+  erbse: A("direkt", "4 cm", "ab 5 °C, 1–2 Wochen", "Ab Ende März direkt säen, Netz oder Reisig zum Ranken stecken."),
+  zuckererbse: A("direkt", "4 cm", "ab 5 °C, 1–2 Wochen", "Wie Erbsen, Rankhilfe ist Pflicht."),
+  dickebohne: A("direkt", "5 cm", "ab 5 °C, 1–2 Wochen", "Schon im März direkt säen – verträgt leichten Frost."),
+  kohlrabi: A("beides", "1 cm", "15–20 °C, 5–7 Tage", "Ab Februar/März in Schalen vorziehen oder Jungpflanzen kaufen. Flach setzen – die Knolle bildet sich über der Erde."),
+  brokkoli: A("beides", "1 cm", "15–20 °C, 5–7 Tage", "März/April vorziehen oder im Mai Jungpflanzen kaufen."),
+  blumenkohl: A("kaufen", "1 cm", "15–20 °C, 5–7 Tage", "Etwas anspruchsvoll – kräftige Jungpflanzen im Mai kaufen erspart Enttäuschungen."),
+  weisskohl: A("beides", "1 cm", "15–20 °C, 5–7 Tage", "April vorziehen oder Jungpflanzen kaufen, im Mai/Juni pflanzen."),
+  rotkohl: A("beides", "1 cm", "15–20 °C, 5–7 Tage", "Wie Weißkohl."),
+  wirsing: A("beides", "1 cm", "15–20 °C, 5–7 Tage", "Mai vorziehen oder Jungpflanzen kaufen, im Juni/Juli pflanzen."),
+  spitzkohl: A("beides", "1 cm", "15–20 °C, 5–7 Tage", "Februar/März vorziehen oder kaufen, ab April pflanzen."),
+  rosenkohl: A("kaufen", "1 cm", "15–20 °C, 5–7 Tage", "Jungpflanzen im Mai/Juni kaufen – braucht eine lange Saison."),
+  gruenkohl: A("beides", "1 cm", "15–20 °C, 5–7 Tage", "Mai vorziehen oder Jungpflanzen kaufen, im Juni/Juli pflanzen – gar nicht so aufwendig, steht bis zum Winter."),
+  chinakohl: A("direkt", "1 cm", "15–20 °C, 4–6 Tage", "Ab Juli direkt säen und auf 30 cm vereinzeln – vorgezogen schießt er leichter."),
+  steckruebe: A("direkt", "2 cm", "15–20 °C, 1 Woche", "Mai bis Juli direkt säen, auf 25 cm vereinzeln."),
+  kartoffel: A("stecken", "10 cm", "–", "Pflanzkartoffeln (keine Speisekartoffeln) ab Mitte März 3–4 Wochen hell und kühl vorkeimen. Ab Mitte April 10 cm tief legen, Keime nach oben, 35 cm Abstand. ANHÄUFELN: sobald das Kraut 15–20 cm hoch ist, mit der Hacke Erde von beiden Seiten an die Pflanzen ziehen, bis nur noch die Spitzen herausschauen. Nach 2–3 Wochen nochmal. So bilden sich mehr Knollen und keine grünen (giftigen) Stellen."),
+  mais: A("beides", "3–4 cm", "über 12 °C, 1–2 Wochen", "Ende April vorziehen oder ab Mitte Mai direkt säen – immer im Block, nicht in einer Reihe."),
+  erdbeere: A("kaufen", "–", "–", "Jungpflanzen im August pflanzen (tragen im nächsten Jahr) oder im April. Das Herz darf nicht unter die Erde."),
+  rhabarber: A("kaufen", "–", "–", "Eine Pflanze oder ein Stück vom Wurzelstock im Herbst setzen, im ersten Jahr nicht ernten."),
+  basilikum: A("beides", "nur andrücken (Lichtkeimer)", "20–25 °C, 1–2 Wochen", "Im April auf der Fensterbank säen oder einen Supermarkt-Topf in 4–5 Teile teilen und einzeln pflanzen (sonst faulen sie)."),
+  petersilie: A("direkt", "1 cm", "15–20 °C, 3–4 Wochen", "Keimt sehr langsam – Saat einen Tag einweichen. Oder einen Topf kaufen."),
+  dill: A("direkt", "nur andrücken", "15–20 °C, 2 Wochen", "Direkt zwischen die Gurken säen, mag kein Umpflanzen."),
+  bohnenkraut: A("direkt", "nur andrücken (Lichtkeimer)", "18–20 °C, 2 Wochen", "Im Mai direkt zwischen die Bohnen säen."),
+  thymian: A("kaufen", "–", "–", "Am einfachsten als Topfpflanze kaufen und an den sonnigen Beetrand setzen. Mehrjährig."),
+  salbei: A("kaufen", "–", "–", "Topfpflanze kaufen, mehrjährig – im Frühjahr zurückschneiden."),
+  oregano: A("kaufen", "–", "–", "Topfpflanze kaufen, mehrjährig."),
+  minze: A("kaufen", "–", "–", "Topfpflanze kaufen und in einen Kübel setzen (wuchert)."),
+  ringelblume: A("direkt", "1 cm", "15–20 °C, 1–2 Wochen", "Direkt säen – sät sich danach jedes Jahr selbst aus."),
+  kapuzinerkresse: A("direkt", "2 cm", "15–20 °C, 1–2 Wochen", "Ab Mai direkt säen, große Samen – auch gut für Kinderhände."),
+  tagetes: A("beides", "0,5 cm", "20 °C, 1 Woche", "April vorziehen oder im Mai Pflanzen kaufen."),
+  sonnenblume: A("direkt", "2–3 cm", "15–20 °C, 1–2 Wochen", "Ab April direkt säen – Vorsicht vor Schnecken bei den Keimlingen."),
+  roggen: A("direkt", "2–3 cm", "ab 5 °C", "September/Oktober breitwürfig säen und einharken. Im Frühjahr abmähen und flach einarbeiten."),
+};
+function anbauHtml(id) {
+  const a = ANBAU[id]; if (!a) return "";
+  const [t, f] = WEG[a.weg];
+  return `<div class="anbau"><div><span class="weg" style="background:${f}1A;color:${f}">${t}</span>
+    ${a.tiefe && a.tiefe !== "–" ? `<span class="klein"> · Saattiefe ${esc(a.tiefe)}</span>` : ""}${a.keim && a.keim !== "–" ? `<span class="klein"> · Keimt bei ${esc(a.keim)}</span>` : ""}</div>
+    <p>${esc(a.text)}</p></div>`;
+}
+
 const FAMILIE = { nacht: "Nachtschatten", kuerbis: "Kürbisgewächse", korb: "Korbblütler", baldrian: "Baldriangewächse", portulak: "Portulak", kreuz: "Kreuzblütler (Kohl)",
   gaensefuss: "Gänsefuß", dolden: "Doldenblütler", lauch: "Lauch/Zwiebel", huelsen: "Hülsenfrüchte", gras: "Gräser", rosen: "Rosengewächse", lippen: "Lippenblütler", kresse: "Kresse", knoeterich: "Knöterichgewächse" };
 const FARBE = { nacht: "#E5534B", kuerbis: "#F2A33A", korb: "#8BC34A", baldrian: "#6FBF73", portulak: "#4DB6AC", kreuz: "#7E9CD8", gaensefuss: "#C2185B",
@@ -1191,7 +1273,7 @@ function zeichnePflanzen() {
         return `<div class="pflanze ${n ? "gewaehlt" : ""}">
           <i class="punkt" style="background:${FARBE[pf.fam]}"></i>
           <div class="mitte" data-a="pflanze-info" data-w="${pf.id}"><div class="name">${esc(pf.name)}</div>
-            <div class="info">${wo} · ${pf.reihe}×${pf.abstand} cm${jetzt.length ? ` · <span class="marke gruen">jetzt: ${jetzt.join(", ")}</span>` : ""}</div></div>
+            <div class="info">${ANBAU[pf.id] ? `<span style="color:${WEG[ANBAU[pf.id].weg][1]};font-weight:700">${WEG[ANBAU[pf.id].weg][0]}</span> · ` : ""}${wo} · ${pf.reihe}×${pf.abstand} cm${jetzt.length ? ` · <span class="marke gruen">jetzt: ${jetzt.join(", ")}</span>` : ""}</div></div>
           <div class="zahl"><button data-a="minus" data-w="${pf.id}">−</button><b>${n || ""}</b><button data-a="plus" data-w="${pf.id}">+</button></div>
         </div>`;
       }).join("")}</div>
@@ -1317,6 +1399,46 @@ function zeichneWissen() {
       </ul>
       <p class="klein">Auf den Kärtchen im Plan steht grün „gut mit …“ oder rot „schlecht neben …“. Unter „Pflanzen“ zeigt ein Tipp auf den Namen alle guten und schlechten Nachbarn.</p>
     </div>
+    <div class="karte"><h2>Selbst vorziehen, direkt säen oder Jungpflanzen kaufen?</h2>
+      <div class="folge">
+        <div><span class="weg" style="background:#34A8531A;color:#34A853">Direkt ins Beet säen</span><div class="klein" style="margin-top:6px">Alles, was schnell keimt oder Umpflanzen nicht mag: Möhre, Radieschen, Spinat, Bohnen, Erbsen, Feldsalat, Rote Bete, Dill.</div></div>
+        <div><span class="weg" style="background:#007AFF1A;color:#007AFF">Selbst vorziehen</span><div class="klein" style="margin-top:6px">Lohnt sich bei vielen Pflanzen oder besonderen Sorten: Tomate, Zucchini, Kürbis, Kohl, Salat, Mais. Braucht eine helle Fensterbank.</div></div>
+        <div><span class="weg" style="background:#FF95001A;color:#FF9500">Jungpflanzen kaufen</span><div class="klein" style="margin-top:6px">Was sehr früh Wärme braucht oder schwierig ist: Paprika, Chili, Aubergine, Sellerie, Lauch, Blumenkohl, Kräuter. Im ersten Jahr auch gern bei Tomaten.</div></div>
+        <div><span class="weg" style="background:#8E5B3A1A;color:#8E5B3A">Stecken / Legen</span><div class="klein" style="margin-top:6px">Zwiebeln, Schalotten, Knoblauch und Kartoffeln – einfach in die Erde, fast kein Risiko.</div></div>
+      </div>
+      <p class="klein">Bei jeder Pflanze (Pflanzen → Name antippen) steht, was sich lohnt, wie tief gesät wird und bei welcher Temperatur sie keimt.</p>
+    </div>
+    <div class="karte"><h2>So ziehst du selbst vor</h2>
+      <ol class="liste-tipps">
+        <li><b>Material:</b> Anzuchterde (nährstoffarm, nicht normale Blumenerde), kleine Töpfe oder Anzuchtschalen, eine Sprühflasche.</li>
+        <li><b>Säen:</b> Erde leicht andrücken, Samen so tief legen wie angegeben (Faustregel: doppelt so tief, wie das Korn dick ist). Lichtkeimer nur andrücken.</li>
+        <li><b>Feucht und warm:</b> Mit Folie oder Deckel abdecken, an einen warmen Platz stellen, täglich lüften, nie austrocknen lassen – aber auch nicht nass.</li>
+        <li><b>Hell:</b> Sobald die Keimlinge da sind, an das hellste Fenster (Süd). Zu dunkel = lange, dünne „vergeilte“ Stängel.</li>
+        <li><b>Pikieren:</b> Wenn nach den Keimblättern das erste richtige Blatt kommt, jede Pflanze einzeln in einen eigenen Topf setzen (mit einem Löffelstiel herausheben).</li>
+        <li><b>Abhärten:</b> 1–2 Wochen vor dem Auspflanzen tagsüber nach draußen stellen (erst Schatten, dann Sonne), nachts wieder rein.</li>
+        <li><b>Auspflanzen:</b> Wärmeliebende erst nach den Eisheiligen (Mitte Mai). Angießen, die ersten Tage gut feucht halten.</li>
+      </ol>
+    </div>
+    <div class="karte"><h2>Jungpflanzen kaufen – worauf achten?</h2>
+      <ul class="liste-tipps">
+        <li>Kräftig und gedrungen, dunkelgrüne Blätter, keine gelben oder fleckigen Blätter.</li>
+        <li>Unten aus dem Topf schauen ein paar helle Wurzeln – aber kein dichter Wurzelfilz.</li>
+        <li>Tomaten und Paprika möglichst noch ohne Blüten oder Früchte.</li>
+        <li>Unterseite der Blätter anschauen: keine Läuse, keine weißen Fliegen.</li>
+        <li>Vor dem Pflanzen Topf in einen Eimer Wasser tauchen, bis keine Blasen mehr kommen.</li>
+      </ul>
+    </div>
+    <div class="karte"><h2>Kartoffeln: vorkeimen, legen, anhäufeln</h2>
+      <ol class="liste-tipps">
+        <li><b>Pflanzkartoffeln kaufen</b> (Gartencenter, ab Februar) – Speisekartoffeln sind oft keimgehemmt.</li>
+        <li><b>Vorkeimen</b> ab Mitte März: Kartoffeln in Eierkartons, hell und kühl (10–15 °C) stellen. Nach 3–4 Wochen haben sie kurze, kräftige, dunkle Keime.</li>
+        <li><b>Legen</b> ab Mitte April: 10 cm tief, Keime nach oben, 35 cm Abstand, Reihen 65 cm auseinander. Auf euren Erdhaufen einfach in einer Reihe oben drauf.</li>
+        <li><b>Anhäufeln – wann?</b> Das erste Mal, wenn das Kraut 15–20 cm hoch ist; das zweite Mal 2–3 Wochen später.</li>
+        <li><b>Anhäufeln – wie?</b> Mit Hacke oder Spaten Erde von beiden Seiten an die Pflanzen ziehen, bis nur noch die oberen Blätter herausschauen. So bilden sich mehr Knollen, und keine Knolle sieht Licht (grüne Stellen sind giftig).</li>
+        <li><b>Spätfrost:</b> Kommt das Kraut zu früh heraus, einfach mit Erde zuhäufeln oder Vlies drüberlegen.</li>
+        <li><b>Ernte:</b> Frühkartoffeln, wenn die Pflanze blüht; Lagerkartoffeln, wenn das Kraut gelb und abgestorben ist – dann noch 2 Wochen warten (festere Schale).</li>
+      </ol>
+    </div>
     <div class="karte"><h2>Stark-, Mittel- und Schwachzehrer</h2>
       <p>„Zehren“ heißt, wie viele Nährstoffe eine Pflanze aus dem Boden holt.</p>
       <ul class="liste-tipps">
@@ -1403,6 +1525,7 @@ function pflanzeInfo(id) {
     <p class="klein">${FAMILIE[pf.fam]} · ${pf.zehrer === "stark" ? "Starkzehrer" : pf.zehrer === "mittel" ? "Mittelzehrer" : "Schwachzehrer"} · Abstand ${pf.reihe} × ${pf.abstand} cm · Höhe ca. ${pf.hoehe} cm · Wasser ${["", "wenig", "mittel", "viel"][pf.wasser]}${pf.frost ? " · frostempfindlich" : ""}</p>
     <p><b>Vorziehen:</b> ${mon(pf.vorziehen)}<br><b>Unter Dach:</b> ${mon(pf.ghm)}<br><b>Draußen:</b> ${mon(pf.draussen)}<br><b>Ernte:</b> ${mon(pf.ernte)}</p>
     <p><b>Gute Nachbarn:</b> ${esc(namen(pf.gut))}<br><b>Nicht daneben:</b> ${esc(namen(pf.schlecht))}</p>
+    <h3 style="font-size:15px;margin:12px 0 4px">So pflanzt du es an</h3>${anbauHtml(pf.id)}
     <p><b>Dünger:</b> ${esc(pf.duenger)}</p><p><b>Tipp:</b> ${esc(pf.tipp)}</p>
     <div class="zeile"><button class="knopf voll" data-a="zu">Schließen</button></div>`);
 }
@@ -1413,6 +1536,7 @@ function pflanzungZeigen(id) {
   blatt(`<h3><i class="punkt" style="background:${FARBE[pf.fam]}"></i> ${esc(pf.name)} – ${esc(b.name)}</h3>
     <p class="klein">${p.anzahl} Stück auf ${Math.round(p.laenge)} cm, Abstand ${pf.reihe} × ${pf.abstand} cm.
       ${nb.map(x => `Neben ${esc(anzeigeName(x.pflanze))}: ${nachbarn(p.pflanze, x.pflanze) > 0 ? "gute Nachbarn" : nachbarn(p.pflanze, x.pflanze) < 0 ? "<b style='color:#FF3B30'>schlechte Nachbarn</b>" : "neutral"}.`).join(" ")}</p>
+    ${anbauHtml(pf.id)}
     <p><b>Dünger:</b> ${esc(pf.duenger)}<br><b>Tipp:</b> ${esc(pf.tipp)}</p>
     <label class="f">Anzahl</label><input type="number" id="pl-anzahl" min="1" value="${p.anzahl}">
     <label class="f">Beet</label><select id="pl-beet">${alleBeete().filter(x => PFLANZBAR.includes(x.art)).map(x => `<option value="${x.id}" ${x.id === p.beet ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
@@ -1512,7 +1636,8 @@ function beetBearbeiten(id, ecke) {
       <div class="zwei"><div><label class="f">Tiefe (cm)</label><input type="number" id="bt-tiefe" value="${breit(b)}"></div>
         <div><p class="klein" style="margin-top:30px">Diese Seite ist ${Math.round(b.kl * 100)} cm lang.</p></div></div>`
       : `<div class="zwei"><div><label class="f">${b.art === "erdstreifen" ? "Breite (cm)" : "Tiefe/Breite (cm)"}</label><input type="number" id="bt-breite" value="${breit(b)}"></div>
-        <div>${zwei ? `<label class="f">Länge (cm)</label><input type="number" id="bt-laenge" value="${lang(b)}">` : `<p class="klein" style="margin-top:30px">${(lang(b) / 100).toFixed(1).replace(".", ",")} m lang – weiße Punkte ziehen.</p>`}</div></div>`}
+        <div><label class="f">Länge (cm)</label><input type="number" id="bt-laenge" value="${lang(b)}"></div></div>
+        ${zwei ? "" : `<p class="klein">Die Form bleibt erhalten und wird auf die neue Länge gestreckt bzw. gestaucht – danach bei Bedarf die weißen Punkte ziehen.</p>`}`}
     <label class="f"><input type="checkbox" id="bt-wasser" ${b.wasser ? "checked" : ""}> Tropfbewässerung vorhanden</label>
     <label class="f"><input type="checkbox" id="bt-warm" ${b.warm ? "checked" : ""}> Wärme-Ecke (Folie/Windschutz/Tunnel gebaut)</label>
     <div class="zeile" style="margin-top:14px">
@@ -1599,6 +1724,11 @@ async function aktion(a, w, el) {
         const z = daten.karte.beete.find(x => x.id === w);
         z.name = name || z.name; z.wasser = wasser; z.warm = warm; z.breite = Math.max(0.2, Math.min(3, zahlWert("bt-breite") / 100));
         const neuL = $("bt-laenge") ? zahlWert("bt-laenge") / 100 : 0;
+        // Erdhaufen: ganze Form vom Anfangspunkt aus auf die neue Länge skalieren
+        if (neuL > 0.2 && z.p.length > 2) {
+          const alt = laengeVon(z.art === "erdstreifen" ? glatt(z.p) : z.p), f = neuL / (alt || 1), [x0, y0] = z.p[0];
+          if (Math.abs(f - 1) > 0.005) z.p = z.p.map(([x, y]) => [Math.round((x0 + (x - x0) * f) * 100) / 100, Math.round((y0 + (y - y0) * f) * 100) / 100]);
+        }
         if (neuL > 0.2 && z.p.length === 2) { const [a, c] = z.p, l = abst(a, c) || 1; z.p[1] = [Math.round((a[0] + (c[0] - a[0]) / l * neuL) * 100) / 100, Math.round((a[1] + (c[1] - a[1]) / l * neuL) * 100) / 100]; }
       }
       geaendert(); blattZu(); zeichnePlan(); break;
