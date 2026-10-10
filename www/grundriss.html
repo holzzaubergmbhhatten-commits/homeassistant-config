@@ -149,7 +149,7 @@
   <span class="luecke"></span>
   <span id="knoepfe-ansicht"><button id="alle-aus"></button> <button id="bearbeiten"></button></span>
   <span id="knoepfe-bearbeiten" style="display:none">
-    <button id="raum-neu"></button> <button id="geraet-neu"></button> <button id="foto"></button> <button id="gelaende"></button> <button id="gelaende-neu"></button>
+    <button id="raum-neu"></button> <button id="tuer-neu"></button> <button id="geraet-neu"></button> <button id="foto"></button> <button id="gelaende"></button> <button id="gelaende-neu"></button>
     <button id="abbrechen" class="rot"></button> <button id="speichern" class="voll"></button>
   </span>
 </div>
@@ -645,14 +645,14 @@ function zeichneHaus(g) {
   }
   for (const [a, b, c, d] of ZONEN) el("line", { class: "zone", x1: a, y1: b, x2: c, y2: d }, g);
   // Fenster: Öffnung in der Außenmauer mit zwei Glaslinien
-  for (const [w, a, von, bis] of FENSTER) {
-    const r = w === "h" ? { x: von, y: a, width: bis - von, height: A } : { x: a, y: von, width: A, height: bis - von };
+  for (const { w, a, von, bis, d = A } of daten.fenster) {
+    const r = w === "h" ? { x: von, y: a, width: bis - von, height: d } : { x: a, y: von, width: d, height: bis - von };
     el("rect", { class: "fenster", ...r }, g);
-    if (w === "h") el("line", { class: "fenster", x1: von, y1: a + A / 2, x2: bis, y2: a + A / 2 }, g);
-    else el("line", { class: "fenster", x1: a + A / 2, y1: von, x2: a + A / 2, y2: bis }, g);
+    if (w === "h") el("line", { class: "fenster", x1: von, y1: a + d / 2, x2: bis, y2: a + d / 2 }, g);
+    else el("line", { class: "fenster", x1: a + d / 2, y1: von, x2: a + d / 2, y2: bis }, g);
   }
   // Türen: Öffnung + Türblatt + Aufschlagbogen
-  for (const t of TUEREN) {
+  for (const t of daten.tueren) {
     const b = t.bis - t.von;
     if (t.w === "h") {
       el("rect", { class: "tuer-oeffnung", x: t.von, y: t.a - 0.01, width: b, height: t.d + 0.02 }, g);
@@ -675,6 +675,56 @@ function zeichneHaus(g) {
     if (passt < 0.34) t.style.fontSize = Math.max(0.14, passt) + "px";
   }
   el("text", { class: "gebaeudename", x: 0.1, y: HAUS.h + 0.65 }, g).textContent = "HAUPTHAUS";
+}
+// ================= Türen & Fenster verschieben (Bearbeiten-Modus; gespeichert in daten.tueren / daten.fenster) =================
+// Wände des Haupthauses: Außenmauern + Innenwände zwischen benachbarten Räumen des Bauplans
+function wandListe() {
+  if (wandListe.c) return wandListe.c;
+  const L = [
+    { w: "h", a: 0, d: A, von: A, bis: HAUS.w - A, aussen: true }, { w: "h", a: HAUS.h - A, d: A, von: A, bis: HAUS.w - A, aussen: true },
+    { w: "v", a: 0, d: A, von: A, bis: HAUS.h - A, aussen: true }, { w: "v", a: HAUS.w - A, d: A, von: A, bis: HAUS.h - A, aussen: true },
+  ];
+  const R = PLAN_RAEUME.map(p => p.r);
+  for (const r1 of R) for (const r2 of R) {
+    const dy = Math.round((r2[1] - r1[3]) * 1000) / 1000, dx = Math.round((r2[0] - r1[2]) * 1000) / 1000;
+    if (dy > 0.05 && dy < 0.35) { const von = Math.max(r1[0], r2[0]), bis = Math.min(r1[2], r2[2]); if (bis - von > 0.5) L.push({ w: "h", a: r1[3], d: dy, von, bis }); }
+    if (dx > 0.05 && dx < 0.35) { const von = Math.max(r1[1], r2[1]), bis = Math.min(r1[3], r2[3]); if (bis - von > 0.5) L.push({ w: "v", a: r1[2], d: dx, von, bis }); }
+  }
+  return wandListe.c = L;
+}
+function naechsteWand(p, nurAussen) {
+  let best = null, bd = 1e9;
+  for (const w of wandListe()) {
+    if (nurAussen && !w.aussen) continue;
+    const quer = w.w === "h" ? p.y : p.x, laengs = w.w === "h" ? p.x : p.y;
+    const dist = Math.hypot(quer - (w.a + w.d / 2), Math.max(0, w.von - laengs, laengs - w.bis));
+    if (dist < bd) { bd = dist; best = w; }
+  }
+  return best;
+}
+// Öffnung auf eine Wand setzen (Mitte bei "mitte", Breite bleibt, passt sie nicht, wird sie kürzer)
+function aufWand(o, w, mitte, breite) {
+  const b = Math.min(breite || o.bis - o.von, w.bis - w.von);
+  const von = Math.max(w.von, Math.min(w.bis - b, Math.round((mitte - b / 2) * 20) / 20));
+  Object.assign(o, { w: w.w, a: w.a, d: w.d, von: Math.round(von * 1000) / 1000, bis: Math.round((von + b) * 1000) / 1000 });
+}
+const wandVon = o => wandListe().find(w => w.w === o.w && Math.abs(w.a - o.a) < 0.01 && (o.von + o.bis) / 2 >= w.von - 0.01 && (o.von + o.bis) / 2 <= w.bis + 0.01)
+  || naechsteWand(o.w === "h" ? { x: (o.von + o.bis) / 2, y: o.a } : { x: o.a, y: (o.von + o.bis) / 2 });
+// Anfassflächen (etwas größer als die Öffnung, damit man sie mit dem Finger trifft)
+function zeichneOeffnungsGriffe(g) {
+  const griff = (liste, i, o, auf) => {
+    const sel = auswahl && auswahl.art === "oeffnung" && auswahl.liste === liste && auswahl.i === i, pad = 0.18;
+    const quer1 = Math.min(o.a, auf) - pad, quer2 = Math.max(o.a + o.d, auf) + pad;
+    const r = o.w === "h" ? { x: o.von - pad, y: quer1, width: o.bis - o.von + 2 * pad, height: quer2 - quer1 }
+                          : { x: quer1, y: o.von - pad, width: quer2 - quer1, height: o.bis - o.von + 2 * pad };
+    el("rect", { ...r, rx: 0.1, fill: "var(--akzent)", "fill-opacity": sel ? 0.28 : 0.1, stroke: "var(--akzent)",
+      "stroke-width": sel ? 0.06 : 0.025, "stroke-dasharray": sel ? "" : "0.12 0.08", ["data-" + (liste === "tueren" ? "tuer" : "fenster")]: i }, g);
+  };
+  daten.fenster.forEach((f, i) => griff("fenster", i, f, f.a));
+  daten.tueren.forEach((t, i) => {
+    const b = t.bis - t.von, ya = t.seite > 0 ? t.a + t.d : t.a;
+    griff("tueren", i, t, t.schiebe ? t.a : ya + (t.seite || 1) * b);
+  });
 }
 function zeichneTreppe(g) {
   const t = daten.treppe;
@@ -717,6 +767,7 @@ function zeichnen() {
   zeichneHaus(g);
   for (const f of fl) if (!(EBENE[f.typ] <= 2)) zeichneFlaeche(f, g);
   zeichneTreppe(g);
+  if (bearbeiten) zeichneOeffnungsGriffe(g);
   if (fotoAn) el("image", { href: FOTO_URL, x: PLANFOTO.x, y: PLANFOTO.y, width: PLANFOTO.w, height: PLANFOTO.h,
     opacity: 0.5, preserveAspectRatio: "none", "pointer-events": "none" }, g);
   // Lichtschein
@@ -763,6 +814,7 @@ function runter(ev) {
   const lampeEl = ev.target.closest("[data-lampe]"), wandEl = ev.target.closest("[data-wand]");
   const flEl = ev.target.closest("[data-flaeche]"), planEl = ev.target.closest("[data-plan]");
   const treppeEl = bearbeiten && ev.target.closest("[data-treppe]");
+  const oeffEl = bearbeiten && ev.target.closest("[data-tuer],[data-fenster]");
   const punktEl = bearbeiten && ev.target.closest("[data-punkt]"), gelEl = bearbeiten && ev.target.closest("[data-gel]");
   const schalterEl = ev.target.closest("[data-raumschalter]");
   const basis = { start: p, sx: ev.clientX, sy: ev.clientY, a0: { ...ansicht }, bewegt: false, t0: Date.now() };
@@ -775,6 +827,9 @@ function runter(ev) {
   } else if (lampeEl) {
     const i = +lampeEl.dataset.lampe, l = daten.lampen[i];
     zug = { ...basis, art: "lampe", i, dx: p.x - l.x, dy: p.y - l.y };
+  } else if (oeffEl) {
+    const liste = oeffEl.dataset.tuer !== undefined ? "tueren" : "fenster";
+    zug = { ...basis, art: "oeffnung", liste, i: +(oeffEl.dataset.tuer ?? oeffEl.dataset.fenster) };
   } else if (treppeEl) {
     const t = daten.treppe;
     zug = wandEl ? { ...basis, art: "wand", treppe: true, teile: [{ q: t, seite: wandEl.dataset.wand }] }
@@ -833,6 +888,12 @@ function weiter(ev) {
     if (g) g.setAttribute("transform", `translate(${l.x} ${l.y})`);   // nur verschieben, nicht alles neu zeichnen
     return;
   }
+  if (zug.art === "oeffnung") {
+    // an der nächsten Wand entlang mitziehen (Fenster nur in Außenmauern)
+    const o = daten[zug.liste][zug.i], w = naechsteWand(p, zug.liste === "fenster");
+    if (w) aufWand(o, w, w.w === "h" ? p.x : p.y);
+    zeichnenBald(); return;
+  }
   if (zug.art === "punkt") {
     const x = Math.round(p.x * 10) / 10, y = Math.round(p.y * 10) / 10;
     if (zug.e.p) zug.e.p[zug.i] = [x, y]; else { zug.e.x = x; zug.e.y = y; }
@@ -866,7 +927,10 @@ function hoch(ev) {
   if (zug.art === "zwei") { if (finger.size === 0) zug = null; return; }
   const z = zug; zug = null;
   svg.querySelectorAll(".gedrueckt").forEach(e => e.classList.remove("gedrueckt"));
-  if (z.bewegt) { if (z.art !== "schieben") zeichnen(); return; }
+  if (z.bewegt) {
+    if (z.art === "oeffnung") { auswahl = { art: "oeffnung", liste: z.liste, i: z.i }; panelZeigen(); }
+    if (z.art !== "schieben") zeichnen(); return;
+  }
   const h = hass();
   if (!bearbeiten) {
     if (z.tipp && z.tipp.lampe !== undefined) {
@@ -889,6 +953,7 @@ function hoch(ev) {
   if (z.art === "punkt") auswahl = { art: "gel", id: z.e.id, punkt: z.i };
   else if (z.art === "gel") auswahl = { art: "gel", id: z.e.id };
   else if (z.treppe) auswahl = { art: "treppe" };
+  else if (z.art === "oeffnung") auswahl = { art: "oeffnung", liste: z.liste, i: z.i };
   else if (z.art === "lampe") auswahl = { art: "lampe", id: z.i };
   else if (z.f) auswahl = { art: "fl", id: z.f.id };
   else if (z.planRaum) auswahl = { art: "plan", id: z.planRaum };
@@ -1007,6 +1072,48 @@ function panelZeigen() {
       <div class="zeile"><button id="p-fertig" class="voll">${icon("haken")} Fertig</button></div>
       <div class="hinweis">Das neue Element erscheint in der Bildmitte – dann hinziehen und die weißen Punkte zurechtziehen.</div>`;
     p.querySelectorAll("[data-neugel]").forEach(b => b.onclick = () => neuesGelaende(b.dataset.neugel));
+  } else if (auswahl.art === "oeffnung") {
+    const liste = daten[auswahl.liste], o = liste[auswahl.i];
+    if (!o) { auswahl = null; return panelZeigen(); }
+    const tuer = auswahl.liste === "tueren", cm = Math.round((o.bis - o.von) * 100);
+    p.innerHTML = `<h3>${tuer ? (o.schiebe ? "Schiebetür" : "Tür") : "Fenster"}</h3>
+      <div class="zeile" style="align-items:center;margin-bottom:12px">Breite:
+        <button id="o-schmaler">−</button><b style="min-width:80px;text-align:center">${cm} cm</b><button id="o-breiter">+</button></div>
+      ${tuer && !o.schiebe ? `<div class="zeile"><button id="o-seite">Geht zur anderen Seite auf</button><button id="o-anschlag">Scharnier auf die andere Seite</button></div>` : ""}
+      ${tuer ? `<div class="zeile"><button id="o-art">${o.schiebe ? "Normale Tür daraus machen" : "Schiebetür daraus machen"}</button></div>` : ""}
+      <div class="zeile"><button id="o-weg" class="rot">${icon("x")} ${tuer ? "Tür" : "Fenster"} löschen</button>
+      <button id="p-fertig" class="voll">${icon("haken")} Fertig</button></div>
+      <div class="hinweis">${tuer ? "Tür" : "Fenster"} anfassen und an die richtige Stelle ziehen – rastet an der nächsten Wand ein${tuer ? "" : " (nur Außenwände)"}.
+      Tipp: „Bauplan einblenden“ zeigt die Lage im Original.</div>`;
+    const breite = delta => {
+      const w = wandVon(o), b = Math.max(0.4, Math.min(4, Math.round((o.bis - o.von + delta) * 100) / 100));
+      if (w) aufWand(o, w, (o.von + o.bis) / 2, b);
+      panelZeigen(); zeichnen();
+    };
+    p.querySelector("#o-schmaler").onclick = () => breite(-0.05);
+    p.querySelector("#o-breiter").onclick = () => breite(0.05);
+    const k = id => p.querySelector(id);
+    if (k("#o-seite")) k("#o-seite").onclick = () => { o.seite = -(o.seite || 1); panelZeigen(); zeichnen(); };
+    if (k("#o-anschlag")) k("#o-anschlag").onclick = () => { o.rueck = !o.rueck || undefined; panelZeigen(); zeichnen(); };
+    if (k("#o-art")) k("#o-art").onclick = () => { o.schiebe = !o.schiebe || undefined; if (!o.seite) o.seite = 1; panelZeigen(); zeichnen(); };
+    k("#o-weg").onclick = ev => {
+      if (ev.currentTarget.dataset.scharf !== "1") { ev.currentTarget.dataset.scharf = "1"; ev.currentTarget.textContent = "Wirklich löschen?"; return; }
+      liste.splice(auswahl.i, 1); auswahl = null; panelZeigen(); zeichnen();
+    };
+  } else if (auswahl.art === "neuoeffnung") {
+    p.innerHTML = `<h3>Tür oder Fenster hinzufügen</h3><div class="symbole">
+      <button data-neuo="tuer">Tür</button><button data-neuo="schiebe">Schiebetür</button><button data-neuo="fenster">Fenster</button></div>
+      <div class="zeile"><button id="p-fertig" class="voll">${icon("haken")} Fertig</button></div>
+      <div class="hinweis">Erscheint an der Wand in der Bildmitte – dann an die richtige Stelle ziehen.</div>`;
+    p.querySelectorAll("[data-neuo]").forEach(b => b.onclick = () => {
+      const art = b.dataset.neuo, fenster = art === "fenster";
+      const m = { x: ansicht.x + ansicht.w / 2, y: ansicht.y + ansicht.h / 2 }, w = naechsteWand(m, fenster);
+      const o = fenster ? {} : { seite: 1, ...(art === "schiebe" ? { schiebe: true } : {}) };
+      aufWand(o, w, w.w === "h" ? m.x : m.y, fenster ? 1.0 : art === "schiebe" ? 2.0 : 0.85);
+      const liste = fenster ? "fenster" : "tueren";
+      daten[liste].push(o); auswahl = { art: "oeffnung", liste, i: daten[liste].length - 1 }; panelZeigen(); zeichnen();
+      meldung("Hinzugefügt – jetzt an die richtige Stelle ziehen");
+    });
   } else if (auswahl.art === "treppe") {
     const t = daten.treppe;
     const pfeile = [["hoch", "↑ hoch"], ["runter", "↓ runter"], ["links", "← links"], ["rechts", "→ rechts"]];
@@ -1110,6 +1217,8 @@ K("raum-neu").onclick = () => {
   daten.flaechen.push(f); auswahl = { art: "fl", id: f.id }; panelZeigen(); zeichnen();
 };
 K("geraet-neu").onclick = () => { auswahl = { art: "neu" }; panelZeigen(); };
+K("tuer-neu").innerHTML = `${icon("plus")} Tür / Fenster`;
+K("tuer-neu").onclick = () => { auswahl = { art: "neuoeffnung" }; panelZeigen(); };
 K("gelaende").innerHTML = `${icon("scheune")} Grundstück einpassen`;
 // Eigene Scheune (mit Räumen und Lampen) in das Scheunen-Gebäude des Luftbilds setzen, alte Groß-Flächen entfernen
 K("gelaende").onclick = () => grundstueckEinpassen();
@@ -1174,6 +1283,8 @@ function uebernehmen(alt, h) {
   else daten = neuerStand();
   daten.namen = daten.namen || {}; daten.flaechen = daten.flaechen || []; daten.lampen = daten.lampen || [];
   if (!daten.treppe) daten.treppe = { ...TREPPE };
+  if (!Array.isArray(daten.tueren)) daten.tueren = TUEREN.map(t => ({ ...t }));
+  if (!Array.isArray(daten.fenster)) daten.fenster = FENSTER.map(([w, a, von, bis]) => ({ w, a, d: A, von, bis }));
   if (!Array.isArray(daten.gelaende)) daten.gelaende = gelaendeAusVorlage();
   ergaenzen(h);
   if (!daten.gelaendeEingepasst) grundstueckEinpassen();

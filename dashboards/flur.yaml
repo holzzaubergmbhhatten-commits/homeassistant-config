@@ -1513,7 +1513,7 @@ views:
   type: panel
   cards:
   - type: iframe
-    url: /local/grundriss.html?v=15
+    url: /local/grundriss.html?v=16
     aspect_ratio: 53.3%
 - title: Garten
   path: garten
