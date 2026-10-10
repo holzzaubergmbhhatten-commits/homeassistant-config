@@ -82,6 +82,9 @@
   .folge > div { background: var(--bg); border-radius: 12px; padding: 10px 12px; }
   .nrf { display: inline-flex; width: 22px; height: 22px; border-radius: 50%; background: var(--akzent); color: #fff; font-weight: 800; font-size: 13px; align-items: center; justify-content: center; margin-right: 6px; }
   .farben-link { font-size: 12px; font-weight: 700; color: var(--blau); padding: 4px 9px; border-radius: 8px; background: #E8F1FF; }
+  .zoomknoepfe { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .zoomknoepfe button { width: 40px; height: 40px; border-radius: 11px; background: rgba(255,255,255,.95); box-shadow: 0 1px 4px rgba(0,0,0,.2); font-size: 24px; font-weight: 700; color: var(--blau); display: flex; align-items: center; justify-content: center; }
+  .suche { margin: 6px 0 8px; }
   .tipp-waerme { border: 2px solid #FFD08A; }
   .liste-tipps { padding-left: 18px; margin: 6px 0; line-height: 1.5; font-size: 14px; }
   /* Pflanzenliste */
@@ -144,7 +147,7 @@
 <div class="meldung" id="meldung"></div>
 
 <script>
-const SEITEN_VERSION = 8;
+const SEITEN_VERSION = 9;
 const DATEN_URL = "/local/garten_daten.json";
 const WETTER = "weather.touchmonitor_home";
 const $ = id => document.getElementById(id);
@@ -164,6 +167,7 @@ const ICON = {
   stift: "M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z",
   plus: "M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z",
   info: "M13,9H11V7H13M13,17H11V11H13M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z",
+  alles: "M17 4H20C21.1 4 22 4.9 22 6V8H20V6H17V4M4 8V6H7V4H4C2.9 4 2 4.9 2 6V8H4M20 16V18H17V20H20C21.1 20 22 19.1 22 18V16H20M7 18H4V16H2V18C2 19.1 2.9 20 4 20H7V18Z",
   frage: "M10,19H13V22H10V19M12,2C17.35,2.22 19.68,7.62 16.5,11.67C15.67,12.67 14.33,13.33 13.67,14.17C13,15 13,16 13,17H10C10,15.33 10,13.92 10.67,12.92C11.33,11.92 12.67,11.33 13.5,10.67C15.92,8.43 15.32,5.26 12,5A3,3 0 0,0 9,8H6A6,6 0 0,1 12,2Z",
   zauber: "M7.5,5.6L5,7L6.4,4.5L5,2L7.5,3.4L10,2L8.6,4.5L10,7L7.5,5.6M19.5,15.4L22,14L20.6,16.5L22,19L19.5,17.6L17,19L18.4,16.5L17,14L19.5,15.4M22,2L20.6,4.5L22,7L19.5,5.6L17,7L18.4,4.5L17,2L19.5,3.4L22,2M13.34,12.78L15.78,10.34L13.66,8.22L11.22,10.66L13.34,12.78M14.37,7.29L16.71,9.63C17.1,10 17.1,10.65 16.71,11.04L5.04,22.71C4.65,23.1 4,23.1 3.63,22.71L1.29,20.37C0.9,20 0.9,19.35 1.29,18.96L12.96,7.29C13.35,6.9 14,6.9 14.37,7.29Z",
 };
@@ -839,7 +843,7 @@ function kartenBox(art) {
 }
 function karteBauen(box) {
   beeteCache = null;
-  box = box || kartenBox(ansichtWahl);
+  box = box || zoomBox || kartenBox(ansichtWahl);
   const beete = alleBeete(), gh = ghForm || GH_VORLAGE;
   const k = box.w / 60;   // Schriftgröße passend zum Ausschnitt
   const segmente = [];
@@ -1007,7 +1011,7 @@ function zeichnePlan() {
       </div>
       <div class="planlayout ${leer || bearbeiten ? "ohne" : ""}" id="planlayout">
         <div class="spalte">${leer || bearbeiten ? "" : links.map(karte).join("")}</div>
-        <div class="planbox" id="planbox">${svg}</div>
+        <div class="planbox" id="planbox">${svg}<div class="zoomknoepfe"><button data-a="zoom-rein" aria-label="Hineinzoomen">+</button><button data-a="zoom-raus" aria-label="Herauszoomen">−</button><button data-a="zoom-alles" aria-label="Ganzer Ausschnitt">${ic("alles")}</button></div></div>
         <div class="spalte">${leer || bearbeiten ? "" : rechts.map(karte).join("")}</div>
         <svg class="linien" id="linien"></svg>
       </div>
@@ -1065,9 +1069,54 @@ async function grundrissSpeichern() {
     $("speicher").textContent = "gespeichert";
   } catch (e) { $("speicher").textContent = "nicht gespeichert"; meldung("Gelände nicht gespeichert: " + (e && e.message || e)); }
 }
+// Zoomen: zwei Finger (auseinander/zusammen), Mausrad, Knöpfe +/−; ein Finger auf freier Fläche = verschieben
+let zoomBox = null, zoomBenutzt = false;
+function zoomSetzen(v) {
+  const w = Math.max(3, Math.min(250, v.w)), f = w / v.w, h = v.h * f;
+  zoomBox = { x: v.x + (v.w - w) / 2, y: v.y + (v.h - h) / 2, w, h };
+}
+function zoomGesten(svg) {
+  const zeiger = new Map(); let st = null, neuZeichnen = 0;
+  const vb = () => { const v = svg.viewBox.baseVal; return { x: v.x, y: v.y, w: v.width, h: v.height }; };
+  const setze = v => { svg.setAttribute("viewBox", `${v.x} ${v.y} ${v.w} ${v.h}`); zoomBox = v; };
+  const spaeter = () => { clearTimeout(neuZeichnen); neuZeichnen = setTimeout(() => { if (!zeiger.size) zeichnePlan(); }, 250); };
+  svg.addEventListener("pointerdown", ev => {
+    zeiger.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    const greifbar = bearbeiten && ev.target.closest("[data-punkt],[data-gpunkt],[data-element],[data-beet]");
+    if (zeiger.size === 2) { const [a, b] = [...zeiger.values()]; st = { pinch: true, d: Math.hypot(a.x - b.x, a.y - b.y) || 1, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, v: vb() }; zoomBenutzt = true; }
+    else if (zeiger.size === 1) st = greifbar ? null : { pan: true, sx: ev.clientX, sy: ev.clientY, v: vb(), aktiv: false };
+  });
+  svg.addEventListener("pointermove", ev => {
+    if (!zeiger.has(ev.pointerId) || !st) return;
+    zeiger.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    const r = svg.getBoundingClientRect(), skal = Math.max(st.v.w / r.width, st.v.h / r.height);
+    if (st.pinch && zeiger.size >= 2) {
+      const [a, b] = [...zeiger.values()], d = Math.hypot(a.x - b.x, a.y - b.y) || 1, mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      const f = Math.max(3 / st.v.w, Math.min(250 / st.v.w, st.d / d));
+      const wx = st.v.x + (st.mx - r.left - (r.width - st.v.w / skal) / 2) * skal, wy = st.v.y + (st.my - r.top - (r.height - st.v.h / skal) / 2) * skal;
+      const w = st.v.w * f, h = st.v.h * f, s2 = skal * f;
+      setze({ x: wx - (mx - r.left - (r.width - w / s2) / 2) * s2, y: wy - (my - r.top - (r.height - h / s2) / 2) * s2, w, h });
+    } else if (st.pan && zeiger.size === 1) {
+      const dx = ev.clientX - st.sx, dy = ev.clientY - st.sy;
+      if (!st.aktiv && Math.hypot(dx, dy) > 10) { st.aktiv = true; zoomBenutzt = true; }
+      if (st.aktiv) setze({ ...st.v, x: st.v.x - dx * skal, y: st.v.y - dy * skal });
+    }
+  });
+  const los = ev => { zeiger.delete(ev.pointerId); if (!zeiger.size) { if (st && (st.pinch || st.aktiv)) spaeter(); st = null; setTimeout(() => { zoomBenutzt = false; }, 50); }
+    else if (st && st.pinch) { const [a] = [...zeiger.values()]; st = { pan: true, sx: a.x, sy: a.y, v: vb(), aktiv: true }; } };
+  svg.addEventListener("pointerup", los); svg.addEventListener("pointercancel", los);
+  svg.addEventListener("wheel", ev => {
+    ev.preventDefault();
+    const v = vb(), r = svg.getBoundingClientRect(), skal = Math.max(v.w / r.width, v.h / r.height), f = Math.exp(ev.deltaY * 0.0015);
+    const wx = v.x + (ev.clientX - r.left - (r.width - v.w / skal) / 2) * skal, wy = v.y + (ev.clientY - r.top - (r.height - v.h / skal) / 2) * skal;
+    const w = Math.max(3, Math.min(250, v.w * f)), k2 = w / v.w;
+    setze({ x: wx - (wx - v.x) * k2, y: wy - (wy - v.y) * k2, w, h: v.h * k2 }); spaeter();
+  }, { passive: false });
+}
 // Bearbeiten: Punkte/Erdhaufen/Häuschen ziehen; Antippen = Infos bzw. Einstellungen
 function planGesten() {
   const svg = $("plansvg"); if (!svg) return;
+  zoomGesten(svg);
   let zug = null, raf = 0;
   const punkt = ev => { const p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY; return p.matrixTransform(svg.getScreenCTM().inverse()); };
   svg.addEventListener("pointerdown", ev => {
@@ -1082,7 +1131,7 @@ function planGesten() {
     }
   });
   svg.addEventListener("pointermove", ev => {
-    if (!zug || !zug.ziel) return;
+    if (!zug || !zug.ziel || zoomBenutzt) return;
     if (Math.hypot(ev.clientX - zug.sx, ev.clientY - zug.sy) > 6) zug.bewegt = true;
     if (!zug.bewegt) return;
     const p = punkt(ev), dx = Math.round((p.x - zug.p.x) * 10) / 10, dy = Math.round((p.y - zug.p.y) * 10) / 10;
@@ -1099,6 +1148,7 @@ function planGesten() {
   const ende = ev => {
     if (!zug) return;
     const z = zug; zug = null;
+    if (zoomBenutzt && !z.bewegt) return;
     if (z.bewegt && z.gel) { gelaendeGeaendert(); zeichnePlan(); return; }
     if (z.bewegt && z.ziel) { geaendert(); zeichnePlan(); return; }
     if (Math.hypot(ev.clientX - z.sx, ev.clientY - z.sy) > 10 || !tippErlaubt()) return;
@@ -1339,6 +1389,11 @@ async function kiFragen(auftrag, bild) {
 
 // ================= Fenster =================
 function blatt(html, aufbau) { $("blatt").innerHTML = html; $("schleier").classList.add("offen"); if (aufbau) aufbau($("blatt")); }
+document.addEventListener("input", ev => {
+  const z = { "such-vorschlag": "liste-abc", "such-historie": "liste-hist" }[ev.target.id]; if (!z) return;
+  const q = ev.target.value.trim().toLowerCase();
+  $(z).querySelectorAll("[data-name]").forEach(e => { e.style.display = !q || e.dataset.name.includes(q) ? "" : "none"; });
+});
 function blattZu() { $("schleier").classList.remove("offen"); $("blatt").innerHTML = ""; }
 function pflanzeInfo(id) {
   const pf = PF[id]; if (!pf) return;
@@ -1388,7 +1443,13 @@ function beetZeigen(id) {
   const b = beet(id); if (!b) return;
   const jahr = planSaison(), ps = daten.pflanzungen.filter(p => p.beet === id && p.saison === jahr);
   const frei = freiImBeet(b);
-  const vorschlaege = PFLANZEN.map(pf => ({ pf, ...eignung(pf, b) })).filter(x => x.w > -20).sort((a, c) => c.w - a.w);
+  const bewertet = PFLANZEN.map(pf => ({ pf, ...eignung(pf, b) })).filter(x => x.w > -20);
+  const vorschlaege = bewertet.slice().sort((a, c) => c.w - a.w).slice(0, 6);
+  const abc = bewertet.slice().sort((a, c) => a.pf.name.localeCompare(c.pf.name, "de"));
+  const zeile = x => `<div class="vorschlag" data-name="${esc(x.pf.name.toLowerCase())}">
+      <i class="punkt" style="background:${FARBE[x.pf.fam]}"></i><div class="mitte"><b>${esc(x.pf.name)}</b>
+      <div class="tags">${x.gruende.slice(0, 3).map(([t, c]) => `<span style="background:${c}1A;color:${c}">${esc(t)}</span>`).join("")}</div></div>
+      <button class="knopf klein-k voll" data-a="vorschlag-dazu" data-w="${b.id}|${x.pf.id}">${ic("plus", "#fff")}</button></div>`;
   const hist = daten.historie.filter(h => h.beet === id).sort((a, c) => c.saison - a.saison);
   const diesJahr = saison();
   const histJahr = hist.filter(h => h.saison === diesJahr && h.pflanze);
@@ -1396,12 +1457,11 @@ function beetZeigen(id) {
     <p class="klein">${bereichName(b)} · ${(lang(b) / 100).toFixed(1).replace(".", ",")} m lang, ${breit(b)} cm breit${b.wasser ? " · Tropfbewässerung" : ""}${b.warm ? " · Wärme-Ecke" : ""} · noch frei: ${(frei / 100).toFixed(1).replace(".", ",")} m</p>
     <h3 style="font-size:15px;margin-top:12px">Geplant für ${jahr}</h3>
     ${ps.length ? `<div class="pflanzen-liste">${ps.map(p => `<button class="knopf klein-k" data-a="pflanzung" data-w="${p.id}"><i class="punkt" style="background:${FARBE[PF[p.pflanze]?.fam]}"></i>${esc(anzeigeName(p.pflanze))} ${p.anzahl}×</button>`).join("")}</div>` : `<p class="klein">Noch nichts – unten aus den Vorschlägen hinzufügen.</p>`}
-    <h3 style="font-size:15px;margin-top:14px">Was passt hier? (beste zuerst)</h3>
-    <div class="vorschlaege">${vorschlaege.slice(0, vorschlagAlle ? 60 : 8).map(x => `<div class="vorschlag">
-      <i class="punkt" style="background:${FARBE[x.pf.fam]}"></i><div class="mitte"><b>${esc(x.pf.name)}</b>
-      <div class="tags">${x.gruende.slice(0, 3).map(([t, c]) => `<span style="background:${c}1A;color:${c}">${esc(t)}</span>`).join("")}</div></div>
-      <button class="knopf klein-k voll" data-a="vorschlag-dazu" data-w="${b.id}|${x.pf.id}">${ic("plus", "#fff")}</button></div>`).join("")}</div>
-    ${vorschlagAlle ? "" : `<button class="knopf klein-k" data-a="vorschlag-alle" data-w="${b.id}" style="margin-top:6px">Alle Pflanzen zeigen</button>`}
+    <h3 style="font-size:15px;margin-top:14px">Passt hier am besten</h3>
+    <div class="vorschlaege">${vorschlaege.map(zeile).join("")}</div>
+    <h3 style="font-size:15px;margin-top:14px">Alle Pflanzen von A bis Z</h3>
+    <input type="text" class="suche" id="such-vorschlag" placeholder="Pflanze suchen, z. B. Blumenkohl …">
+    <div class="vorschlaege" id="liste-abc">${abc.map(zeile).join("")}</div>
     <h3 style="font-size:15px;margin-top:14px">Was war ${diesJahr} hier drin?</h3>
     <p class="klein">Für die Fruchtfolge: damit im nächsten Jahr nicht wieder dieselbe Familie ins Beet kommt.</p>
     ${histJahr.length ? `<div class="pflanzen-liste">${histJahr.map(h => `<span><i class="punkt" style="background:${FARBE[h.fam]}"></i>${esc(anzeigeName(h.pflanze))}</span>`).join("")}</div>` : `<p class="klein">Noch nichts eingetragen.</p>`}
@@ -1413,7 +1473,8 @@ function historieBearbeiten(id) {
   const b = beet(id), jahr = saison();
   const drin = new Set(daten.historie.filter(h => h.beet === id && h.saison === jahr && h.pflanze).map(h => h.pflanze));
   blatt(`<h3>${esc(b.name)}: was war ${jahr} drin?</h3><p class="klein">Antippen zum An-/Abwählen.</p>
-    <div class="pflanzen-wahl">${PFLANZEN.map(pf => `<button class="knopf klein-k ${drin.has(pf.id) ? "voll" : ""}" data-a="historie-tipp" data-w="${id}|${pf.id}"><i class="punkt" style="background:${FARBE[pf.fam]}"></i>${esc(pf.name)}</button>`).join("")}</div>
+    <input type="text" class="suche" id="such-historie" placeholder="Pflanze suchen …">
+    <div class="pflanzen-wahl" id="liste-hist">${PFLANZEN.slice().sort((a, c) => a.name.localeCompare(c.name, "de")).map(pf => `<button data-name="${esc(pf.name.toLowerCase())}" class="knopf klein-k ${drin.has(pf.id) ? "voll" : ""}" data-a="historie-tipp" data-w="${id}|${pf.id}"><i class="punkt" style="background:${FARBE[pf.fam]}"></i>${esc(pf.name)}</button>`).join("")}</div>
     <div class="zeile" style="margin-top:14px"><span class="luecke"></span><button class="knopf voll" data-a="beet" data-w="${id}">Fertig</button></div>`);
 }
 function zaunBearbeiten(i) {
@@ -1488,7 +1549,10 @@ async function aktion(a, w, el) {
   const zahlWert = id => { const v = parseInt($(id).value, 10); return isNaN(v) ? 0 : v; };
   switch (a) {
     case "reiter": reiter = w; bearbeiten = false; zeichnen(); $("inhalt").scrollTop = 0; break;
-    case "ansicht": ansichtWahl = w; zeichnePlan(); break;
+    case "ansicht": ansichtWahl = w; zoomBox = null; zeichnePlan(); break;
+    case "zoom-rein": case "zoom-raus": { const v = $("plansvg").viewBox.baseVal, f = a === "zoom-rein" ? 0.7 : 1 / 0.7;
+      zoomSetzen({ x: v.x + v.width * (1 - f) / 2, y: v.y + v.height * (1 - f) / 2, w: v.width * f, h: v.height * f }); zeichnePlan(); break; }
+    case "zoom-alles": zoomBox = null; zeichnePlan(); break;
     case "bearbeiten": bearbeiten = !bearbeiten; zeichnePlan(); break;
     case "filter": filter = w; zeichnePflanzen(); break;
     case "plus": daten.wunsch[w] = (daten.wunsch[w] || 0) ? daten.wunsch[w] + 1 : vorschlag(PF[w]); geaendert(); zeichnePflanzen(); break;
