@@ -150,7 +150,7 @@
 <div class="meldung" id="meldung"></div>
 
 <script>
-const SEITEN_VERSION = 10;
+const SEITEN_VERSION = 11;
 const DATEN_URL = "/local/garten_daten.json";
 const WETTER = "weather.touchmonitor_home";
 const $ = id => document.getElementById(id);
@@ -470,8 +470,20 @@ function uebernehmen(d) {
 // ================= Speichern / Laden =================
 let speicherTimer = 0, letzterText = "";
 function geaendert() { beeteCache = null; $("speicher").textContent = "…"; clearTimeout(speicherTimer); speicherTimer = setTimeout(speichern, 1200); }
+// Kurzfassung für die To-dos auf dem Start-Dashboard (claude_tools/garten_aufgaben.py liest nur diese Datei)
+function aufgabenInfo() {
+  const ids = new Set([...Object.keys(daten.wunsch), ...daten.pflanzungen.map(p => p.pflanze), ...daten.historie.map(x => x.pflanze)]);
+  const pflanzen = {};
+  for (const id of ids) { const p = PF[id]; if (!p) continue;
+    pflanzen[id] = { name: p.name, vorziehen: p.vorziehen, draussen: p.draussen, ghm: p.ghm, ernte: p.ernte, frost: p.frost,
+      zehrer: p.zehrer, wasser: p.wasser, weg: ANBAU[id] ? ANBAU[id].weg : "" }; }
+  const beete = {};
+  for (const b of alleBeete()) if (PFLANZBAR.includes(b.art || "hochbeet")) beete[b.id] = { name: b.name || "", gh: b.bereich === "gh", wasser: !!b.wasser, art: b.art || "" };
+  return { v: 1, pflanzen, beete, gh_beete: Object.values(beete).some(b => b.gh), garten_beete: Object.values(beete).some(b => !b.gh) };
+}
 async function speichern() {
   const h = hass(); if (!h) return;
+  try { daten.info = aufgabenInfo(); } catch (e) { /* To-dos sind nur ein Zusatz */ }
   const text = JSON.stringify(daten);
   try {
     const r = await h.callWS({ type: "call_service", domain: "script", service: "garten_speichern", service_data: { daten: text }, return_response: true });
@@ -493,6 +505,8 @@ async function laden() {
   await gelaendeLaden();
   zeichnen();
   wetterLaden();
+  // ältere Speicherstände: Kurzfassung für die Dashboard-To-dos einmal nachtragen
+  if (letzterText && (!daten.info || daten.info.v !== 1)) geaendert();
 }
 // Änderungen von anderen Geräten übernehmen
 setInterval(async () => {

@@ -1,7 +1,8 @@
 # Garten: Pflanzplan für den überdachten Garten (offen, Folien-Dach, Hochbeete) und Gemüsegarten (Erdstreifen) als Reiter "Garten"
 # im Flur-Dashboard (www/garten.html) – am Monitor und im Handy-App.
 # - Plan, Pflanzenwahl und Fotos liegen lokal in /config/www/garten_daten.json (nicht im Repository).
-# - Pflegehinweise rechnet die Seite aus dem Wetter (weather.touchmonitor_home).
+# - Pflegehinweise rechnet die Seite aus dem Wetter (weather.touchmonitor_home); die wichtigsten davon
+#   stehen als "Garten heute" auf dem Start-Dashboard (sensor.garten_aufgaben, claude_tools/garten_aufgaben.py).
 # - Foto-Check und Fragen beantwortet Claude über claude_tools/garten_ki.py (Schlüssel aus der
 #   Anthropic-Integration, nicht im Repository).
 # - Foto an den Telegram-Bot schicken (Text dazu = Frage) → Claude prüft die Pflanze und antwortet im Chat;
@@ -10,6 +11,7 @@ shell_command:
   # lange Texte kommen in Stücken (ein einzelnes Argument darf nicht beliebig lang sein)
   garten_schreiben: python3 /config/claude_tools/garten_speichern.py {{ b64 }}
   garten_ki_befehl: python3 /config/claude_tools/garten_ki.py {{ auftrag }} {{ bild }}
+  garten_aufgaben_befehl: python3 /config/claude_tools/garten_aufgaben.py {{ wetter }}
 
 script:
   garten_speichern:
@@ -36,6 +38,8 @@ script:
               notification_id: garten
               title: Gartenplan speichern
               message: "{{ antwort.text }}"
+      # To-dos auf dem Start-Dashboard gleich neu berechnen
+      - event: garten_geaendert
       - stop: fertig
         response_variable: antwort
 
@@ -120,3 +124,43 @@ automation:
           parse_mode: html
           message: >-
             {% set t %}🌱 {{ antwort }}{% endset %}{{ t | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}
+
+# To-dos für das Start-Dashboard ("Garten heute"): aus Pflanzplan + Wettervorhersage,
+# stündlich, beim Start und gleich nach jedem Speichern auf der Garten-Seite neu berechnet.
+template:
+  - triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: 7
+      - trigger: event
+        event_type: garten_geaendert
+    actions:
+      - action: weather.get_forecasts
+        continue_on_error: true
+        target:
+          entity_id: weather.touchmonitor_home
+        data:
+          type: daily
+        response_variable: vorhersage
+      - action: shell_command.garten_aufgaben_befehl
+        continue_on_error: true
+        data:
+          wetter: >-
+            {% set fc = vorhersage['weather.touchmonitor_home'].forecast if vorhersage is defined and vorhersage is mapping
+                        and 'weather.touchmonitor_home' in vorhersage else [] %}
+            {{ {'tage': fc[:5], 'jetzt': state_attr('weather.touchmonitor_home', 'temperature')} | to_json | base64_encode }}
+        response_variable: ergebnis
+      - variables:
+          liste: >-
+            {% set a = ergebnis.stdout | default('') if ergebnis is defined and ergebnis is mapping else '' %}
+            {{ a if a is mapping else (a | from_json if (a | string).startswith('{') else {'aufgaben': [], 'bald': []}) }}
+    sensor:
+      - name: Garten Aufgaben
+        unique_id: garten_aufgaben
+        icon: mdi:sprout
+        state: "{{ liste.aufgaben | default([]) | count }}"
+        attributes:
+          aufgaben: "{{ liste.aufgaben | default([]) }}"
+          bald: "{{ liste.bald | default([]) }}"
+          fehler: "{{ liste.fehler | default('') }}"
