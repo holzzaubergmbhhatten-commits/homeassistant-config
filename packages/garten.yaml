@@ -7,6 +7,15 @@
 #   Anthropic-Integration, nicht im Repository).
 # - Foto an den Telegram-Bot schicken (Text dazu = Frage) → Claude prüft die Pflanze und antwortet im Chat;
 #   das Ergebnis erscheint auch unter "Foto-Check" auf der Garten-Seite.
+# - Am Monitor (Start-Dashboard, "Garten heute") und im Reiter "Fragen" der Garten-Seite kann man Claude
+#   fragen oder melden, was erledigt ist ("Kürbis habe ich geerntet") – dann verschwindet die Aufgabe.
+input_text:
+  garten_nachricht:
+    name: Garten – Frage oder erledigt
+    icon: mdi:message-question-outline
+    max: 255
+    initial: ""
+
 shell_command:
   # lange Texte kommen in Stücken (ein einzelnes Argument darf nicht beliebig lang sein)
   garten_schreiben: python3 /config/claude_tools/garten_speichern.py {{ b64 }}
@@ -61,10 +70,67 @@ script:
       - variables:
           antwort:
             stdout: "{{ ergebnis.stdout | default('') if ergebnis is defined and ergebnis is mapping else '' }}"
+          a: >-
+            {% set t = antwort.stdout %}{{ t if t is mapping else (t | from_json if (t | string).startswith('{') else {}) }}
+          art: "{{ (auftrag if auftrag is mapping else (auftrag | from_json)).art | default('') }}"
+      # Fragen/Meldungen: Aufgaben neu berechnen (Erledigtes verschwindet), Antwort für den Monitor
+      - if: "{{ art == 'chat' }}"
+        then:
+          - event: garten_geaendert
+            event_data:
+              antwort: "{{ a.text if a.ok | default(false) else 'Das hat leider nicht geklappt – bitte nochmal versuchen.' }}"
+              frage: "{{ (auftrag if auftrag is mapping else (auftrag | from_json)).frage | default('') }}"
+              quelle: "{{ (auftrag if auftrag is mapping else (auftrag | from_json)).quelle | default('') }}"
       - stop: fertig
         response_variable: antwort
 
 automation:
+  # Eingabefeld am Monitor: Frage oder "erledigt" an Claude, danach Feld leeren
+  - id: garten_nachricht_monitor
+    alias: "Garten: Frage/Meldung vom Monitor an Claude"
+    mode: queued
+    max: 3
+    triggers:
+      - trigger: state
+        entity_id: input_text.garten_nachricht
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.to_state.state | trim not in ['', 'unknown', 'unavailable'] }}"
+    actions:
+      - variables:
+          frage: "{{ trigger.to_state.state | trim }}"
+      - event: garten_geaendert
+        event_data:
+          antwort: "Claude denkt nach …"
+          frage: "{{ frage }}"
+          quelle: monitor
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.garten_nachricht
+        data:
+          value: ""
+      - action: weather.get_forecasts
+        continue_on_error: true
+        target:
+          entity_id: weather.touchmonitor_home
+        data:
+          type: daily
+        response_variable: vorhersage
+      - action: script.garten_ki
+        continue_on_error: true
+        data:
+          auftrag: >-
+            {% set w = states.weather.touchmonitor_home %}
+            {% set fc = (vorhersage['weather.touchmonitor_home'].forecast if vorhersage is defined and vorhersage is mapping
+                         and 'weather.touchmonitor_home' in vorhersage else [])[:3] %}
+            {% set ns = namespace(t=('jetzt ' ~ w.attributes.temperature ~ ' °C, ' ~ w.state) if w else '') %}
+            {% for d in fc %}{% set ns.t = ns.t ~ '; ' ~ (as_timestamp(d.datetime) | timestamp_custom('%d.%m.')) ~ ' '
+               ~ d.templow | default('?') ~ '–' ~ d.temperature ~ ' °C, ' ~ d.precipitation | default(0) ~ ' mm' %}{% endfor %}
+            {{ {'art': 'chat', 'frage': frage, 'quelle': 'monitor', 'wetter': ns.t, 'plan_laden': true,
+                'aufgaben': state_attr('sensor.garten_aufgaben', 'aufgaben') or [],
+                'schluessel': state_attr('sensor.garten_aufgaben', 'schluessel') or [],
+                'datum': now().strftime('%d.%m.%Y')} | to_json }}
+
   - id: garten_foto_telegram
     alias: "Garten: Foto per Telegram von Claude prüfen lassen"
     mode: queued
@@ -135,6 +201,7 @@ template:
         minutes: 7
       - trigger: event
         event_type: garten_geaendert
+        id: geaendert
     actions:
       - action: weather.get_forecasts
         continue_on_error: true
@@ -163,4 +230,24 @@ template:
         attributes:
           aufgaben: "{{ liste.aufgaben | default([]) }}"
           bald: "{{ liste.bald | default([]) }}"
+          schluessel: "{{ liste.schluessel | default([]) }}"
           fehler: "{{ liste.fehler | default('') }}"
+          # letzte Antwort von Claude auf eine Frage/Meldung am Monitor (die Karte zeigt sie ein paar Stunden)
+          antwort: >-
+            {% set e = trigger.event.data if trigger.id == 'geaendert' else {} %}
+            {{ e.antwort if e.antwort is defined and e.quelle | default('') == 'monitor' else this.attributes.get('antwort', '') }}
+          frage: >-
+            {% set e = trigger.event.data if trigger.id == 'geaendert' else {} %}
+            {{ e.frage if e.antwort is defined and e.quelle | default('') == 'monitor' else this.attributes.get('frage', '') }}
+          antwort_zeit: >-
+            {% set e = trigger.event.data if trigger.id == 'geaendert' else {} %}
+            {{ now().isoformat() if e.antwort is defined and e.quelle | default('') == 'monitor' else this.attributes.get('antwort_zeit', '') }}
+
+  # Antwort am Monitor nur ein paar Stunden zeigen
+  - binary_sensor:
+      - name: Garten Antwort zeigen
+        unique_id: garten_antwort_zeigen
+        state: >-
+          {% set z = state_attr('sensor.garten_aufgaben', 'antwort_zeit') %}
+          {{ z not in [none, ''] and as_datetime(z) is not none and (now() - as_datetime(z)).total_seconds() < 6 * 3600
+             and state_attr('sensor.garten_aufgaben', 'antwort') not in [none, ''] }}

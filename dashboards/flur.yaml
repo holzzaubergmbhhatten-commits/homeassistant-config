@@ -111,6 +111,26 @@ views:
         {{ '<br>' if not loop.first }}<font color="#8E8E93"><ha-icon icon="{{ t.icon }}"></ha-icon></font> {{ t.titel }}{{ ' – ' ~ t.text if t.text }}
         {%- endfor %}
         {%- endif %}
+    # Frage stellen oder melden, was erledigt ist ("Kürbis habe ich geerntet") – Claude antwortet darunter
+    - type: entities
+      grid_options:
+        columns: full
+      entities:
+      - entity: input_text.garten_nachricht
+        name: Erledigt? Oder Frage an Claude …
+    - type: conditional
+      grid_options:
+        columns: full
+      conditions:
+      - condition: state
+        entity: binary_sensor.garten_antwort_zeigen
+        state: 'on'
+      card:
+        type: markdown
+        content: |-
+          <font color="#8E8E93"><ha-icon icon="mdi:account"></ha-icon> {{ state_attr('sensor.garten_aufgaben', 'frage') }}</font>
+
+          <ha-icon icon="mdi:sprout"></ha-icon> {{ state_attr('sensor.garten_aufgaben', 'antwort') }}
   - type: grid
     cards:
     - type: heading
@@ -1506,7 +1526,7 @@ views:
   type: panel
   cards:
   - type: iframe
-    url: /local/garten.html?v=12
+    url: /local/garten.html?v=13
     aspect_ratio: 53.3%
 - title: Infos
   path: infos

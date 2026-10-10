@@ -4,7 +4,10 @@
 Argument 1: Base64 des JSON {"tage": [Tagesvorhersage aus weather.get_forecasts], "jetzt": aktuelle Temperatur}.
 Liest den Pflanzplan aus /config/www/garten_daten.json – die Garten-Seite legt dort unter "info" eine
 Kurzfassung der Pflanzen und Beete ab (Monate für Vorziehen/Säen/Ernte usw.), damit hier nichts doppelt steht.
-Ausgabe immer JSON: {"aufgaben": [{"icon", "farbe", "titel", "text"}], "bald": [...]}.
+Was schon erledigt ist ("Kürbis geerntet" – am Monitor oder auf der Garten-Seite Claude gesagt), steht in
+/config/www/garten_erledigt.json (schreibt claude_tools/garten_ki.py) und wird hier ausgeblendet.
+Ausgabe immer JSON: {"aufgaben": [{"icon", "farbe", "titel", "text", "key"}], "bald": [...],
+"schluessel": [{"key", "text"}]} – schluessel = alles, was man gerade als erledigt melden kann.
 """
 import base64
 import json
@@ -12,11 +15,22 @@ import sys
 from datetime import date, timedelta
 
 DATEN = "/config/www/garten_daten.json"
+ERLEDIGT = "/config/www/garten_erledigt.json"
 MONATE = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"]
 
 
-def aufgabe(icon, farbe, titel, text=""):
-    return {"icon": icon, "farbe": farbe, "titel": titel, "text": text}
+def aufgabe(icon, farbe, titel, text="", key=""):
+    return {"icon": icon, "farbe": farbe, "titel": titel, "text": text, "key": key}
+
+
+def erledigt_laden(heute):
+    """Gemeldete Erledigungen, die heute noch gelten."""
+    try:
+        with open(ERLEDIGT, encoding="utf-8") as f:
+            liste = json.load(f).get("erledigt", [])
+    except (OSError, ValueError, AttributeError):
+        return set()
+    return {e.get("key") for e in liste if isinstance(e, dict) and str(e.get("bis", "")) >= heute.isoformat()}
 
 
 def namen(liste):
@@ -55,16 +69,38 @@ def main():
     geplant |= {pid for pid, n in (d.get("wunsch") or {}).items() if n}
     geplant = {pid for pid in geplant if pid in pflanzen}
     pf = lambda pid: pflanzen[pid]
+    fertig = erledigt_laden(heute)
+    # ganz abgeerntet gemeldet = steht nicht mehr im Beet (kein Frost-, Dünge- oder Ernte-Hinweis mehr)
+    aktiv = [(pid, bid) for pid, bid in aktiv if f"ernte:{pid}" not in fertig]
+    schluessel = []
+    melde = lambda key, text: schluessel.append({"key": key, "text": text})
     ist_gh = lambda bid: bool((beete.get(bid) or {}).get("gh")) or str(bid or "").startswith("gh-")
 
     aufgaben, bald = [], []
 
+    def dazu(liste, icon, farbe, titel, text="", key=""):
+        """Aufgabe nur, wenn sie nicht schon als erledigt gemeldet ist; meldbar ist sie in jedem Fall."""
+        if key:
+            melde(key, titel)
+            if key in fertig:
+                return
+        liste.append(aufgabe(icon, farbe, titel, text, key))
+
+    def je_pflanze(art, ids, wort):
+        """Pflanzen-Listen (Ernte, Säen …): jede Pflanze einzeln meldbar; erledigte fallen heraus."""
+        offen = []
+        for pid in sorted(set(ids)):
+            melde(f"{art}:{pid}", f"{pf(pid)['name']} {wort}")
+            if f"{art}:{pid}" not in fertig:
+                offen.append(pf(pid)["name"])
+        return offen
+
     # Frost – das Dach ist offen, dort wird es genauso kalt
     if tmin < 2:
         # nur, was noch im Beet steht (nach der letzten Erntezeit ist es meist abgeräumt)
-        empf = [pf(pid)["name"] for pid, _ in aktiv if pf(pid).get("frost") and m <= max(pf(pid).get("ernte") or [12])]
-        aufgaben.append(aufgabe("mdi:snowflake-alert", "#5AC8FA", f"Frost bis {round(tmin)} °C",
-                                f"Abends mit Vlies abdecken: {namen(empf)}." if empf else "Frisch Gepflanztes abends mit Vlies abdecken."))
+        empf = sorted({pf(pid)["name"] for pid, _ in aktiv if pf(pid).get("frost") and m <= max(pf(pid).get("ernte") or [12])})
+        dazu(aufgaben, "mdi:snowflake-alert", "#5AC8FA", f"Frost bis {round(tmin)} °C",
+             f"Abends mit Vlies abdecken: {namen(empf)}." if empf else "Frisch Gepflanztes abends mit Vlies abdecken.", "frost")
 
     # Gießen unter dem Dach (kein Regen) und draußen (nach Regen-Vorhersage)
     gh_beete = info.get("gh_beete") or any(b.get("gh") for b in beete.values())
@@ -72,19 +108,19 @@ def main():
     wachstum = 4 <= m <= 10 or (m in (3, 11) and tmax >= 15)
     if gh_beete and wachstum:
         if tmax >= 28:
-            aufgaben.append(aufgabe("mdi:watering-can", "#007AFF", "Unter dem Dach gießen", "Morgens ca. 20 Minuten Tropfschlauch, nachmittags nochmal 10 Minuten – dort kommt kein Regen an."))
+            dazu(aufgaben, "mdi:watering-can", "#007AFF", "Unter dem Dach gießen", "Morgens ca. 20 Minuten Tropfschlauch, nachmittags nochmal 10 Minuten – dort kommt kein Regen an.", "giessen_dach")
         elif tmax >= 20:
-            aufgaben.append(aufgabe("mdi:watering-can", "#007AFF", "Unter dem Dach gießen", "Morgens ca. 15 Minuten – dort kommt kein Regen an."))
+            dazu(aufgaben, "mdi:watering-can", "#007AFF", "Unter dem Dach gießen", "Morgens ca. 15 Minuten – dort kommt kein Regen an.", "giessen_dach")
         elif tmax >= 12 and heute.toordinal() % 2 == 0:
-            aufgaben.append(aufgabe("mdi:watering-can", "#007AFF", "Unter dem Dach gießen", "Heute ca. 10–15 Minuten (alle 2 Tage reicht)."))
+            dazu(aufgaben, "mdi:watering-can", "#007AFF", "Unter dem Dach gießen", "Heute ca. 10–15 Minuten (alle 2 Tage reicht).", "giessen_dach")
     if garten_beete and wachstum:
         if regen_heute >= 2 or regen2 >= 5:
             aufgaben.append(aufgabe("mdi:weather-pouring", "#8E8E93", "Draußen nicht gießen",
                                     f"Es kommen ca. {round(regen2)} mm Regen{' – heute regnet es' if regen_heute >= 2 else ''}."))
         elif tmax >= 25:
-            aufgaben.append(aufgabe("mdi:watering-can", "#007AFF", "Erdhaufen kräftig gießen", "Früh morgens 15–20 l pro Meter, danach mulchen."))
+            dazu(aufgaben, "mdi:watering-can", "#007AFF", "Erdhaufen kräftig gießen", "Früh morgens 15–20 l pro Meter, danach mulchen.", "giessen_draussen")
         elif tmax >= 18 and heute.toordinal() % 3 == 0:
-            aufgaben.append(aufgabe("mdi:watering-can", "#007AFF", "Erdhaufen gießen, wenn trocken", "Ca. 10 l pro Meter – Fingerprobe: 3 cm tief trocken?"))
+            dazu(aufgaben, "mdi:watering-can", "#007AFF", "Erdhaufen gießen, wenn trocken", "Ca. 10 l pro Meter – Fingerprobe: 3 cm tief trocken?", "giessen_draussen")
     if tmax >= 30 and gh_beete:
         aufgaben.append(aufgabe("mdi:white-balance-sunny", "#FF9500", "Hitze unter der Folie", "Morgens gründlich gießen und die Erde mulchen."))
 
@@ -93,21 +129,21 @@ def main():
     kart_geplant = "kartoffel" in geplant or kart_aktiv
     if kart_geplant:
         if (m == 3 and heute.day >= 10) or (m == 4 and heute.day <= 5):
-            aufgaben.append(aufgabe("mdi:egg-outline", "#8E5B3A", "Kartoffeln vorkeimen",
-                                    "Saatkartoffeln in Eierkartons, Augen nach oben, hell und kühl (10–15 °C) hinstellen – nach ca. 4 Wochen legen."))
+            dazu(aufgaben, "mdi:egg-outline", "#8E5B3A", "Kartoffeln vorkeimen",
+                 "Saatkartoffeln in Eierkartons, Augen nach oben, hell und kühl (10–15 °C) hinstellen – nach ca. 4 Wochen legen.", "vorkeimen:kartoffel")
         elif m == 3 and heute.day >= 1:
-            bald.append(aufgabe("mdi:egg-outline", "#8E5B3A", "Ab 10. März: Kartoffeln vorkeimen"))
+            dazu(bald, "mdi:egg-outline", "#8E5B3A", "Ab 10. März: Kartoffeln vorkeimen", "", "vorkeimen:kartoffel")
         elif m == 2 and heute.day >= 20:
-            bald.append(aufgabe("mdi:cart-outline", "#8E5B3A", "Saatkartoffeln kaufen", "Zum Vorkeimen ab Mitte März."))
+            dazu(bald, "mdi:cart-outline", "#8E5B3A", "Saatkartoffeln kaufen", "Zum Vorkeimen ab Mitte März.", "kaufen:kartoffel")
         if (m == 4 and heute.day >= 10) or (m == 5 and heute.day <= 10):
             if tmin >= 2:
-                aufgaben.append(aufgabe("mdi:shovel", "#8E5B3A", "Kartoffeln legen", "Ca. 10 cm tief, 35 cm Abstand, Keime nach oben – in die Erdhaufen."))
+                dazu(aufgaben, "mdi:shovel", "#8E5B3A", "Kartoffeln legen", "Ca. 10 cm tief, 35 cm Abstand, Keime nach oben – in die Erdhaufen.", "legen:kartoffel")
             else:
-                bald.append(aufgabe("mdi:shovel", "#8E5B3A", "Kartoffeln legen, sobald kein Frost mehr kommt"))
+                dazu(bald, "mdi:shovel", "#8E5B3A", "Kartoffeln legen, sobald kein Frost mehr kommt", "", "legen:kartoffel")
     if kart_aktiv and ((m == 5 and heute.day >= 10) or (m == 6 and heute.day <= 25)):
-        aufgaben.append(aufgabe("mdi:image-filter-hdr", "#8E5B3A", "Kartoffeln anhäufeln",
-                                "Wenn das Kraut 15–20 cm hoch ist: Erde von der Seite bis an die Blätter heranziehen, nach 2–3 Wochen nochmal."
-                                + (" Am besten nach dem Regen – feuchte Erde hält besser." if regen2 >= 2 else "")))
+        dazu(aufgaben, "mdi:image-filter-hdr", "#8E5B3A", "Kartoffeln anhäufeln",
+             "Wenn das Kraut 15–20 cm hoch ist: Erde von der Seite bis an die Blätter heranziehen, nach 2–3 Wochen nochmal."
+             + (" Am besten nach dem Regen – feuchte Erde hält besser." if regen2 >= 2 else ""), "anhaeufeln:kartoffel")
     if kart_aktiv and m == 5 and tmin < 3:
         aufgaben.append(aufgabe("mdi:snowflake", "#5AC8FA", "Kartoffelkraut schützen", "Bei Spätfrost Erde über die Triebe häufeln oder Vlies drauf."))
 
@@ -120,43 +156,45 @@ def main():
             continue
         weg = p.get("weg", "")
         if m in p.get("vorziehen", []) and weg != "kaufen":
-            vorziehen.append(p["name"])
+            vorziehen.append(pid)
         if m in p.get("draussen", []):
-            (kaufen if weg == "kaufen" else saeen).append(p["name"])
+            (kaufen if weg == "kaufen" else saeen).append(pid)
         if m in p.get("ghm", []):
-            (kaufen if weg == "kaufen" else dach).append(p["name"])
+            (kaufen if weg == "kaufen" else dach).append(pid)
         if naechster in p.get("vorziehen", []) + p.get("draussen", []) + p.get("ghm", []) and m not in p.get("vorziehen", []) + p.get("draussen", []) + p.get("ghm", []):
             bald_saat.append(p["name"])
-    if vorziehen:
-        aufgaben.append(aufgabe("mdi:sprout", "#007AFF", "Auf der Fensterbank vorziehen", namen(vorziehen)))
-    if saeen:
-        aufgaben.append(aufgabe("mdi:seed", "#34A853", "Draußen säen/pflanzen", namen(saeen) + (" (nicht bei Frost)" if tmin < 2 else "")))
-    if dach:
-        aufgaben.append(aufgabe("mdi:seed", "#34A853", "Unters Dach säen/pflanzen", namen(dach)))
-    if kaufen:
-        aufgaben.append(aufgabe("mdi:cart-outline", "#FF9500", "Jungpflanzen kaufen und pflanzen", namen(kaufen)))
+    if (n := je_pflanze("vorziehen", vorziehen, "vorgezogen")):
+        aufgaben.append(aufgabe("mdi:sprout", "#007AFF", "Auf der Fensterbank vorziehen", namen(n), "vorziehen"))
+    if (n := je_pflanze("saeen", saeen, "draußen gesät/gepflanzt")):
+        aufgaben.append(aufgabe("mdi:seed", "#34A853", "Draußen säen/pflanzen", namen(n) + (" (nicht bei Frost)" if tmin < 2 else ""), "saeen"))
+    if (n := je_pflanze("dach", dach, "unters Dach gesät/gepflanzt")):
+        aufgaben.append(aufgabe("mdi:seed", "#34A853", "Unters Dach säen/pflanzen", namen(n), "dach"))
+    if (n := je_pflanze("kaufen", kaufen, "gekauft und gepflanzt")):
+        aufgaben.append(aufgabe("mdi:cart-outline", "#FF9500", "Jungpflanzen kaufen und pflanzen", namen(n), "kaufen"))
     if bald_saat:
         bald.append(aufgabe("mdi:calendar-arrow-right", "#34A853", f"Im {MONATE[naechster - 1]} säen/pflanzen", namen(bald_saat)))
 
     # Düngen im Sommer, Ernte
     if 6 <= m <= 8:
-        stark = [pf(pid)["name"] for pid, _ in aktiv if pf(pid).get("zehrer") == "stark"]
+        stark = sorted({pf(pid)["name"] for pid, _ in aktiv if pf(pid).get("zehrer") == "stark"})
         if stark and heute.isocalendar()[1] % 2 == 0:
-            aufgaben.append(aufgabe("mdi:bottle-tonic-plus", "#A0522D", "Düngen", f"{namen(stark)}: Flüssigdünger oder Brennnesseljauche (1:10)."))
-    ernte = [pf(pid)["name"] for pid, _ in aktiv if m in pf(pid).get("ernte", [])]
-    if ernte:
-        aufgaben.append(aufgabe("mdi:basket-outline", "#FF9500", "Erntezeit", namen(ernte)))
+            dazu(aufgaben, "mdi:bottle-tonic-plus", "#A0522D", "Düngen", f"{namen(stark)}: Flüssigdünger oder Brennnesseljauche (1:10).", "duengen")
+    # "ernte:x" = ganz abgeerntet (fällt oben schon aus aktiv heraus); "ernten:x" = für ein paar Tage erledigt
+    if (n := je_pflanze("ernten", [pid for pid, _ in aktiv if m in pf(pid).get("ernte", [])], "geerntet (es kommt noch mehr)")):
+        aufgaben.append(aufgabe("mdi:basket-outline", "#FF9500", "Erntezeit", namen(n), "ernte"))
+    for pid in sorted({pid for pid, _ in aktiv}):
+        melde(f"ernte:{pid}", f"{pf(pid)['name']} ganz abgeerntet / abgeräumt")
 
     # Jahreszeit
     if m in (10, 11):
-        aufgaben.append(aufgabe("mdi:leaf", "#8E8E93", "Herbst im Garten",
-                                "Abgeerntetes raus, Hochbeete mit 3–5 cm Kompost auffüllen, freie Erdhaufen mit Laub abdecken."))
+        dazu(aufgaben, "mdi:leaf", "#8E8E93", "Herbst im Garten",
+             "Abgeerntetes raus, Hochbeete mit 3–5 cm Kompost auffüllen, freie Erdhaufen mit Laub abdecken.", "herbst")
         if m == 11 and heute.day >= 15:
-            bald.append(aufgabe("mdi:water-off", "#8E8E93", "Tropfschlauch und Pumpe winterfest machen", "Vor dem ersten Dauerfrost entleeren."))
+            dazu(bald, "mdi:water-off", "#8E8E93", "Tropfschlauch und Pumpe winterfest machen", "Vor dem ersten Dauerfrost entleeren.", "winterfest")
     if m == 2 or (m == 3 and heute.day < 15):
-        aufgaben.append(aufgabe("mdi:shovel", "#8E8E93", "Frühjahr vorbereiten", "Hochbeete mit Kompost auffrischen, Saatgut und Anzuchterde besorgen."))
+        dazu(aufgaben, "mdi:shovel", "#8E8E93", "Frühjahr vorbereiten", "Hochbeete mit Kompost auffrischen, Saatgut und Anzuchterde besorgen.", "fruehjahr")
 
-    print(json.dumps({"aufgaben": aufgaben[:8], "bald": bald[:4], "stand": heute.isoformat()}, ensure_ascii=False))
+    print(json.dumps({"aufgaben": aufgaben[:8], "bald": bald[:4], "schluessel": schluessel[:60], "stand": heute.isoformat()}, ensure_ascii=False))
 
 
 if __name__ == "__main__":

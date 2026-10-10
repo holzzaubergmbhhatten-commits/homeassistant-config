@@ -114,6 +114,14 @@
   /* Foto */
   .vorschau { max-width: 100%; max-height: 320px; border-radius: 12px; display: block; margin: 8px 0; }
   .antwort { white-space: pre-wrap; line-height: 1.5; font-size: 15px; }
+  /* Fragen an Claude */
+  .beispiele { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; }
+  .beispiele button { background: var(--bg); border-radius: 14px; padding: 6px 11px; font-size: 13px; }
+  .gespraech { border-top: 1px solid #E5E5EA; padding: 10px 0; }
+  .gespraech:first-of-type { border-top: 0; }
+  .gespraech .wir { font-weight: 600; }
+  .gespraech .zeit { font-size: 12px; color: var(--grau); }
+  .erledigt-marke { display: inline-block; font-size: 12px; background: #34C7591A; color: #248A3D; border-radius: 8px; padding: 2px 7px; margin: 3px 4px 0 0; }
   .verlauf-foto { display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid var(--linie); }
   .verlauf-foto img { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; flex: none; }
   textarea, input[type=text], input[type=number], select { width: 100%; font: inherit; font-size: 16px; padding: 10px 12px; border: 1px solid var(--linie); border-radius: 12px; background: var(--bg); color: var(--text); }
@@ -141,6 +149,7 @@
     <button data-a="reiter" data-w="heute">Heute</button>
     <button data-a="reiter" data-w="foto">Foto-Check</button>
     <button data-a="reiter" data-w="wissen">Wissen</button>
+    <button data-a="reiter" data-w="fragen">Fragen</button>
   </div>
   <span class="luecke"></span>
   <span class="speicher" id="speicher"></span>
@@ -150,7 +159,7 @@
 <div class="meldung" id="meldung"></div>
 
 <script>
-const SEITEN_VERSION = 12;
+const SEITEN_VERSION = 13;
 const DATEN_URL = "/local/garten_daten.json";
 const WETTER = "weather.touchmonitor_home";
 const $ = id => document.getElementById(id);
@@ -503,6 +512,7 @@ async function laden() {
       if (daten.umgestellt) { delete daten.umgestellt; geaendert(); setTimeout(() => meldung("Der Plan zeigt jetzt euren echten Grundriss – bitte unter „Pflanzen“ einmal „Pflanzplan erstellen“ tippen.", 7000), 800); } } }
   } catch (e) { /* noch nichts gespeichert */ }
   await gelaendeLaden();
+  await chatDatenLaden();
   zeichnen();
   wetterLaden();
   // ältere Speicherstände: Kurzfassung für die Dashboard-To-dos einmal nachtragen
@@ -657,7 +667,7 @@ function ordnen(r) {
 function zeichnen() {
   beeteCache = null;
   document.querySelectorAll("#reiter button").forEach(b => b.classList.toggle("an", b.dataset.w === reiter));
-  const f = { plan: zeichnePlan, pflanzen: zeichnePflanzen, heute: zeichneHeute, foto: zeichneFoto, wissen: zeichneWissen }[reiter];
+  const f = { plan: zeichnePlan, pflanzen: zeichnePflanzen, heute: zeichneHeute, foto: zeichneFoto, wissen: zeichneWissen, fragen: zeichneFragen }[reiter];
   f();
 }
 
@@ -1318,7 +1328,7 @@ function zeichneHeute() {
   const imGh = plaene.filter(p => p.b.bereich === "gh"), draussen = plaene.filter(p => p.b.bereich !== "gh");
   // Frost – das Dach ist offen, dort wird es genauso kalt wie draußen
   if (tmin < 2 && tmin !== 99) {
-    const empf = [...new Set(plaene.filter(p => p.pf.frost).map(p => p.pf.name))];
+    const empf = [...new Set(plaene.filter(p => p.pf.frost && !erledigt.has("ernte:" + p.pf.id)).map(p => p.pf.name))];
     aufgaben.push(["frost", "#5AC8FA", `Frost möglich (bis ${Math.round(tmin)} °C)`,
       (empf.length ? `Abends mit Vlies abdecken – auch unter dem Dach (es ist offen und wird genauso kalt): ${empf.join(", ")}.` :
         "Unter dem Dach ist es genauso kalt wie draußen – Wintersalate vertragen das, frisch Gepflanztes mit Vlies abdecken.")]);
@@ -1349,16 +1359,17 @@ function zeichneHeute() {
   // Pflanzkalender für die ausgewählten Pflanzen
   const ausgewaehlt = Object.entries(daten.wunsch).filter(([id, n]) => n > 0 && PF[id]).map(([id]) => PF[id]);
   const jetzt = [];
+  const fertig = (...k) => k.some(x => erledigt.has(x));
   for (const pf of ausgewaehlt) {
-    if (pf.vorziehen.includes(m)) jetzt.push(`${pf.name} auf der Fensterbank vorziehen`);
-    if (pf.ghm.includes(m)) jetzt.push(`${pf.name} unters Dach`);
-    if (pf.draussen.includes(m)) jetzt.push(`${pf.name} draußen säen/pflanzen`);
+    if (pf.vorziehen.includes(m) && !fertig("vorziehen:" + pf.id)) jetzt.push(`${pf.name} auf der Fensterbank vorziehen`);
+    if (pf.ghm.includes(m) && !fertig("dach:" + pf.id, "kaufen:" + pf.id)) jetzt.push(`${pf.name} unters Dach`);
+    if (pf.draussen.includes(m) && !fertig("saeen:" + pf.id, "kaufen:" + pf.id)) jetzt.push(`${pf.name} draußen säen/pflanzen`);
   }
   if (jetzt.length) aufgaben.push(["saat", "#34A853", "Diesen Monat säen/pflanzen", jetzt.join(" · ")]);
-  const ernte = [...new Set(plaene.filter(p => p.pf.ernte.includes(m)).map(p => p.pf.name))];
+  const ernte = [...new Set(plaene.filter(p => p.pf.ernte.includes(m) && !fertig("ernte:" + p.pf.id, "ernten:" + p.pf.id)).map(p => p.pf.name))];
   if (ernte.length) aufgaben.push(["ernte", "#FF9500", "Erntezeit", ernte.join(", ")]);
   // Jahreszeit
-  if (m === 10 || m === 11) aufgaben.push(["info", "#8E8E93", "Herbst-Arbeiten", "Abgeerntete Tomaten/Gurken raus (kranke Blätter in den Restmüll, nicht auf den Kompost), Hochbeete mit 3–5 cm Kompost auffüllen, freie Erdstreifen mit Laub mulchen oder Winterroggen säen. Feldsalat, Winterportulak und Asia-Salat gehen jetzt noch unters Dach, Knoblauch nach draußen."]);
+  if ((m === 10 || m === 11) && !erledigt.has("herbst")) aufgaben.push(["info", "#8E8E93", "Herbst-Arbeiten", "Abgeerntete Tomaten/Gurken raus (kranke Blätter in den Restmüll, nicht auf den Kompost), Hochbeete mit 3–5 cm Kompost auffüllen, freie Erdstreifen mit Laub mulchen oder Winterroggen säen. Feldsalat, Winterportulak und Asia-Salat gehen jetzt noch unters Dach, Knoblauch nach draußen."]);
   if (m === 2 || m === 3) aufgaben.push(["info", "#8E8E93", "Frühjahr vorbereiten", "Hochbeete mit Kompost auffrischen, Tomaten/Paprika auf der Fensterbank vorziehen, ab März Salat, Radieschen und Kohlrabi unters Dach (bei Frost mit Vlies abdecken)."]);
 
   $("inhalt").innerHTML = `
@@ -1369,11 +1380,9 @@ function zeichneHeute() {
     <div class="karte"><h2>Heute im Garten</h2>
       ${aufgaben.map(([sym, f, titel, text]) => `<div class="aufgabe"><div class="sym" style="background:${f}">${ic(sym, "#fff")}</div><div><b>${esc(titel)}</b><span>${esc(text)}</span></div></div>`).join("") || `<p class="klein">Nichts zu tun.</p>`}
     </div>
-    <div class="karte"><h2>${ic("frage")} Claude fragen</h2>
-      <p class="klein">z. B. „Was kann ich jetzt noch unters Dach pflanzen?“ oder „Warum werden die Gurkenblätter gelb?“ – Claude kennt euren Plan und das Wetter.</p>
-      <textarea id="ki-frage" placeholder="Deine Frage …"></textarea>
-      <div class="zeile" style="margin-top:8px"><button class="knopf voll" data-a="ki-frage">Fragen</button></div>
-      <div id="ki-antwort" class="antwort" style="margin-top:10px"></div>
+    <div class="karte"><h2>${ic("frage")} Claude fragen oder „erledigt“ sagen</h2>
+      <p class="klein">z. B. „Was kann ich jetzt noch unters Dach pflanzen?“ oder „Kürbis habe ich geerntet“ – dann verschwindet die Aufgabe auch auf dem Monitor.</p>
+      <button class="knopf voll" data-a="reiter" data-w="fragen">${ic("frage", "#fff")} Zu „Fragen“</button>
     </div>`;
   if (!tage.length && Date.now() - wetterGeladen > 60000) wetterLaden();
 }
@@ -1533,6 +1542,46 @@ async function kiFragen(auftrag, bild) {
   const teile = bild ? bild.match(/.{1,60000}/g).join(" ") : "";
   const r = await h.callWS({ type: "call_service", domain: "script", service: "garten_ki", service_data: { auftrag: JSON.stringify(auftrag), bild: teile }, return_response: true });
   return kiAntwortLesen(r);
+}
+
+// ================= Fragen an Claude (auch "Kürbis habe ich geerntet") =================
+// Verlauf und Erledigtes schreibt claude_tools/garten_ki.py nach garten_fragen.json / garten_erledigt.json
+let erledigt = new Set(), verlauf = [];
+async function chatDatenLaden() {
+  try { const r = await fetch("/local/garten_erledigt.json?t=" + Date.now(), { cache: "no-store" });
+    if (r.ok) { const d = await r.json(), heute = new Date().toISOString().slice(0, 10);
+      erledigt = new Set((d.erledigt || []).filter(e => String(e.bis || "") >= heute).map(e => e.key)); } } catch (e) { /* noch nichts */ }
+  try { const r = await fetch("/local/garten_fragen.json?t=" + Date.now(), { cache: "no-store" }); if (r.ok) verlauf = await r.json(); } catch (e) { /* noch nichts */ }
+}
+function sensorAttr(n) { const h = hass(), s = h && h.states["sensor.garten_aufgaben"]; return (s && s.attributes[n]) || []; }
+const BEISPIELE = ["Kann Rhabarber draußen stehen?", "Was muss ich diese Woche im Garten tun?", "Kürbis habe ich schon geerntet", "Unter dem Dach habe ich heute gegossen", "Was kann ich jetzt noch säen?"];
+function zeichneFragen() {
+  const marke = t => `<span class="erledigt-marke">${t.startsWith("nicht mehr") ? "" : "erledigt: "}${esc(t)}</span>`;
+  $("inhalt").innerHTML = `
+    <div class="karte"><h2>${ic("frage")} Frag Claude – oder sag, was erledigt ist</h2>
+      <p class="klein">Claude kennt euren Pflanzplan, das Wetter und die Aufgaben auf dem Monitor. Wenn du schreibst, was du gemacht hast („Kürbis habe ich geerntet“), verschwindet die Aufgabe – hier und auf dem Monitor.</p>
+      <textarea id="chat-text" placeholder="Frage oder Meldung …"></textarea>
+      <div class="beispiele">${BEISPIELE.map(b => `<button data-a="chat-beispiel" data-w="${esc(b)}">${esc(b)}</button>`).join("")}</div>
+      <div class="zeile" style="margin-top:8px"><button class="knopf voll" data-a="chat-senden" id="chat-knopf">Senden</button></div>
+      <div id="chat-antwort" class="antwort" style="margin-top:10px"></div>
+    </div>
+    <div class="karte"><h2>Bisher gefragt</h2>
+      ${verlauf.length ? verlauf.slice().reverse().map(v => `<div class="gespraech">
+        <div class="zeit">${esc(v.zeit)}${v.quelle === "monitor" ? " · am Monitor" : ""}</div>
+        <div class="wir">${esc(v.frage)}</div><div class="antwort">${esc(v.antwort)}</div>
+        ${(v.erledigt || []).map(marke).join("")}</div>`).join("") : `<p class="klein">Noch keine Fragen.</p>`}
+    </div>`;
+}
+async function chatSenden(el) {
+  const frage = $("chat-text").value.trim(); if (!frage) return meldung("Bitte eine Frage oder Meldung eintippen");
+  el.innerHTML = `<span class="warten"></span> Claude denkt …`; el.disabled = true; $("chat-antwort").textContent = "";
+  try {
+    const a = await kiFragen({ art: "chat", frage, quelle: "seite", wetter: wetterText(), plan_laden: true,
+      aufgaben: sensorAttr("aufgaben"), schluessel: sensorAttr("schluessel"), datum: new Date().toLocaleDateString("de-DE") });
+    if (!a.ok) { $("chat-antwort").textContent = "Hat nicht geklappt: " + (a.fehler || "unbekannt"); el.textContent = "Senden"; el.disabled = false; return; }
+    await chatDatenLaden();
+    if (reiter === "fragen") { zeichneFragen(); $("chat-antwort").textContent = a.text; }
+  } catch (e) { $("chat-antwort").textContent = "Hat nicht geklappt: " + (e && e.message || e); el.textContent = "Senden"; el.disabled = false; }
 }
 
 // ================= Fenster =================
@@ -1699,7 +1748,7 @@ document.addEventListener("click", ev => {
 async function aktion(a, w, el) {
   const zahlWert = id => { const v = parseInt($(id).value, 10); return isNaN(v) ? 0 : v; };
   switch (a) {
-    case "reiter": reiter = w; bearbeiten = false; zeichnen(); $("inhalt").scrollTop = 0; break;
+    case "reiter": reiter = w; bearbeiten = false; if (w === "fragen" || w === "heute") await chatDatenLaden(); zeichnen(); $("inhalt").scrollTop = 0; break;
     case "ansicht": ansichtWahl = w; zoomBox = null; zeichnePlan(); break;
     case "zoom-rein": case "zoom-raus": { const v = $("plansvg").viewBox.baseVal, f = a === "zoom-rein" ? 0.7 : 1 / 0.7;
       zoomSetzen({ x: v.x + v.width * (1 - f) / 2, y: v.y + v.height * (1 - f) / 2, w: v.width * f, h: v.height * f }); zeichnePlan(); break; }
@@ -1864,15 +1913,8 @@ async function aktion(a, w, el) {
       if (el.dataset.scharf !== "1") { el.dataset.scharf = "1"; el.textContent = "Wirklich entfernen?"; return; }
       daten.pflanzungen = daten.pflanzungen.filter(x => x.id !== w); geaendert(); blattZu(); zeichnePlan(); break;
     }
-    case "ki-frage": {
-      const frage = $("ki-frage").value.trim(); if (!frage) return meldung("Bitte eine Frage eintippen");
-      el.innerHTML = `<span class="warten"></span> Claude denkt …`; el.disabled = true; $("ki-antwort").textContent = "";
-      try {
-        const a = await kiFragen({ art: "frage", frage, wetter: wetterText(), plan: planKurz(), datum: new Date().toLocaleDateString("de-DE") });
-        $("ki-antwort").textContent = a.ok ? a.text : "Hat nicht geklappt: " + (a.fehler || "unbekannt");
-      } catch (e) { $("ki-antwort").textContent = "Hat nicht geklappt: " + (e && e.message || e); }
-      el.textContent = "Fragen"; el.disabled = false; break;
-    }
+    case "chat-beispiel": $("chat-text").value = w; $("chat-text").focus(); break;
+    case "chat-senden": await chatSenden(el); break;
     case "foto-pruefen": {
       if (!fotoDaten) return;
       const pid = $("foto-pflanze").value, p = daten.pflanzungen.find(x => x.id === pid), frage = $("foto-frage").value.trim();

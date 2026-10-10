@@ -1,20 +1,27 @@
 #!/usr/bin/env python3
 """Garten-Fragen und Foto-Check mit Claude (Aufruf aus script.garten_ki).
 
-Argument 1: Base64 des JSON {art: "foto"|"frage", frage, pflanze, beet, bereich, wetter, plan,
+Argument 1: Base64 des JSON {art: "foto"|"frage"|"chat", frage, pflanze, beet, bereich, wetter, plan, quelle,
+            schluessel (bei "chat": was gerade als erledigt gemeldet werden kann, aus sensor.garten_aufgaben),
             datei (Foto-Pfad, z. B. von Telegram), plan_laden (Plan aus garten_daten.json lesen), merken (Ergebnis in den Foto-Verlauf)}.
 Argument 2 ff. (optional): das Foto als Base64-JPEG, in Stücke geteilt.
 Der API-Schlüssel kommt aus der Anthropic-Integration von Home Assistant (.storage), nicht aus dem Repository.
+"chat" = Fragen oder Meldungen vom Monitor bzw. der Garten-Seite ("Kürbis habe ich geerntet"): Claude
+antwortet und merkt sich Erledigtes und Notizen in /config/www/garten_erledigt.json; der Verlauf steht in
+/config/www/garten_fragen.json (beides lokal, nicht im Repository).
 Ausgabe immer JSON: {"ok": true, "text": "..."} oder {"ok": false, "fehler": "..."}.
 """
 import base64
 import io
 import json
 import os
+import re
 import sys
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 DATEN = "/config/www/garten_daten.json"
+ERLEDIGT = "/config/www/garten_erledigt.json"
+FRAGEN = "/config/www/garten_fragen.json"
 
 MODELL = "claude-opus-5-5"
 
@@ -28,6 +35,83 @@ Gliedere mit kurzen Zwischenzeilen, z. B. "Zustand:", "Was ich sehe:", "Was jetz
 Berücksichtige das mitgeschickte Wetter und die Jahreszeit. Nenne Mengen (Liter, Zentimeter, Tage), wo es hilft.
 Wenn du auf dem Foto etwas nicht sicher erkennen kannst, sag das ehrlich und nenne, worauf sie achten sollen.
 Keine Markdown-Tabellen, keine Überschriften mit #, höchstens einfache Aufzählungen mit "- "."""
+
+
+CHAT = """
+
+So antwortest du hier: Die Familie schreibt dir am Monitor oder auf der Garten-Seite – entweder eine Frage
+("Kann Rhabarber draußen stehen?") oder eine Meldung, was erledigt ist ("Kürbis habe ich schon geerntet",
+"Kartoffeln liegen zum Vorkeimen"), oder beides. Antworte NUR mit einem JSON-Objekt, ohne Text davor oder danach:
+{"antwort": "kurze, freundliche Antwort (bei Meldungen 1–2 Sätze mit einem passenden Tipp, bei Fragen höchstens ca. 8 Sätze)",
+ "erledigt": [{"key": "<key aus der Liste 'Meldbar'>", "dauer": "heute" | "woche" | "2wochen" | "saison"}],
+ "zurueck": ["<key>", …nur wenn sie sagen, dass etwas doch NICHT erledigt ist, sonst leer],
+ "notiz": "was man sich für später merken sollte (z. B. 'Rhabarber steht am Erdhaufen am Weg'), sonst leer"}
+Regeln für "erledigt": nur Keys aus der Liste "Meldbar" nehmen, nichts erfinden. Ganz abgeerntet/abgeräumt → "ernte:<pflanze>"
+mit "saison"; nur ein Teil geerntet, es kommt noch mehr → "ernten:<pflanze>" mit "woche". Gegossen → "heute".
+Gesät/gepflanzt/vorgezogen/gekauft/vorgekeimt/gelegt → "saison". Angehäufelt → "2wochen" (danach nochmal).
+Herbst- oder Frühjahrsarbeit erledigt → "saison". Ist es nur eine Frage, bleibt "erledigt" leer."""
+
+
+def json_laden(pfad, leer):
+    try:
+        with open(pfad, encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, type(leer)) else leer
+    except (OSError, ValueError):
+        return leer
+
+
+def json_schreiben(pfad, d):
+    tmp = pfad + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(d, f, ensure_ascii=False)
+    os.replace(tmp, pfad)
+
+
+def notizen_text():
+    n = json_laden(ERLEDIGT, {}).get("notizen", [])[-15:]
+    return "; ".join(f"{x.get('datum', '')}: {x.get('text', '')}" for x in n if isinstance(x, dict))
+
+
+def chat_merken(auftrag, roh):
+    """Claudes JSON-Antwort auswerten: Erledigtes und Notizen speichern, Verlauf schreiben."""
+    treffer = re.search(r"\{.*\}", roh, re.S)
+    try:
+        a = json.loads(treffer.group(0)) if treffer else {}
+    except ValueError:
+        a = {}
+    antwort = str(a.get("antwort") or "").strip() or roh.strip()
+    texte = {k.get("key"): k.get("text", "") for k in auftrag.get("schluessel") or [] if isinstance(k, dict)}
+    erlaubt = set(texte)
+    heute = date.today()
+    tage = {"heute": 0, "woche": 6, "2wochen": 13}
+    e = json_laden(ERLEDIGT, {})
+    liste = [x for x in e.get("erledigt", []) if isinstance(x, dict) and str(x.get("bis", "")) >= heute.isoformat()]
+    gemeldet = []
+    for x in a.get("erledigt") or []:
+        key = str((x or {}).get("key", "")) if isinstance(x, dict) else ""
+        if key not in erlaubt:
+            continue
+        dauer = x.get("dauer", "saison")
+        bis = date(heute.year, 12, 31) if dauer not in tage else heute + timedelta(days=tage[dauer])
+        liste = [y for y in liste if y.get("key") != key]
+        liste.append({"key": key, "bis": bis.isoformat(), "datum": heute.isoformat(), "text": auftrag.get("frage", "")[:200]})
+        gemeldet.append(key)
+    for key in a.get("zurueck") or []:
+        if isinstance(key, str) and any(y.get("key") == key for y in liste):
+            liste = [y for y in liste if y.get("key") != key]
+            gemeldet.append("-" + key)
+    e["erledigt"] = liste
+    notiz = str(a.get("notiz") or "").strip()
+    if notiz:
+        e["notizen"] = (e.get("notizen", []) + [{"datum": heute.strftime("%d.%m.%Y"), "text": notiz[:300]}])[-40:]
+    json_schreiben(ERLEDIGT, e)
+    verlauf = json_laden(FRAGEN, [])
+    verlauf.append({"zeit": datetime.now().strftime("%d.%m.%Y %H:%M"), "quelle": auftrag.get("quelle", ""),
+                    "frage": auftrag.get("frage", "")[:500], "antwort": antwort,
+                    "erledigt": [("nicht mehr erledigt: " + texte.get(k[1:], k[1:])) if k.startswith("-") else texte.get(k, k) for k in gemeldet]})
+    json_schreiben(FRAGEN, verlauf[-30:])
+    return antwort, gemeldet
 
 
 def api_schluessel():
@@ -48,8 +132,12 @@ def plan_aus_datei():
             d = json.load(f)
     except (OSError, ValueError):
         return ""
+    info = d.get("info") or {}
     beete = {b["id"]: b.get("name", "") for b in (d.get("karte") or {}).get("beete", [])}
-    return "; ".join(f"{beete.get(p.get('beet'), 'Hochbeet im Gewächshaus' if str(p.get('beet', '')).startswith('gh-') else '')}: {p.get('pflanze', '')} {p.get('anzahl', '')}×"
+    beete.update({k: v.get("name", "") for k, v in (info.get("beete") or {}).items() if v.get("name")})
+    namen = {k: v.get("name", k) for k, v in (info.get("pflanzen") or {}).items()}
+    return "; ".join(f"{p.get('saison', '')} {beete.get(p.get('beet'), 'Hochbeet unter dem Dach' if str(p.get('beet', '')).startswith('gh-') else 'Beet')}: "
+                     f"{namen.get(p.get('pflanze'), p.get('pflanze', ''))} {p.get('anzahl', '')}×"
                      for p in d.get("pflanzungen", []))[:1500]
 
 
@@ -124,7 +212,22 @@ def main():
         kontext.append(f"Wetter: {auftrag['wetter']}")
     if auftrag.get("plan"):
         kontext.append(f"Aktueller Pflanzplan: {auftrag['plan']}")
-    kontext.append(f"Datum: {auftrag.get('datum', '')}")
+    if auftrag.get("art") == "chat" or auftrag.get("plan_laden"):
+        notizen = notizen_text()
+        if notizen:
+            kontext.append(f"Unsere Notizen von früher: {notizen}")
+    if auftrag.get("art") == "chat":
+        aufgaben = auftrag.get("aufgaben") or []
+        if aufgaben:
+            kontext.append("Aufgaben, die gerade auf dem Monitor stehen: " + "; ".join(f"{x.get('titel', '')} {x.get('text', '')}".strip() for x in aufgaben if isinstance(x, dict)))
+        kontext.append("Meldbar (key = Bedeutung): " + "; ".join(f"{x.get('key')} = {x.get('text')}" for x in auftrag.get("schluessel") or [] if isinstance(x, dict)))
+        schon = [x.get("key") for x in json_laden(ERLEDIGT, {}).get("erledigt", []) if isinstance(x, dict) and str(x.get("bis", "")) >= date.today().isoformat()]
+        if schon:
+            kontext.append("Schon als erledigt gemerkt: " + ", ".join(schon))
+        vorher = json_laden(FRAGEN, [])[-3:]
+        if vorher:
+            kontext.append("Unser letztes Gespräch: " + " | ".join(f"Wir: {x.get('frage', '')} – Du: {x.get('antwort', '')[:300]}" for x in vorher))
+    kontext.append(f"Datum: {auftrag.get('datum') or date.today().strftime('%d.%m.%Y')}")
     frage = (auftrag.get("frage") or "").strip()
     if auftrag.get("art") == "foto":
         frage = frage or "Geht es der Pflanze gut? Was soll ich tun?"
@@ -141,7 +244,7 @@ def main():
     antwort = client.messages.create(
         model=MODELL,
         max_tokens=3000,
-        system=SYSTEM,
+        system=SYSTEM + (CHAT if auftrag.get("art") == "chat" else ""),
         messages=[{"role": "user", "content": inhalt}],
         # schnelle, alltagstaugliche Antwort (Home Assistant wartet höchstens 60 Sekunden);
         # lehnt das Modell ab, springt automatisch ein passendes anderes Modell ein
@@ -152,6 +255,10 @@ def main():
         print(json.dumps({"ok": False, "fehler": "Claude hat die Anfrage abgelehnt"}))
         return
     ergebnis = "".join(b.text for b in antwort.content if getattr(b, "type", "") == "text").strip()
+    if auftrag.get("art") == "chat":
+        text, gemeldet = chat_merken(auftrag, ergebnis)
+        print(json.dumps({"ok": True, "text": text, "erledigt": gemeldet}, ensure_ascii=False))
+        return
     if auftrag.get("merken"):
         merken(auftrag, ergebnis, bild)
     print(json.dumps({"ok": True, "text": ergebnis}, ensure_ascii=False))
