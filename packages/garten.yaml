@@ -1,4 +1,4 @@
-# Garten: Pflanzplan für Gewächshaus (Hochbeete) und Gemüsegarten (Erdstreifen) als Reiter "Garten"
+# Garten: Pflanzplan für den überdachten Garten (offen, Folien-Dach, Hochbeete) und Gemüsegarten (Erdstreifen) als Reiter "Garten"
 # im Flur-Dashboard (www/garten.html) – am Monitor und im Handy-App.
 # - Plan, Pflanzenwahl und Fotos liegen lokal in /config/www/garten_daten.json (nicht im Repository).
 # - Pflegehinweise rechnet die Seite aus dem Wetter (weather.touchmonitor_home).

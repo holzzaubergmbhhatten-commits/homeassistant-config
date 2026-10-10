@@ -6,7 +6,7 @@
 <title>Garten</title>
 <!--
   Garten-Seite (im Flur-Dashboard als Vollbild-iframe, am Monitor und im Handy-App):
-  - Plan: Gewächshaus (Hochbeete) und Gemüsegarten (Erdstreifen) in cm, Beete verschieben/ändern
+  - Plan: überdachter Garten (offen, Holzzaun + Folien-Dach, Hochbeete) und Gemüsegarten (Erdstreifen) in cm
   - Pflanzen: auswählen, was wachsen soll → Pflanzplan nach Mischkultur, Höhe (Schatten), Fruchtfolge, Platz
   - Heute: Gießen, Lüften, Frost, Düngen nach Wetter (weather.touchmonitor_home) und Pflanzkalender
   - Foto-Check / Fragen: Claude (script.garten_ki)
@@ -111,7 +111,7 @@
 <div class="meldung" id="meldung"></div>
 
 <script>
-const SEITEN_VERSION = 1;
+const SEITEN_VERSION = 2;
 const DATEN_URL = "/local/garten_daten.json";
 const WETTER = "weather.touchmonitor_home";
 const $ = id => document.getElementById(id);
@@ -138,16 +138,17 @@ const ic = (n, f) => `<svg class="ic" viewBox="0 0 24 24"><path fill="${f || "cu
 
 // ================= Pflanzen-Wissen (Norddeutschland) =================
 // fam = Familie (Fruchtfolge), zehrer = Nährstoffbedarf, reihe/abstand = cm, hoehe = cm,
-// gh: "bevorzugt" (gehört ins Gewächshaus) | "geeignet" (beides) | "draussen",
+// gh: "bevorzugt" (gehört unters Dach – Regenschutz) | "geeignet" (beides) | "draussen",
+// ghm = Monate für den überdachten Garten (offen, unbeheizt: kaum wärmer als draußen, aber trocken)
 // vorziehen/draussen/gh = Monate (Aussaat/Pflanzung), ernte = Monate, wasser 1–3, frost = frostempfindlich
 const P = (id, name, fam, zehrer, reihe, abstand, hoehe, gh, vorziehen, draussen, ghm, ernte, wasser, frost, gut, schlecht, duenger, tipp) =>
   ({ id, name, fam, zehrer, reihe, abstand, hoehe, gh, vorziehen, draussen, ghm, ernte, wasser, frost, gut, schlecht, duenger, tipp });
 const PFLANZEN = [
-  P("tomate", "Tomate", "nacht", "stark", 80, 50, 180, "bevorzugt", [3, 4], [5], [4, 5], [7, 8, 9, 10], 3, true,
+  P("tomate", "Tomate", "nacht", "stark", 80, 50, 180, "bevorzugt", [3, 4], [5], [5], [7, 8, 9, 10], 3, true,
     ["basilikum", "karotte", "petersilie", "salat", "spinat", "zwiebel", "knoblauch", "ringelblume", "kapuzinerkresse", "sellerie", "tagetes", "kohlrabi"],
     ["kartoffel", "erbse", "fenchel", "gurke"], "Beim Pflanzen 3 l Kompost je Pflanze, ab der ersten Blüte alle 2 Wochen Tomatendünger oder Brennnesseljauche (1:10).",
-    "Geiztriebe jede Woche ausbrechen, nur unten an der Erde gießen, Gewächshaus täglich lüften (gegen Braunfäule)."),
-  P("gurke", "Gurke", "kuerbis", "stark", 100, 50, 200, "bevorzugt", [4], [5, 6], [4, 5], [6, 7, 8, 9], 3, true,
+    "Geiztriebe jede Woche ausbrechen, nur unten an der Erde gießen, unter dem Dach bleiben die Blätter trocken – bester Schutz gegen Braunfäule."),
+  P("gurke", "Gurke", "kuerbis", "stark", 100, 50, 200, "bevorzugt", [4], [5, 6], [5], [6, 7, 8, 9], 3, true,
     ["dill", "buschbohne", "erbse", "salat", "zwiebel", "kohlrabi", "sellerie", "mais"], ["tomate", "radieschen", "kartoffel"],
     "Viel Kompost beim Pflanzen, dann alle 2 Wochen organischer Flüssigdünger.", "Mit lauwarmem Wasser gießen, an einer Schnur hochleiten, Seitentriebe nach dem 1. Blatt kappen."),
   P("paprika", "Paprika", "nacht", "stark", 50, 40, 80, "bevorzugt", [2, 3], [], [5], [7, 8, 9, 10], 2, true,
@@ -156,29 +157,29 @@ const PFLANZEN = [
   P("chili", "Chili", "nacht", "stark", 50, 40, 70, "bevorzugt", [1, 2, 3], [], [5], [7, 8, 9, 10], 2, true,
     ["basilikum", "tomate", "karotte", "zwiebel"], ["buschbohne", "fenchel"], "Wie Paprika, etwas sparsamer düngen.", "Mag es heiß und eher trocken zwischen den Gießgängen."),
   P("aubergine", "Aubergine", "nacht", "stark", 60, 50, 80, "bevorzugt", [2, 3], [], [5], [8, 9], 3, true,
-    ["basilikum", "buschbohne", "spinat", "tagetes"], ["kartoffel", "fenchel"], "Kompost, ab Blüte alle 10 Tage Flüssigdünger.", "Braucht viel Wärme (über 25 °C) – nur im Gewächshaus sinnvoll."),
+    ["basilikum", "buschbohne", "spinat", "tagetes"], ["kartoffel", "fenchel"], "Kompost, ab Blüte alle 10 Tage Flüssigdünger.", "Braucht viel Wärme (über 25 °C) – unter dem offenen Dach nur in der sonnigsten, windgeschützten Ecke, in kühlen Sommern mager."),
   P("melone", "Melone", "kuerbis", "stark", 100, 80, 40, "bevorzugt", [4], [], [5], [8, 9], 2, true,
     ["mais", "buschbohne", "kapuzinerkresse"], ["gurke", "kartoffel"], "Kompost, ab Fruchtansatz Kalidünger.", "Pro Pflanze nur 3–4 Früchte lassen, Triebe nach 4 Blättern über der Frucht kappen."),
-  P("zucchini", "Zucchini", "kuerbis", "stark", 100, 100, 70, "geeignet", [4], [5, 6], [4, 5], [6, 7, 8, 9], 3, true,
+  P("zucchini", "Zucchini", "kuerbis", "stark", 100, 100, 70, "geeignet", [4], [5, 6], [5], [6, 7, 8, 9], 3, true,
     ["buschbohne", "zwiebel", "mais", "kapuzinerkresse", "dill", "ringelblume"], ["gurke", "kuerbis", "kartoffel"],
     "Beim Pflanzen 5 l Kompost, im Sommer alle 2 Wochen Brennnesseljauche.", "Immer klein ernten (20 cm), dann kommen laufend neue. Blätter trocken halten (Mehltau)."),
   P("kuerbis", "Kürbis", "kuerbis", "stark", 150, 150, 60, "geeignet", [4], [5, 6], [5], [9, 10], 3, true,
     ["buschbohne", "stangenbohne", "mais", "zwiebel", "kapuzinerkresse"], ["kartoffel", "gurke", "zucchini"],
     "Viel Kompost oder Mist, im Sommer alle 2 Wochen Jauche.", "Braucht viel Platz – Ranken dürfen aus dem Beet wachsen."),
-  P("salat", "Pflücksalat", "korb", "schwach", 30, 30, 25, "geeignet", [2, 3], [3, 4, 5, 6, 7, 8], [2, 3, 4, 9], [4, 5, 6, 7, 8, 9, 10], 2, false,
+  P("salat", "Pflücksalat", "korb", "schwach", 30, 30, 25, "geeignet", [2, 3], [3, 4, 5, 6, 7, 8], [3, 4, 8, 9], [4, 5, 6, 7, 8, 9, 10], 2, false,
     ["radieschen", "karotte", "erdbeere", "zwiebel", "gurke", "tomate", "kohlrabi", "buschbohne", "dill"], ["petersilie", "sellerie"],
     "Kaum Dünger nötig, etwas Kompost reicht.", "Flach pflanzen (Herz nicht eingraben), alle 3–4 Wochen nachsäen."),
   P("feldsalat", "Feldsalat", "baldrian", "schwach", 10, 5, 10, "geeignet", [], [8, 9], [9, 10], [10, 11, 12, 1, 2, 3], 1, false,
     ["zwiebel", "radieschen", "erdbeere", "kohlrabi"], [], "Kein Dünger nötig.", "Ideal als Wintersalat nach den Tomaten, verträgt Frost. Erde vor der Aussaat festdrücken."),
-  P("portulak", "Winterportulak", "portulak", "schwach", 15, 10, 15, "geeignet", [], [9], [9, 10, 11], [11, 12, 1, 2, 3, 4], 1, false,
-    ["feldsalat", "spinat"], [], "Kein Dünger nötig.", "Winterhart, im Gewächshaus den ganzen Winter erntbar."),
-  P("asiasalat", "Asia-Salat (Mizuna)", "kreuz", "schwach", 20, 20, 30, "geeignet", [], [8, 9], [8, 9, 10], [9, 10, 11, 12], 2, false,
+  P("portulak", "Winterportulak", "portulak", "schwach", 15, 10, 15, "geeignet", [], [9], [9, 10], [11, 12, 1, 2, 3, 4], 1, false,
+    ["feldsalat", "spinat"], [], "Kein Dünger nötig.", "Winterhart, unter dem Dach den ganzen Winter erntbar."),
+  P("asiasalat", "Asia-Salat (Mizuna)", "kreuz", "schwach", 20, 20, 30, "geeignet", [], [8, 9], [8, 9], [9, 10, 11, 12], 2, false,
     ["salat", "spinat"], [], "Etwas Kompost.", "Wächst schnell, als Babyleaf schon nach 3–4 Wochen ernten."),
-  P("rucola", "Rucola", "kreuz", "schwach", 15, 5, 25, "geeignet", [], [4, 5, 6, 7, 8], [3, 4, 9, 10], [5, 6, 7, 8, 9, 10, 11], 2, false,
+  P("rucola", "Rucola", "kreuz", "schwach", 15, 5, 25, "geeignet", [], [4, 5, 6, 7, 8], [3, 4, 9], [5, 6, 7, 8, 9, 10, 11], 2, false,
     ["salat", "tomate"], ["kohlrabi", "brokkoli"], "Kein Dünger nötig.", "Im Hochsommer schießt er schnell – lieber im Frühjahr und Herbst säen."),
-  P("radieschen", "Radieschen", "kreuz", "schwach", 10, 4, 15, "geeignet", [], [3, 4, 5, 6, 7, 8, 9], [2, 3, 10], [4, 5, 6, 7, 8, 9, 10, 11], 2, false,
+  P("radieschen", "Radieschen", "kreuz", "schwach", 10, 4, 15, "geeignet", [], [3, 4, 5, 6, 7, 8, 9], [3, 9], [4, 5, 6, 7, 8, 9, 10, 11], 2, false,
     ["salat", "karotte", "spinat", "tomate", "erbse", "buschbohne", "kohlrabi"], ["gurke"], "Kein Dünger nötig.", "Gleichmäßig feucht halten, sonst werden sie scharf und holzig."),
-  P("spinat", "Spinat", "gaensefuss", "mittel", 25, 8, 25, "geeignet", [], [3, 4, 8, 9], [2, 3, 9, 10], [4, 5, 6, 10, 11, 12], 2, false,
+  P("spinat", "Spinat", "gaensefuss", "mittel", 25, 8, 25, "geeignet", [], [3, 4, 8, 9], [3, 9], [4, 5, 6, 10, 11, 12], 2, false,
     ["radieschen", "kohlrabi", "erdbeere", "tomate", "buschbohne", "kartoffel"], ["rote_bete", "mangold"], "Etwas Kompost.", "Winterspinat im September säen, erntet man bis Dezember und wieder im Frühjahr."),
   P("mangold", "Mangold", "gaensefuss", "mittel", 40, 30, 50, "draussen", [], [4, 5, 6, 7], [], [6, 7, 8, 9, 10, 11], 2, false,
     ["buschbohne", "radieschen", "kohlrabi"], ["spinat", "rote_bete"], "Kompost, im Sommer einmal Jauche.", "Immer die äußeren Blätter ernten, dann wächst er monatelang nach."),
@@ -211,7 +212,7 @@ const PFLANZEN = [
   P("erbse", "Erbse", "huelsen", "schwach", 40, 5, 120, "draussen", [], [3, 4, 5], [], [6, 7], 2, false,
     ["karotte", "radieschen", "salat", "gurke", "kohlrabi", "zucchini"], ["buschbohne", "stangenbohne", "zwiebel", "knoblauch", "lauch", "tomate", "kartoffel"],
     "Kein Dünger nötig.", "Reisig oder Netz als Rankhilfe, früh säen (verträgt leichten Frost)."),
-  P("kohlrabi", "Kohlrabi", "kreuz", "mittel", 30, 25, 30, "geeignet", [2, 3], [4, 5, 6, 7, 8], [2, 3], [5, 6, 7, 8, 9, 10], 2, false,
+  P("kohlrabi", "Kohlrabi", "kreuz", "mittel", 30, 25, 30, "geeignet", [2, 3], [4, 5, 6, 7, 8], [3, 4], [5, 6, 7, 8, 9, 10], 2, false,
     ["salat", "spinat", "sellerie", "buschbohne", "erbse", "tomate", "rote_bete", "gurke"], ["zwiebel", "knoblauch", "erdbeere", "fenchel"],
     "Kompost, nach 4 Wochen 1× Jauche.", "Gleichmäßig gießen, sonst platzen die Knollen."),
   P("brokkoli", "Brokkoli", "kreuz", "stark", 50, 45, 60, "draussen", [3, 4], [5, 6], [], [7, 8, 9, 10], 2, false,
@@ -225,9 +226,9 @@ const PFLANZEN = [
     ["buschbohne", "stangenbohne", "kuerbis", "gurke", "zucchini", "melone"], ["sellerie"], "Viel Kompost, im Juni 1× Jauche.", "Im Block pflanzen (nicht einzeln in einer Reihe), sonst werden die Kolben nicht bestäubt."),
   P("erdbeere", "Erdbeere", "rosen", "mittel", 40, 30, 25, "draussen", [], [4, 8], [], [6, 7], 2, false,
     ["knoblauch", "zwiebel", "schnittlauch", "salat", "spinat", "buschbohne", "lauch"], ["kohlrabi", "brokkoli", "gruenkohl"], "Nach der Ernte Beerendünger oder Kompost.", "Stroh unter die Früchte legen, Ausläufer abschneiden."),
-  P("basilikum", "Basilikum", "lippen", "schwach", 25, 25, 40, "bevorzugt", [3, 4], [6], [5], [6, 7, 8, 9], 2, true,
+  P("basilikum", "Basilikum", "lippen", "schwach", 25, 25, 40, "bevorzugt", [3, 4], [6], [6], [6, 7, 8, 9], 2, true,
     ["tomate", "paprika", "chili", "gurke", "aubergine"], [], "Etwas Kompost.", "Nur morgens gießen, Triebspitzen abknipsen statt einzelner Blätter."),
-  P("petersilie", "Petersilie", "dolden", "schwach", 25, 15, 30, "geeignet", [], [3, 4, 5, 6, 7], [3, 9], [5, 6, 7, 8, 9, 10, 11], 2, false,
+  P("petersilie", "Petersilie", "dolden", "schwach", 25, 15, 30, "geeignet", [], [3, 4, 5, 6, 7], [3, 8], [5, 6, 7, 8, 9, 10, 11], 2, false,
     ["tomate", "zwiebel", "radieschen"], ["salat"], "Etwas Kompost.", "Keimt langsam (bis 4 Wochen) – Saat vorher einweichen."),
   P("dill", "Dill", "dolden", "schwach", 25, 10, 80, "draussen", [], [4, 5, 6, 7], [], [6, 7, 8, 9], 2, false,
     ["gurke", "salat", "zwiebel", "kohlrabi", "rote_bete"], ["fenchel", "karotte"], "Kein Dünger.", "Zwischen die Gurken säen – fördert sie."),
@@ -257,7 +258,7 @@ function nachbarn(a, b) {
 const VORLAGE = {
   version: 1,
   bereiche: [
-    { id: "gh", name: "Gewächshaus", w: 600, h: 400, sued: "unten" },
+    { id: "gh", name: "Überdachter Garten", w: 600, h: 400, sued: "unten" },
     { id: "garten", name: "Gemüsegarten", w: 420, h: 640, sued: "unten" },
   ],
   beete: [
@@ -303,7 +304,8 @@ async function laden() {
   if (!hass()) { setTimeout(laden, 400); return; }
   try {
     const r = await fetch(DATEN_URL + "?t=" + Date.now(), { cache: "no-store" });
-    if (r.ok) { const d = await r.json(); if (d && Array.isArray(d.beete)) { daten = { ...JSON.parse(JSON.stringify(VORLAGE)), ...d }; letzterText = JSON.stringify(daten); } }
+    if (r.ok) { const d = await r.json(); if (d && Array.isArray(d.beete)) { daten = { ...JSON.parse(JSON.stringify(VORLAGE)), ...d }; letzterText = JSON.stringify(daten);
+      const gh = daten.bereiche.find(b => b.id === "gh"); if (gh && gh.name === "Gewächshaus") { gh.name = "Überdachter Garten"; geaendert(); } } }
   } catch (e) { /* noch nichts gespeichert */ }
   zeichnen();
   wetterLaden();
@@ -358,9 +360,9 @@ function passtInsBeet(pf, b, m) {
   const ber = b.bereich === "gh";
   if (pf.gh === "bevorzugt") return ber ? 3 : (pf.draussen.length ? -1 : -9);
   if (pf.gh === "draussen") return ber ? -6 : 2;
-  // große Pflanzen (Kürbis, Zucchini) lieber draußen – sie nehmen im Gewächshaus zu viel Platz weg
+  // große Pflanzen (Kürbis, Zucchini) lieber draußen – sie nehmen unter dem Dach zu viel Platz weg
   if (pf.abstand >= 80) return ber ? -1 : 2;
-  // geeignet: im Winterhalbjahr lieber ins Gewächshaus, im Sommer lieber draußen
+  // geeignet: im Winterhalbjahr lieber unters Dach (trocken), im Sommer lieber draußen
   const winter = m >= 9 || m <= 3;
   return ber ? (winter ? 2 : 0) : (winter ? 0 : 1);
 }
@@ -547,19 +549,19 @@ function zeichnePflanzen() {
     <div class="karte">
       <h2>Was soll wachsen?</h2>
       <p class="klein">Antippen = auswählen, mit + und − die Stückzahl. Dann „Pflanzplan erstellen“: Ich verteile alles auf die Beete –
-        gute Nachbarn nebeneinander, hohe Pflanzen an die Nordseite, Wärmeliebende ins Gewächshaus, kein Platz für dieselbe Familie wie letztes Jahr.</p>
+        gute Nachbarn nebeneinander, hohe Pflanzen an die Nordseite, Tomaten & Co. unters Dach (Regenschutz), kein Platz für dieselbe Familie wie letztes Jahr.</p>
       <div class="zeile" style="margin:8px 0">
-        <div class="segment">${[["jetzt", "Jetzt passend"], ["gh", "Gewächshaus"], ["draussen", "Draußen"], ["alle", "Alle"]].map(([w, t]) =>
+        <div class="segment">${[["jetzt", "Jetzt passend"], ["gh", "Unter Dach"], ["draussen", "Draußen"], ["alle", "Alle"]].map(([w, t]) =>
           `<button data-a="filter" data-w="${w}" class="${w === filter ? "an" : ""}">${t}</button>`).join("")}</div>
         <span class="luecke"></span>
         <button class="knopf voll" data-a="plan-erstellen">${ic("zauber")} Pflanzplan erstellen${gewaehlt.length ? ` (${gewaehlt.length})` : ""}</button>
       </div>
       <div class="pliste">${liste.map(pf => {
         const n = daten.wunsch[pf.id] || 0;
-        const wo = pf.gh === "bevorzugt" ? "Gewächshaus" : pf.gh === "draussen" ? "Draußen" : "Beides";
+        const wo = pf.gh === "bevorzugt" ? "Unter Dach" : pf.gh === "draussen" ? "Draußen" : "Beides";
         const jetzt = [];
         if (pf.vorziehen.includes(m)) jetzt.push("vorziehen");
-        if (pf.ghm.includes(m)) jetzt.push("ins Gewächshaus");
+        if (pf.ghm.includes(m)) jetzt.push("unters Dach");
         if (pf.draussen.includes(m)) jetzt.push("draußen säen/pflanzen");
         return `<div class="pflanze ${n ? "gewaehlt" : ""}">
           <i class="punkt" style="background:${FARBE[pf.fam]}"></i>
@@ -581,21 +583,20 @@ function zeichneHeute() {
   const aufgaben = [];
   const plaene = daten.pflanzungen.map(p => ({ ...p, pf: PF[p.pflanze], b: beet(p.beet) })).filter(p => p.pf && p.b);
   const imGh = plaene.filter(p => p.b.bereich === "gh"), draussen = plaene.filter(p => p.b.bereich !== "gh");
-  // Frost
+  // Frost – das Dach ist offen, dort wird es genauso kalt wie draußen
   if (tmin < 2 && tmin !== 99) {
-    const empf = draussen.filter(p => p.pf.frost).map(p => p.pf.name);
+    const empf = [...new Set(plaene.filter(p => p.pf.frost).map(p => p.pf.name))];
     aufgaben.push(["frost", "#5AC8FA", `Frost möglich (bis ${Math.round(tmin)} °C)`,
-      (empf.length ? `Draußen abdecken (Vlies): ${[...new Set(empf)].join(", ")}. ` : "") + "Gewächshaus abends schließen" + (tmin < -2 ? ", empfindliche Pflanzen zusätzlich mit Vlies abdecken." : ".")]);
+      (empf.length ? `Abends mit Vlies abdecken – auch unter dem Dach (es ist offen und wird genauso kalt): ${empf.join(", ")}.` :
+        "Unter dem Dach ist es genauso kalt wie draußen – Wintersalate vertragen das, frisch Gepflanztes mit Vlies abdecken.")]);
   }
-  // Gewächshaus lüften / Bewässerung
+  // Unter dem Dach: kein Regen → immer selbst gießen (Tropfbewässerung)
   if (daten.beete.some(b => b.bereich === "gh")) {
-    if (tmax >= 22) aufgaben.push(["wind", "#34C759", "Gewächshaus lüften", `Bis ${Math.round(tmax)} °C erwartet – Tür tagsüber ganz öffnen, sonst wird es drinnen über 35 °C. Abends schließen, wenn die Nacht unter 10 °C geht.`]);
-    else if (tmax >= 14) aufgaben.push(["wind", "#34C759", "Gewächshaus mittags lüften", "Tür 2–3 Stunden öffnen, damit die Luftfeuchte raus kann (beugt Pilzkrankheiten vor)."]);
-    else aufgaben.push(["wind", "#8E8E93", "Gewächshaus geschlossen lassen", "Nur kurz an sonnigen Mittagen lüften, damit es nachts warm bleibt."]);
     const tropf = daten.beete.some(b => b.bereich === "gh" && b.wasser);
-    const takt = tmax >= 28 ? "2× täglich (morgens und nachmittags) je ca. 15 Minuten" : tmax >= 20 ? "1× täglich morgens ca. 15 Minuten" : tmax >= 12 ? "alle 2 Tage morgens ca. 10–15 Minuten" : "nur alle 3–4 Tage, wenn die Erde 2 cm tief trocken ist";
-    aufgaben.push(["tropfen", "#007AFF", "Gießen im Gewächshaus", (tropf ? `Tropfbewässerung ${takt}. ` : `${takt.replace("Minuten", "Minuten gießen")}. `) +
+    const takt = tmax >= 28 ? "1× täglich morgens ca. 20 Minuten, an heißen Nachmittagen nochmal 10 Minuten" : tmax >= 20 ? "1× täglich morgens ca. 15 Minuten" : tmax >= 12 ? "alle 2 Tage morgens ca. 10–15 Minuten" : "nur alle 3–5 Tage, wenn die Erde 3 cm tief trocken ist";
+    aufgaben.push(["tropfen", "#007AFF", "Gießen unter dem Dach", "Dort kommt kein Regen an. " + (tropf ? `Tropfbewässerung ${takt}. ` : `${takt.replace("Minuten", "Minuten gießen")}. `) +
       "Fingerprobe: 3 cm tief muss die Erde feucht sein. Faustregel: Tomate/Gurke im Sommer 2–3 l pro Pflanze und Tag." + (tropf ? " (Laufzeiten an euren Tropfschlauch anpassen.)" : "")]);
+    if (tmax >= 30) aufgaben.push(["sonne", "#FF9500", "Hitze unter der Folie", "Unter dem Dach staut sich die Wärme – morgens gründlich gießen, Erde mulchen (Holzhäcksel/Rasenschnitt)."]);
   }
   // Draußen gießen
   if (draussen.length || daten.beete.some(b => b.bereich !== "gh")) {
@@ -614,15 +615,15 @@ function zeichneHeute() {
   const jetzt = [];
   for (const pf of ausgewaehlt) {
     if (pf.vorziehen.includes(m)) jetzt.push(`${pf.name} auf der Fensterbank vorziehen`);
-    if (pf.ghm.includes(m)) jetzt.push(`${pf.name} ins Gewächshaus`);
+    if (pf.ghm.includes(m)) jetzt.push(`${pf.name} unters Dach`);
     if (pf.draussen.includes(m)) jetzt.push(`${pf.name} draußen säen/pflanzen`);
   }
   if (jetzt.length) aufgaben.push(["saat", "#34A853", "Diesen Monat säen/pflanzen", jetzt.join(" · ")]);
   const ernte = [...new Set(plaene.filter(p => p.pf.ernte.includes(m)).map(p => p.pf.name))];
   if (ernte.length) aufgaben.push(["ernte", "#FF9500", "Erntezeit", ernte.join(", ")]);
   // Jahreszeit
-  if (m === 10 || m === 11) aufgaben.push(["info", "#8E8E93", "Herbst-Arbeiten", "Abgeerntete Tomaten/Gurken raus (kranke Blätter in den Restmüll, nicht auf den Kompost), Hochbeete mit 3–5 cm Kompost auffüllen, freie Erdstreifen mit Laub mulchen oder Winterroggen säen. Feldsalat, Winterportulak und Asia-Salat gehen jetzt noch ins Gewächshaus, Knoblauch nach draußen."]);
-  if (m === 2 || m === 3) aufgaben.push(["info", "#8E8E93", "Frühjahr vorbereiten", "Hochbeete mit Kompost auffrischen, Tomaten/Paprika auf der Fensterbank vorziehen, ab März Salat, Radieschen und Kohlrabi ins Gewächshaus."]);
+  if (m === 10 || m === 11) aufgaben.push(["info", "#8E8E93", "Herbst-Arbeiten", "Abgeerntete Tomaten/Gurken raus (kranke Blätter in den Restmüll, nicht auf den Kompost), Hochbeete mit 3–5 cm Kompost auffüllen, freie Erdstreifen mit Laub mulchen oder Winterroggen säen. Feldsalat, Winterportulak und Asia-Salat gehen jetzt noch unters Dach, Knoblauch nach draußen."]);
+  if (m === 2 || m === 3) aufgaben.push(["info", "#8E8E93", "Frühjahr vorbereiten", "Hochbeete mit Kompost auffrischen, Tomaten/Paprika auf der Fensterbank vorziehen, ab März Salat, Radieschen und Kohlrabi unters Dach (bei Frost mit Vlies abdecken)."]);
 
   $("inhalt").innerHTML = `
     <div class="karte"><h2>Wetter</h2>
@@ -633,7 +634,7 @@ function zeichneHeute() {
       ${aufgaben.map(([sym, f, titel, text]) => `<div class="aufgabe"><div class="sym" style="background:${f}">${ic(sym, "#fff")}</div><div><b>${esc(titel)}</b><span>${esc(text)}</span></div></div>`).join("") || `<p class="klein">Nichts zu tun.</p>`}
     </div>
     <div class="karte"><h2>${ic("frage")} Claude fragen</h2>
-      <p class="klein">z. B. „Was kann ich jetzt noch ins Gewächshaus pflanzen?“ oder „Warum werden die Gurkenblätter gelb?“ – Claude kennt euren Plan und das Wetter.</p>
+      <p class="klein">z. B. „Was kann ich jetzt noch unters Dach pflanzen?“ oder „Warum werden die Gurkenblätter gelb?“ – Claude kennt euren Plan und das Wetter.</p>
       <textarea id="ki-frage" placeholder="Deine Frage …"></textarea>
       <div class="zeile" style="margin-top:8px"><button class="knopf voll" data-a="ki-frage">Fragen</button></div>
       <div id="ki-antwort" class="antwort" style="margin-top:10px"></div>
@@ -710,7 +711,7 @@ function pflanzeInfo(id) {
   const namen = a => a.map(anzeigeName).join(", ") || "–";
   blatt(`<h3><i class="punkt" style="background:${FARBE[pf.fam]}"></i> ${esc(pf.name)}</h3>
     <p class="klein">${FAMILIE[pf.fam]} · ${pf.zehrer === "stark" ? "Starkzehrer" : pf.zehrer === "mittel" ? "Mittelzehrer" : "Schwachzehrer"} · Abstand ${pf.reihe} × ${pf.abstand} cm · Höhe ca. ${pf.hoehe} cm · Wasser ${["", "wenig", "mittel", "viel"][pf.wasser]}${pf.frost ? " · frostempfindlich" : ""}</p>
-    <p><b>Vorziehen:</b> ${mon(pf.vorziehen)}<br><b>Gewächshaus:</b> ${mon(pf.ghm)}<br><b>Draußen:</b> ${mon(pf.draussen)}<br><b>Ernte:</b> ${mon(pf.ernte)}</p>
+    <p><b>Vorziehen:</b> ${mon(pf.vorziehen)}<br><b>Unter Dach:</b> ${mon(pf.ghm)}<br><b>Draußen:</b> ${mon(pf.draussen)}<br><b>Ernte:</b> ${mon(pf.ernte)}</p>
     <p><b>Gute Nachbarn:</b> ${esc(namen(pf.gut))}<br><b>Nicht daneben:</b> ${esc(namen(pf.schlecht))}</p>
     <p><b>Dünger:</b> ${esc(pf.duenger)}</p><p><b>Tipp:</b> ${esc(pf.tipp)}</p>
     <div class="zeile"><button class="knopf voll" data-a="zu">Schließen</button></div>`);
