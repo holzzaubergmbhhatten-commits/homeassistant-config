@@ -4,6 +4,8 @@
 # - Pflegehinweise rechnet die Seite aus dem Wetter (weather.touchmonitor_home).
 # - Foto-Check und Fragen beantwortet Claude über claude_tools/garten_ki.py (Schlüssel aus der
 #   Anthropic-Integration, nicht im Repository).
+# - Foto an den Telegram-Bot schicken (Text dazu = Frage) → Claude prüft die Pflanze und antwortet im Chat;
+#   das Ergebnis erscheint auch unter "Foto-Check" auf der Garten-Seite.
 shell_command:
   # lange Texte kommen in Stücken (ein einzelnes Argument darf nicht beliebig lang sein)
   garten_schreiben: python3 /config/claude_tools/garten_speichern.py {{ b64 }}
@@ -57,3 +59,64 @@ script:
             stdout: "{{ ergebnis.stdout | default('') if ergebnis is defined and ergebnis is mapping else '' }}"
       - stop: fertig
         response_variable: antwort
+
+automation:
+  - id: garten_foto_telegram
+    alias: "Garten: Foto per Telegram von Claude prüfen lassen"
+    mode: queued
+    max: 5
+    triggers:
+      - trigger: event
+        event_type: telegram_attachment
+    conditions:
+      - condition: template
+        value_template: "{{ (trigger.event.data.file_mime_type | default('')).startswith('image/') }}"
+    actions:
+      - variables:
+          chat: "{{ trigger.event.data.chat_id }}"
+          frage: "{{ trigger.event.data.text | default('', true) }}"
+          datei: "/config/garten_fotos/foto_{{ now().strftime('%Y%m%d_%H%M%S') }}.jpg"
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ chat }}"
+          message: "🌱 Danke! Ich schaue mir die Pflanze an – einen Moment …"
+      - action: telegram_bot.download_file
+        continue_on_error: true
+        data:
+          file_id: "{{ trigger.event.data.file_id }}"
+          directory_path: /config/garten_fotos
+          file_name: "{{ datei.split('/')[-1] }}"
+      - action: weather.get_forecasts
+        continue_on_error: true
+        target:
+          entity_id: weather.touchmonitor_home
+        data:
+          type: daily
+        response_variable: vorhersage
+      - variables:
+          wetter: >-
+            {% set w = states.weather.touchmonitor_home %}
+            {% set fc = (vorhersage['weather.touchmonitor_home'].forecast if vorhersage is defined and vorhersage is mapping
+                         and 'weather.touchmonitor_home' in vorhersage else [])[:3] %}
+            {{ ('jetzt ' ~ w.attributes.temperature ~ ' °C, ' ~ w.state) if w else '' }}{% for d in fc %};
+            {{ as_timestamp(d.datetime) | timestamp_custom('%d.%m.') }} {{ d.templow | default('?') }}–{{ d.temperature }} °C, {{ d.precipitation | default(0) }} mm{% endfor %}
+      - action: shell_command.garten_ki_befehl
+        continue_on_error: true
+        data:
+          auftrag: >-
+            {{ {'art': 'foto', 'frage': frage, 'datei': datei, 'wetter': wetter | trim, 'plan_laden': true, 'merken': true,
+                'datum': now().strftime('%d.%m.%Y')} | to_json | base64_encode }}
+          bild: ""
+        response_variable: ergebnis
+      - variables:
+          antwort: >-
+            {% set a = ergebnis.stdout | default('') if ergebnis is defined and ergebnis is mapping else '' %}
+            {% set a = a if a is mapping else (a | from_json if (a | string).startswith('{') else {}) %}
+            {{ a.text if a.ok | default(false) else '⚠️ Das hat leider nicht geklappt' ~ (': ' ~ a.fehler if a.fehler is defined else ' (keine Antwort – bitte nochmal schicken).') }}
+      - action: telegram_bot.send_message
+        data:
+          chat_id: "{{ chat }}"
+          parse_mode: html
+          message: >-
+            {% set t %}🌱 {{ antwort }}{% endset %}{{ t | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}
