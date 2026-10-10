@@ -65,6 +65,9 @@
   .schild b { font-size: 15px; } .schild .anz { color: var(--grau); font-weight: 600; }
   .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
   .tags span { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 7px; }
+  .pflanzen-liste { display: flex; flex-wrap: wrap; gap: 3px 10px; font-size: 13px; margin-top: 3px; }
+  .pflanzen-liste span { display: inline-flex; align-items: center; gap: 4px; }
+  .pflanzen-liste .punkt { width: 9px; height: 9px; }
   .tipp-waerme { border: 2px solid #FFD08A; }
   .liste-tipps { padding-left: 18px; margin: 6px 0; line-height: 1.5; font-size: 14px; }
   /* Pflanzenliste */
@@ -126,7 +129,7 @@
 <div class="meldung" id="meldung"></div>
 
 <script>
-const SEITEN_VERSION = 3;
+const SEITEN_VERSION = 4;
 const DATEN_URL = "/local/garten_daten.json";
 const WETTER = "weather.touchmonitor_home";
 const $ = id => document.getElementById(id);
@@ -270,36 +273,39 @@ function nachbarn(a, b) {
 }
 
 // ================= Daten =================
+// Lage in Metern wie im Grundriss. Erdhaufen und Pumpe stehen in der Vorlage relativ zur Vorlage des
+// Gewächshauses (nach eurer Zeichnung) und werden beim ersten Laden auf die echte Lage umgerechnet.
 const VORLAGE = {
-  version: 1,
-  bereiche: [
-    { id: "gh", name: "Überdachter Garten", w: 600, h: 400, sued: "unten" },
-    { id: "garten", name: "Gemüsegarten", w: 420, h: 640, sued: "unten" },
-  ],
-  beete: [
-    { id: "gh1", bereich: "gh", name: "Hochbeet links", art: "hochbeet", x: 0, y: 0, w: 80, h: 400, wasser: true },
-    { id: "gh2", bereich: "gh", name: "Hochbeet hinten", art: "hochbeet", x: 80, y: 0, w: 440, h: 80, wasser: true },
-    { id: "gh3", bereich: "gh", name: "Hochbeet rechts", art: "hochbeet", x: 520, y: 0, w: 80, h: 250, wasser: true },
-    { id: "gh4", bereich: "gh", name: "Kasten Mitte", art: "kasten", x: 250, y: 170, w: 100, h: 60, wasser: false },
-    { id: "gh5", bereich: "gh", name: "Arbeitstisch", art: "tisch", x: 520, y: 265, w: 75, h: 125 },
-    { id: "gh6", bereich: "gh", name: "Eingang", art: "eingang", x: 240, y: 392, w: 120, h: 8 },
-    { id: "ga1", bereich: "garten", name: "Erdstreifen 1", art: "erdstreifen", x: 50, y: 40, w: 60, h: 560, wasser: false },
-    { id: "ga2", bereich: "garten", name: "Erdstreifen 2", art: "erdstreifen", x: 180, y: 40, w: 60, h: 560, wasser: false },
-    { id: "ga3", bereich: "garten", name: "Erdstreifen 3", art: "erdstreifen", x: 310, y: 40, w: 60, h: 560, wasser: false },
-  ],
-  pflanzungen: [],   // {id, beet, pflanze, anzahl, start, laenge, saison}
+  version: 2,
+  karte: {
+    relativ: true,
+    ghTiefe: 0.8,      // Tiefe der Hochbeete rundherum im Gewächshaus (m)
+    kanten: {},        // je Seite des Gewächshauses: {art: hochbeet|eingang|tisch|frei, name, wasser, warm}
+    beete: [
+      { id: "eh-west", name: "Erdhaufen an der Hecke", art: "erdstreifen", breite: 0.6, wasser: false, p: [[32.86, -8.39], [35.5, -7.32], [38.68, -4.49], [41.5, -1.67], [43.61, 1.16], [44.25, 2.47]] },
+      { id: "eh-mitte", name: "Erdhaufen am Bäumchen", art: "erdstreifen", breite: 0.6, wasser: false, p: [[47.43, -4.58], [49.97, -3.06], [51.74, -0.94], [53.14, 1.89], [53.49, 3.65]] },
+      { id: "eh-ost", name: "Erdhaufen am Weg", art: "erdstreifen", breite: 0.6, wasser: false, p: [[50.75, -6.13], [53.15, -4.99], [54.91, -2.7], [56.15, 0.13], [57.03, 2.95]] },
+    ],
+    elemente: [{ id: "pumpe", name: "Pumpenhaus", art: "haus", x: 28.1, y: -11.0, w: 1.6, h: 1.6 }],
+  },
+  pflanzungen: [],   // {id, beet, pflanze, anzahl, start (cm entlang des Beets), laenge (cm), saison}
   wunsch: {},        // {pflanze: anzahl}
   historie: [],      // {saison, beet, fam}
   fotos: [],         // {datum, pflanze, beet, frage, text, bild}
 };
+// Gelände-Vorlage (falls die Grundriss-Seite noch nichts gespeichert hat)
+const GELAENDE_VORLAGE = {"gebaeude": [{"name": "Scheune", "nr": 1, "p": [[18.94, 12.34], [34.26, 12.15], [36.82, 22.23], [20.2, 22.93]]}, {"name": "Nebengebäude", "nr": 2, "p": [[23.42, 29.14], [33.38, 29.15], [36.12, 44.24], [26.12, 44.39], [24.57, 35.76], [19.55, 35.91], [18.83, 31.82], [23.58, 31.34]]}, {"name": "Garage (künftige FeWo)", "nr": 3, "p": [[40.3, 5.9], [49.0, 5.9], [49.0, 15.6], [40.3, 15.6]]}, {"name": "Gewächshaus", "nr": 5, "glas": true, "p": [[37.73, -10.96], [44.2, -13.93], [47.42, -11.96], [50.01, -7.94], [45.78, -6.02], [43.88, -9.39], [38.67, -7.8]]}], "nachbar": [{"p": [[-36.0, 10.0], [-16.2, 10.0], [-16.2, 21.5], [-19.5, 21.5], [-19.5, 25.2], [-36.0, 25.2]]}, {"p": [[-12.5, 17.0], [-0.6, 17.0], [-0.6, 26.5], [-12.5, 26.5]]}, {"p": [[-1.0, 52.2], [43.0, 52.2], [43.0, 63.3], [-1.0, 63.3]]}], "sitzecken": [{"name": "Sitzecke", "p": [[15.98, 30.72], [18.24, 31.03], [18.12, 33.91], [15.86, 33.6]]}, {"name": "Sitzecke (überdacht)", "p": [[11.69, 46.04], [15.45, 46.08], [15.58, 49.78], [11.77, 49.72]]}, {"name": "", "p": [[14.3, -3.5], [19.85, -3.28], [20.21, -0.11], [14.83, -0.49]]}], "terrasse": [[12.3, 10.95], [18.89, 10.95], [20.15, 22.93], [14.2, 21.83]], "stellplaetze": [{"name": "Stellplatz 1", "p": [[73.61, 22.94], [70.66, 23.98], [73.85, 33.06], [76.8, 32.02]]}, {"name": "Stellplatz 2", "p": [[79.39, 37.66], [76.74, 38.61], [79.05, 45.07], [81.71, 44.12]]}, {"name": "Stellplatz 3", "p": [[84.56, 49.4], [81.66, 50.41], [84.17, 57.58], [87.07, 56.57]]}], "fahrwege": [[[-45.25, 2.86], [-24.25, -3.12], [-9.86, -9.51], [4.01, -11.94], [19.31, -13.93], [27.86, -16.83], [40.31, -19.92], [50.24, -16.95], [55.41, -13], [58.26, -5.73], [60.19, 4.56], [61.45, 12.9], [62.75, 19.02]], [[19.31, -13.93], [21.75, -7.38], [25.54, -3.12]]], "kieswege": [[[-21.61, -5.48], [-19.52, 4.3], [-14.8, 11.73], [-7.17, 11.85], [-0.9, 8.08], [3.14, 7.38]]], "hof": [[[19.2, -1.5], [24.71, -4.56], [30.31, -4.1], [36.12, -0.18], [39.19, 4.36], [39.87, 12.49], [40.76, 17.88], [33.91, 15.25], [27.37, 12.2], [19.2, 12.2]], [[36.09, 14.4], [42.47, 18.54], [50.14, 16.43], [59.22, 15.98], [63.27, 21.46], [66.08, 30.96], [75.89, 36.41], [84.3, 46.37], [82.91, 57.07], [72.96, 64.49], [56.21, 67.04], [44.54, 67.62], [33.23, 71.15], [27.6, 72.86], [16.18, 68.48], [28.66, 63.22], [36.69, 51.7], [36.27, 44.8], [36.57, 31.43], [36.77, 22.53]]], "zaun": [[36.12, 44.24], [71.0, 44.24]], "tor": {"pfosten": [[-10.87, -11.92], [-8.85, -7.1]]}, "rondell": {"mitte": [30.28, 3.86]}, "teich": {"mitte": [74.57, -10.98], "rx": 3.5, "ry": 2.3}, "hecken": [[[-9.38, -6.75], [4.44, -9.17], [16.36, -10.72], [19.84, -5.62], [23.6, -1.39]], [[32.09, -19.14], [30.01, -16.56], [30.6, -13.92], [33.83, -5.16], [38.92, -0.96], [40.28, 3.94]]], "birken": [[-8.11, -13.27], [-5.19, -13.78], [-2.27, -14.29], [0.65, -14.8], [3.58, -15.31], [6.52, -15.69], [9.46, -16.08], [12.4, -16.46], [15.34, -16.84], [18.28, -17.22]], "baeume": [[-4.21, -6.0, 3.1], [6.01, -8.08, 3.1], [9.91, -8.72, 1.5], [13.45, -9.44, 1.5], [17.46, -10.03, 1.5], [31.18, -17.24, 1.2], [-4.42, -3.66, 1.1], [-4.04, 9.96, 1.2], [-0.18, 15.66, 1.2], [48.98, -3.56, 1.2], [54.91, 9.27, 1.5], [51.62, 11.66, 1.2], [55.7, 13.95, 1.5], [65.75, 7.25, 1.2], [70.88, 9.22, 1.4], [69.95, 12.23, 1.5], [70.71, 17.01, 1.5], [74.49, 15.1, 1.4], [77.58, 15.44, 1.4], [80.79, 10.21, 1.7], [80.07, 13.59, 1.5], [85.43, 11.71, 1.4], [83.49, 14.9, 1.5], [89.79, 10.01, 1.2], [88.39, 14.53, 1.2], [93.03, 12.94, 1.1], [96.87, 14.98, 1.1], [64.11, 9.43, 1.2], [26.42, 47.76, 1.2], [45.85, -23.4, 1.7], [56.96, -18.02, 1.7], [61.48, -1.68, 2.3], [65.89, -5.61, 2.0], [99.57, 19.66, 2.3], [104.29, 14.73, 2.3], [104.04, 25.87, 2.3], [96.94, 34.38, 2.0], [-40.12, -1.35, 2.3], [-45.91, 13.27, 2.5], [-46.0, 30.09, 2.5], [-28.26, 34.64, 2.3], [-12.9, 42.78, 2.3], [-15.56, -31.24, 2.0], [-23.13, -27.4, 2.0], [-9.14, -35.51, 1.7], [2.69, -36.59, 1.7], [14.72, -34.22, 1.7]], "wegbeleuchtung": [[-1.0, -7.8], [2.5, -8.6], [9.7, -11.5], [16.1, -10.9], [21.9, -8.7], [24.1, -5.9], [24.6, -1.9]]};
 let daten = JSON.parse(JSON.stringify(VORLAGE));
-let reiter = "plan", bereichWahl = "gh", bearbeiten = false, filter = "jetzt";
+let reiter = "plan", bearbeiten = false, filter = "jetzt";
 let wetterTage = [], wetterGeladen = 0;
 const saison = () => new Date().getFullYear();
 const monat = () => new Date().getMonth() + 1;
-const beet = id => daten.beete.find(b => b.id === id);
-const bereich = id => daten.bereiche.find(b => b.id === id);
-const lang = b => Math.max(b.w, b.h), breit = b => Math.min(b.w, b.h);
+// Gespeicherte Daten übernehmen; alte Rechteck-Pläne (vor dem echten Grundriss) werden ersetzt
+function uebernehmen(d) {
+  const neu = { ...JSON.parse(JSON.stringify(VORLAGE)), ...d };
+  if (!d.karte) { neu.karte = JSON.parse(JSON.stringify(VORLAGE.karte)); neu.pflanzungen = []; delete neu.beete; delete neu.bereiche; neu.umgestellt = true; }
+  return neu;
+}
 
 // ================= Speichern / Laden =================
 let speicherTimer = 0, letzterText = "";
@@ -321,10 +327,10 @@ async function laden() {
   if (!hass()) { setTimeout(laden, 400); return; }
   try {
     const r = await fetch(DATEN_URL + "?t=" + Date.now(), { cache: "no-store" });
-    if (r.ok) { const d = await r.json(); if (d && Array.isArray(d.beete)) { daten = { ...JSON.parse(JSON.stringify(VORLAGE)), ...d }; letzterText = JSON.stringify(daten);
-      const gh = daten.bereiche.find(b => b.id === "gh"); if (gh && gh.name === "Gewächshaus") { gh.name = "Überdachter Garten"; geaendert(); }
-      if (!daten.elemente2) { daten.elemente2 = true; for (const v of VORLAGE.beete.filter(v => ["tisch", "eingang"].includes(v.art))) if (!daten.beete.some(b => b.art === v.art && b.bereich === v.bereich)) daten.beete.push({ ...v }); geaendert(); } } }
+    if (r.ok) { const d = await r.json(); if (d && (d.karte || Array.isArray(d.beete))) { daten = uebernehmen(d); letzterText = JSON.stringify(daten);
+      if (daten.umgestellt) { delete daten.umgestellt; geaendert(); setTimeout(() => meldung("Der Plan zeigt jetzt euren echten Grundriss – bitte unter „Pflanzen“ einmal „Pflanzplan erstellen“ tippen.", 7000), 800); } } }
   } catch (e) { /* noch nichts gespeichert */ }
+  await gelaendeLaden();
   zeichnen();
   wetterLaden();
 }
@@ -335,7 +341,7 @@ setInterval(async () => {
     const r = await fetch(DATEN_URL + "?t=" + Date.now(), { cache: "no-store" });
     if (!r.ok) return;
     const t = await r.text();
-    if (t && t !== letzterText) { const d = JSON.parse(t); if (d && Array.isArray(d.beete)) { daten = { ...JSON.parse(JSON.stringify(VORLAGE)), ...d }; letzterText = t; zeichnen(); } }
+    if (t && t !== letzterText) { const d = JSON.parse(t); if (d && d.karte) { daten = uebernehmen(d); letzterText = t; zeichnen(); } }
   } catch (e) { /* später */ }
 }, 20000);
 
@@ -369,10 +375,11 @@ function bedarf(pf, anzahl, b) {
   const reihen = Math.max(1, Math.floor(breit(b) / pf.reihe));
   return Math.ceil(anzahl / reihen) * pf.abstand;
 }
-// Norden = Rückseite: hohe Pflanzen dort, damit sie nichts beschatten
+// Norden = oben im Plan (wie Google Earth): hohe Pflanzen nach Norden, damit sie nichts beschatten
 function nordWert(b) {
-  const ber = bereich(b.bereich), cx = b.x + b.w / 2, cy = b.y + b.h / 2;
-  return { unten: 1 - cy / ber.h, oben: cy / ber.h, links: cx / ber.w, rechts: 1 - cx / ber.w }[ber.sued || "unten"];
+  const alle = alleBeete().flatMap(x => x.linie), ys = alle.map(q => q[1]), y1 = Math.min(...ys), y2 = Math.max(...ys);
+  const cy = b.linie.reduce((s, q) => s + q[1], 0) / b.linie.length;
+  return y2 > y1 ? (y2 - cy) / (y2 - y1) : 0.5;
 }
 function passtInsBeet(pf, b, m) {
   const ber = b.bereich === "gh";
@@ -393,7 +400,7 @@ function planErstellen() {
     if (p.saison && p.saison < jahr && !daten.historie.some(h => h.saison === p.saison && h.beet === p.beet && h.fam === PF[p.pflanze]?.fam))
       daten.historie.push({ saison: p.saison, beet: p.beet, fam: PF[p.pflanze]?.fam });
   }
-  const beete = daten.beete.filter(b => PFLANZBAR.includes(b.art));
+  const beete = alleBeete().filter(b => PFLANZBAR.includes(b.art));
   const frei = Object.fromEntries(beete.map(b => [b.id, lang(b)]));
   const inhalt = Object.fromEntries(beete.map(b => [b.id, []]));
   const hinweise = [];
@@ -434,8 +441,7 @@ function planErstellen() {
   const neu = [];
   for (const b of beete) {
     let r = ordnen(inhalt[b.id]);
-    const ber = bereich(b.bereich), senkrecht = b.h >= b.w;
-    const nordAmAnfang = senkrecht ? ber.sued === "unten" : ber.sued === "rechts";
+    const nordAmAnfang = b.linie[0][1] < b.linie[b.linie.length - 1][1];
     if (r.length > 1) {
       const hoeheAnfang = PF[r[0].pflanze].hoehe, hoeheEnde = PF[r[r.length - 1].pflanze].hoehe;
       if ((nordAmAnfang && hoeheEnde > hoeheAnfang) || (!nordAmAnfang && hoeheAnfang > hoeheEnde)) r = r.reverse();
@@ -445,8 +451,6 @@ function planErstellen() {
   }
   daten.pflanzungen = neu;
   geaendert(); reiter = "plan";
-  const gh = neu.filter(p => beet(p.beet).bereich === "gh").length, ga = neu.length - gh;
-  if (gh && !ga) bereichWahl = "gh"; else if (ga && !gh) bereichWahl = "garten";
   zeichnen();
   meldung(hinweise.length ? "Plan erstellt – " + hinweise.join(", ") : "Pflanzplan erstellt", hinweise.length ? 6000 : 3000);
 }
@@ -469,120 +473,341 @@ function zeichnen() {
   f();
 }
 
-// ================= Plan als Zeichnung (Zaun, Pfosten, Holzhäcksel, Hochbeete, einzelne Pflanzen) =================
+// ================= Plan auf dem echten Grundriss (Gelände aus der Grundriss-Seite, Meter) =================
 const PFLANZBAR = ["hochbeet", "erdstreifen", "kasten"];
 // Pflanzen, die es wärmer brauchen, als es unter dem offenen Dach ist
 const WAERME = { paprika: 2, chili: 2, aubergine: 2, melone: 2, basilikum: 1, gurke: 1 };
-function segmentRechteck(b, p) {
-  const innen = b.art === "erdstreifen" ? 4 : 7, senkrecht = b.h >= b.w, L = lang(b) - 2 * innen;
-  const a = Math.min(p.start, L), l = Math.max(6, Math.min(p.laenge, L - a));
-  return senkrecht ? { x: b.x + innen, y: b.y + innen + a, w: b.w - 2 * innen, h: l, senkrecht } : { x: b.x + innen + a, y: b.y + innen, w: l, h: b.h - 2 * innen, senkrecht };
-}
-function pflanzenPunkte(r, pf, anzahl) {
-  // Reihen quer zum Beet, Pflanzen im Abstand entlang des Beets
-  const quer = r.senkrecht ? r.w : r.h, laengs = r.senkrecht ? r.h : r.w;
-  const reihen = Math.max(1, Math.min(anzahl, Math.floor(quer / Math.max(8, pf.reihe)) || 1));
-  const proReihe = Math.ceil(anzahl / reihen), schritt = laengs / proReihe, qs = quer / reihen;
-  const rad = Math.max(3, Math.min(24, Math.min(schritt, qs) * 0.36));
-  const pkte = [];
-  for (let i = 0; i < Math.min(anzahl, 150); i++) {
-    const reihe = i % reihen, pos = Math.floor(i / reihen);
-    const l = schritt * (pos + 0.5), q = qs * (reihe + 0.5);
-    pkte.push(r.senkrecht ? [r.x + q, r.y + l] : [r.x + l, r.y + q]);
+const GH_NAME = "Gewächshaus (überdacht)";
+let gelaende = null, ghForm = null, ansichtWahl = "alles";
+// --- Geometrie ---
+const abst = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
+const laengeVon = l => l.reduce((s, q, i) => i ? s + abst(l[i - 1], q) : 0, 0);
+function imPolygon(pt, poly) {
+  let drin = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if ((yi > pt[1]) !== (yj > pt[1]) && pt[0] < (xj - xi) * (pt[1] - yi) / (yj - yi) + xi) drin = !drin;
   }
-  return { pkte, rad };
+  return drin;
 }
-function grafikDefs() {
-  return `<defs>
-    <pattern id="haecksel" width="16" height="16" patternUnits="userSpaceOnUse"><rect width="16" height="16" fill="#B48A5E"/>
-      <path d="M2 3l4 1M9 2l3 3M3 10l3-2M11 9l4 1M6 14l3-1M13 13l2 2" stroke="#8E6A43" stroke-width="1.6" stroke-linecap="round"/></pattern>
-    <pattern id="rasen" width="18" height="18" patternUnits="userSpaceOnUse"><rect width="18" height="18" fill="#A9CB8B"/>
-      <path d="M3 14l1-4M8 16l1-5M13 13l1-4M5 6l1-4M14 6l1-4" stroke="#8DB46E" stroke-width="1.4" stroke-linecap="round"/></pattern>
-    <pattern id="erde" width="12" height="12" patternUnits="userSpaceOnUse"><rect width="12" height="12" fill="#5E4129"/>
-      <circle cx="3" cy="3" r="1.1" fill="#4A321F"/><circle cx="9" cy="8" r="1.3" fill="#6F4E33"/></pattern>
-    <linearGradient id="damm" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#4E3420"/><stop offset=".5" stop-color="#7A5636"/><stop offset="1" stop-color="#4E3420"/></linearGradient>
-    <linearGradient id="dammq" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#4E3420"/><stop offset=".5" stop-color="#7A5636"/><stop offset="1" stop-color="#4E3420"/></linearGradient>
-    <pattern id="holz" width="40" height="10" patternUnits="userSpaceOnUse"><rect width="40" height="10" fill="#D9B98C"/><path d="M0 5h40" stroke="#C49E6C" stroke-width="1"/></pattern>
-  </defs>`;
-}
-function zeichneZaun(ber) {
-  // Lattenzaun rundherum, Pfosten an den Ecken und etwa alle 2 m
-  let s = `<rect x="-6" y="-6" width="${ber.w + 12}" height="${ber.h + 12}" fill="none" stroke="#C99A62" stroke-width="12" stroke-dasharray="7 5"/>`;
-  s += `<rect x="-6" y="-6" width="${ber.w + 12}" height="${ber.h + 12}" fill="none" stroke="#9C7443" stroke-width="2.5"/>`;
-  const pf = (x, y) => `<rect x="${x - 8}" y="${y - 8}" width="16" height="16" fill="#7A5A3A" rx="2"/>`;
-  for (let x = 0; x <= ber.w + 1; x += ber.w / Math.max(1, Math.round(ber.w / 200))) { s += pf(x, -6) + pf(x, ber.h + 6); }
-  for (let y = 0; y <= ber.h + 1; y += ber.h / Math.max(1, Math.round(ber.h / 200))) { s += pf(-6, y) + pf(ber.w + 6, y); }
-  return s;
-}
-function zeichneElement(b, ber) {
-  const sel = bearbeiten ? `stroke="#007AFF" stroke-width="4"` : "";
-  if (b.art === "tisch") return `<g data-beet="${b.id}"><rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="url(#holz)" ${sel || `stroke="#8B6F4E" stroke-width="3"`} rx="3"/>
-      <text x="${b.x + b.w / 2}" y="${b.y + b.h / 2}" text-anchor="middle" dominant-baseline="middle" font-size="15" font-weight="700" fill="#5A4632" ${b.h > b.w ? `transform="rotate(-90 ${b.x + b.w / 2} ${b.y + b.h / 2})"` : ""}>${esc(b.name)}</text></g>`;
-  if (b.art === "eingang") return `<g data-beet="${b.id}"><rect x="${b.x}" y="${b.y - 10}" width="${b.w}" height="${b.h + 20}" fill="url(#haecksel)" ${sel}/>
-      <text x="${b.x + b.w / 2}" y="${b.y + b.h + 32}" text-anchor="middle" font-size="16" font-weight="700" fill="#3A3A3C">${esc(b.name)}</text>
-      <path d="M${b.x + b.w / 2} ${b.y + b.h + 8} l-9 -14 h18 z" fill="#3A3A3C"/></g>`;
-  if (b.art === "haus") return `<g data-beet="${b.id}"><rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="#C2483A" ${sel || `stroke="#7A2A20" stroke-width="3"`} rx="2"/>
-      <path d="M${b.x} ${b.y} L${b.x + b.w} ${b.y + b.h} M${b.x + b.w} ${b.y} L${b.x} ${b.y + b.h}" stroke="#9E3A2E" stroke-width="2"/>
-      <text x="${b.x + b.w / 2}" y="${b.y + b.h + 18}" text-anchor="middle" font-size="15" font-weight="700" fill="#3A3A3C">${esc(b.name)}</text></g>`;
-  // Beete
-  const senk = b.h >= b.w;
-  let s = `<g data-beet="${b.id}">`;
-  if (b.art === "erdstreifen") {
-    s += `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="url(#${senk ? "damm" : "dammq"})" ${sel || `stroke="#3E2A18" stroke-width="2"`} rx="${Math.min(b.w, b.h) / 2.2}"/>`;
-  } else {
-    s += `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="url(#holz)" ${sel || `stroke="#A8834F" stroke-width="2.5"`} rx="3"/>`;
-    s += `<rect x="${b.x + 7}" y="${b.y + 7}" width="${b.w - 14}" height="${b.h - 14}" fill="url(#erde)" rx="2"/>`;
-  }
-  if (b.warm) s += `<rect x="${b.x - 5}" y="${b.y - 5}" width="${b.w + 10}" height="${b.h + 10}" fill="none" stroke="#FF9500" stroke-width="3" stroke-dasharray="10 6" rx="6"/>`;
-  return s;
-}
-function zeichnePlan() {
-  const ber = bereich(bereichWahl), rand = 46, dach = ber.id === "gh";
-  const alle = daten.beete.filter(b => b.bereich === ber.id);
-  const beete = alle.filter(b => PFLANZBAR.includes(b.art));
-  const segmente = [];
-  for (const b of beete) for (const p of daten.pflanzungen.filter(p => p.beet === b.id).sort((x, y) => x.start - y.start)) if (PF[p.pflanze]) segmente.push({ p, b, pf: PF[p.pflanze], r: segmentRechteck(b, p) });
-  segmente.forEach((s, i) => { s.nr = i + 1; s.mx = s.r.x + s.r.w / 2; s.my = s.r.y + s.r.h / 2; s.links = s.mx < ber.w / 2; });
-  let svg = `<svg id="plansvg" viewBox="${-rand} ${-rand} ${ber.w + 2 * rand} ${ber.h + 2 * rand + 20}" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, Roboto, Helvetica, Arial, sans-serif">${grafikDefs()}`;
-  svg += `<rect x="${-rand}" y="${-rand}" width="${ber.w + 2 * rand}" height="${ber.h + 2 * rand + 20}" fill="url(#rasen)"/>`;
-  if (dach) {
-    svg += `<rect x="0" y="0" width="${ber.w}" height="${ber.h}" fill="url(#haecksel)"/>` + zeichneZaun(ber);
-    // Dach (Folie) als heller Rand angedeutet
-    svg += `<rect x="-22" y="-22" width="${ber.w + 44}" height="${ber.h + 44}" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="3" stroke-dasharray="2 8"/>`;
-    svg += `<text x="${ber.w - 4}" y="-28" text-anchor="end" font-size="14" fill="#4A6A3A" font-weight="600">Folien-Dach · offen</text>`;
-  }
-  for (const b of alle.filter(b => b.art === "eingang")) svg += zeichneElement(b, ber);
-  for (const b of alle.filter(b => !["eingang"].includes(b.art))) {
-    svg += zeichneElement(b, ber);
-    if (!PFLANZBAR.includes(b.art)) { if (bearbeiten) svg += `<circle cx="${b.x + b.w}" cy="${b.y + b.h}" r="11" fill="#007AFF" stroke="#fff" stroke-width="3" data-griff="${b.id}"/>`; continue; }
-    for (const s of segmente.filter(s => s.b === b)) {
-      const { r, pf, p } = s, f = FARBE[pf.fam] || "#8BC34A";
-      svg += `<g data-pflanzung="${p.id}"><rect x="${r.x + 1}" y="${r.y + 1}" width="${r.w - 2}" height="${r.h - 2}" fill="${f}" fill-opacity=".22" stroke="${f}" stroke-width="2" stroke-dasharray="6 4" rx="5"/>`;
-      const { pkte, rad } = pflanzenPunkte(r, pf, p.anzahl);
-      for (const [x, y] of pkte) svg += `<circle cx="${x}" cy="${y}" r="${rad}" fill="${f}" stroke="#fff" stroke-width="${Math.max(1, rad * 0.18)}"/>` +
-        (rad >= 7 ? `<path d="M${x} ${y + rad * 0.45} v${-rad * 0.8} m0 ${rad * 0.3} q${-rad * 0.45} ${-rad * 0.05} ${-rad * 0.5} ${-rad * 0.5} m${rad * 0.5} ${rad * 0.2} q${rad * 0.45} ${-rad * 0.05} ${rad * 0.5} ${-rad * 0.5}" stroke="#fff" stroke-width="${rad * 0.14}" fill="none" stroke-linecap="round"/>` : "");
-      // Nummer passend zum Infokärtchen
-      const nx = r.x + 13, ny = r.y + 13;
-      svg += `<circle cx="${nx}" cy="${ny}" r="12" fill="#fff" stroke="${f}" stroke-width="3"/><text x="${nx}" y="${ny + 1}" text-anchor="middle" dominant-baseline="middle" font-size="13" font-weight="800" fill="#1C1C1E">${s.nr}</text></g>`;
+// weiche Linie durch die Punkte (Catmull-Rom), als dichte Punktliste – für Zeichnung und Pflanzenplätze
+function glatt(p) {
+  if (p.length < 3) return p.map(q => q.slice());
+  const n = p.length, P = i => p[Math.max(0, Math.min(n - 1, i))], aus = [p[0].slice()];
+  for (let i = 0; i < n - 1; i++) {
+    const a = P(i - 1), b = P(i), c = P(i + 1), e = P(i + 2);
+    const c1 = [b[0] + (c[0] - a[0]) / 6, b[1] + (c[1] - a[1]) / 6], c2 = [c[0] - (e[0] - b[0]) / 6, c[1] - (e[1] - b[1]) / 6];
+    for (let t = 1; t <= 10; t++) {
+      const u = t / 10, v = 1 - u;
+      aus.push([v * v * v * b[0] + 3 * v * v * u * c1[0] + 3 * v * u * u * c2[0] + u * u * u * c[0], v * v * v * b[1] + 3 * v * v * u * c1[1] + 3 * v * u * u * c2[1] + u * u * u * c[1]]);
     }
-    // Beetname klein am Rand
-    const senk = b.h >= b.w, tx = senk ? b.x - 10 : b.x + 6, ty = senk ? b.y + 6 : b.y - 10;
-    svg += `<text x="${tx}" y="${ty}" font-size="13" font-weight="700" fill="#2C2C2E" ${senk ? `transform="rotate(-90 ${tx} ${ty})" text-anchor="end"` : ""}>${esc(b.name)}${b.warm ? " · Wärme-Ecke" : ""}</text>`;
-    if (bearbeiten) svg += `<circle cx="${b.x + b.w}" cy="${b.y + b.h}" r="11" fill="#007AFF" stroke="#fff" stroke-width="3" data-griff="${b.id}"/>`;
+  }
+  return aus;
+}
+// Punkt + Richtung in Abstand d (Meter) entlang einer Linie
+function punktBei(l, d) {
+  let rest = Math.max(0, d);
+  for (let i = 1; i < l.length; i++) {
+    const s = abst(l[i - 1], l[i]);
+    if (rest <= s || i === l.length - 1) {
+      const t = s ? Math.min(1, rest / s) : 0, dx = (l[i][0] - l[i - 1][0]) / (s || 1), dy = (l[i][1] - l[i - 1][1]) / (s || 1);
+      return [l[i - 1][0] + (l[i][0] - l[i - 1][0]) * t, l[i - 1][1] + (l[i][1] - l[i - 1][1]) * t, dx, dy];
+    }
+    rest -= s;
+  }
+  return [l[0][0], l[0][1], 1, 0];
+}
+function teilLinie(l, von, bis) {
+  const aus = [punktBei(l, von).slice(0, 2)]; let d = 0;
+  for (let i = 1; i < l.length; i++) { d += abst(l[i - 1], l[i]); if (d > von && d < bis) aus.push(l[i].slice()); }
+  aus.push(punktBei(l, bis).slice(0, 2));
+  return aus;
+}
+// Schnittpunkt zweier Geraden (Punkt + Richtung)
+function schnitt(p, r, q, s) {
+  const k = r[0] * s[1] - r[1] * s[0];
+  if (Math.abs(k) < 1e-9) return [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+  const t = ((q[0] - p[0]) * s[1] - (q[1] - p[1]) * s[0]) / k;
+  return [p[0] + r[0] * t, p[1] + r[1] * t];
+}
+// Affine Abbildung (kleinste Quadrate) von Punktliste A auf B
+function affin(A, B) {
+  const loese = b => {
+    const M = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], v = [0, 0, 0];
+    A.forEach(([x, y], k) => { const z = [x, y, 1]; for (let i = 0; i < 3; i++) { v[i] += z[i] * b[k]; for (let j = 0; j < 3; j++) M[i][j] += z[i] * z[j]; } });
+    for (let i = 0; i < 3; i++) { let p = i; for (let r = i + 1; r < 3; r++) if (Math.abs(M[r][i]) > Math.abs(M[p][i])) p = r;
+      [M[i], M[p]] = [M[p], M[i]]; [v[i], v[p]] = [v[p], v[i]];
+      for (let r = 0; r < 3; r++) if (r !== i) { const f = M[r][i] / M[i][i]; for (let c = 0; c < 3; c++) M[r][c] -= f * M[i][c]; v[r] -= f * v[i]; } }
+    return v.map((x, i) => x / M[i][i]);
+  };
+  const cx = loese(B.map(q => q[0])), cy = loese(B.map(q => q[1]));
+  return ([x, y]) => [Math.round((cx[0] * x + cx[1] * y + cx[2]) * 100) / 100, Math.round((cy[0] * x + cy[1] * y + cy[2]) * 100) / 100];
+}
+const RICHTUNG = ["Ost", "Südost", "Süd", "Südwest", "West", "Nordwest", "Nord", "Nordost"];
+function himmelsrichtung(nx, ny) { const w = Math.atan2(ny, nx); return RICHTUNG[((Math.round(w / (Math.PI / 4)) % 8) + 8) % 8]; }
+
+// --- Gewächshaus-Form und Beete daraus ---
+const GH_VORLAGE = [[37.73, -10.96], [44.2, -13.93], [47.42, -11.96], [50.01, -7.94], [45.78, -6.02], [43.88, -9.39], [38.67, -7.8]];
+function gewaechshausForm() {
+  const e = (gelaende || []).find(e => e.typ === "gebaeude" && e.p && (e.glas || /gew(ä|ae)chs|überdach|schlag/i.test(e.name || "")));
+  return e ? e.p : GH_VORLAGE;
+}
+function ghKanten() {
+  const P = ghForm || GH_VORLAGE, n = P.length, t = (daten.karte.ghTiefe || 0.8);
+  // innen-Richtung je Kante testen (funktioniert auch an der eingeknickten Ecke)
+  const kanten = P.map((a, i) => {
+    const b = P[(i + 1) % n], l = abst(a, b) || 1, r = [(b[0] - a[0]) / l, (b[1] - a[1]) / l];
+    let nrm = [-r[1], r[0]]; const m = [(a[0] + b[0]) / 2 + nrm[0] * 0.2, (a[1] + b[1]) / 2 + nrm[1] * 0.2];
+    if (!imPolygon(m, P)) nrm = [r[1], -r[0]];
+    return { a, b, r, nrm, l };
+  });
+  // innere Ecken: Schnitt der nach innen verschobenen Kanten (saubere Gehrung an den Ecken)
+  const innen = P.map((_, i) => {
+    const k1 = kanten[(i - 1 + n) % n], k2 = kanten[i];
+    return schnitt([k1.a[0] + k1.nrm[0] * t, k1.a[1] + k1.nrm[1] * t], k1.r, [k2.a[0] + k2.nrm[0] * t, k2.a[1] + k2.nrm[1] * t], k2.r);
+  });
+  const namen = {};
+  return kanten.map((k, i) => {
+    const cfg = daten.karte.kanten[i] || {}, art = cfg.art || "hochbeet";
+    let rn = himmelsrichtung(-k.nrm[0], -k.nrm[1]);
+    namen[rn] = (namen[rn] || 0) + 1; if (namen[rn] > 1) rn += " " + namen[rn];
+    const i2 = (i + 1) % n, quad = [k.a, k.b, innen[i2], innen[i]];
+    const linie = [[(k.a[0] + innen[i][0]) / 2, (k.a[1] + innen[i][1]) / 2], [(k.b[0] + innen[i2][0]) / 2, (k.b[1] + innen[i2][1]) / 2]];
+    return { id: "gh-k" + i, kante: i, art, name: cfg.name || (art === "hochbeet" ? "Hochbeet " + rn : art === "tisch" ? "Arbeitstisch" : art === "eingang" ? "Eingang" : "frei"),
+      bereich: "gh", linie, breite: t, quad, aussen: [-k.nrm[0], -k.nrm[1]], wasser: cfg.wasser !== false, warm: !!cfg.warm };
+  });
+}
+function alleBeete() {
+  const liste = ghKanten();
+  for (const b of daten.karte.beete) {
+    const linie = b.art === "erdstreifen" ? glatt(b.p) : b.p.map(q => q.slice());
+    const mitte = linie[Math.floor(linie.length / 2)];
+    liste.push({ ...b, linie, bereich: imPolygon(mitte, ghForm || GH_VORLAGE) ? "gh" : "garten" });
+  }
+  return liste;
+}
+const beet = id => alleBeete().find(b => b.id === id);
+const lang = b => Math.round(laengeVon(b.linie) * 100), breit = b => Math.round(b.breite * 100);
+const bereichName = b => b && b.bereich === "gh" ? GH_NAME : "Gemüsegarten";
+
+// --- Gelände laden (aus der Grundriss-Seite, damit alles genau wie dort aussieht) ---
+async function gelaendeLaden() {
+  try {
+    const r = await fetch("/local/grundriss_daten.json?t=" + Date.now(), { cache: "no-store" });
+    if (r.ok) { const d = await r.json(); if (Array.isArray(d.gelaende)) gelaende = d.gelaende; }
+  } catch (e) { /* Grundriss noch nie gespeichert */ }
+  if (!gelaende) gelaende = gelaendeVorlage();
+  ghForm = gewaechshausForm();
+  // Erdhaufen/Pumpe aus der Vorlage an die echte Lage des Gewächshauses anpassen (einmalig)
+  if (daten.karte.relativ) {
+    const f = ghForm.length === GH_VORLAGE.length ? affin(GH_VORLAGE, ghForm) : (() => {
+      const m1 = mitteVon(GH_VORLAGE), m2 = mitteVon(ghForm); return ([x, y]) => [x + m2[0] - m1[0], y + m2[1] - m1[1]]; })();
+    for (const b of daten.karte.beete) b.p = b.p.map(f);
+    for (const e of daten.karte.elemente) [e.x, e.y] = f([e.x, e.y]);
+    delete daten.karte.relativ; geaendert();
+  }
+}
+function mitteVon(p) { return [p.reduce((s, q) => s + q[0], 0) / p.length, p.reduce((s, q) => s + q[1], 0) / p.length]; }
+function gelaendeVorlage() {
+  const G = GELAENDE_VORLAGE, l = [];
+  for (const p of G.hof) l.push({ typ: "hof", p });
+  for (const p of G.fahrwege) l.push({ typ: "fahrweg", p });
+  for (const p of G.kieswege) l.push({ typ: "kiesweg", p });
+  for (const p of G.hecken) l.push({ typ: "hecke", p });
+  for (const [x, y, r] of G.baeume) l.push({ typ: "baum", x, y, r });
+  for (const [x, y] of G.birken) l.push({ typ: "birke", x, y, r: 1.3 });
+  l.push({ typ: "rondell", x: G.rondell.mitte[0], y: G.rondell.mitte[1], r: 0.9, name: "Rondell · Säuleneiche" });
+  l.push({ typ: "teich", x: G.teich.mitte[0], y: G.teich.mitte[1], rx: G.teich.rx, ry: G.teich.ry });
+  for (const b of G.gebaeude) l.push({ typ: "gebaeude", p: b.p, name: b.name, glas: b.glas });
+  for (const s of G.stellplaetze) l.push({ typ: "stellplatz", p: s.p, name: s.name });
+  return l;
+}
+function kurve(p, zu) {
+  if (p.length < 3) return "M" + p.map(q => q.join(" ")).join(" L") + (zu ? " Z" : "");
+  const n = p.length, P = i => zu ? p[(i + n) % n] : p[Math.max(0, Math.min(n - 1, i))];
+  let d = `M${p[0][0]} ${p[0][1]}`;
+  for (let i = 0; i < (zu ? n : n - 1); i++) {
+    const a = P(i - 1), b = P(i), c = P(i + 1), e = P(i + 2);
+    d += ` C${b[0] + (c[0] - a[0]) / 6} ${b[1] + (c[1] - a[1]) / 6} ${c[0] - (e[0] - b[0]) / 6} ${c[1] - (e[1] - b[1]) / 6} ${c[0]} ${c[1]}`;
+  }
+  return d + (zu ? " Z" : "");
+}
+const pts = p => p.map(q => q.map(v => Math.round(v * 100) / 100).join(",")).join(" ");
+function zeichneLandschaft(box) {
+  const nah = e => { const q = e.p || [[e.x, e.y]]; return q.some(([x, y]) => x > box.x - 30 && x < box.x + box.w + 30 && y > box.y - 30 && y < box.y + box.h + 30); };
+  const ebene = { hof: 0, fahrweg: 1, kiesweg: 1, teich: 2, hecke: 3, baum: 4, birke: 4, rondell: 4, nachbar: 5, terrasse: 5, gebaeude: 6, sitzecke: 7, stellplatz: 7, zaun: 8 };
+  let s = "";
+  for (const e of (gelaende || []).filter(e => ebene[e.typ] !== undefined && nah(e)).sort((a, b) => ebene[a.typ] - ebene[b.typ])) {
+    if (e.typ === "gebaeude" && e.p === ghForm) continue;   // das Gewächshaus zeichnen wir selbst
+    if (e.typ === "hof") s += `<path d="${kurve(e.p, true)}" fill="#E2D8C6" stroke="#E9E1D2" stroke-width=".3"/>`;
+    else if (e.typ === "fahrweg") s += `<path d="${kurve(e.p, false)}" fill="none" stroke="#E6DECD" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>`;
+    else if (e.typ === "kiesweg") s += `<path d="${kurve(e.p, false)}" fill="none" stroke="#E6DECD" stroke-width="1.8" stroke-linecap="round"/>`;
+    else if (e.typ === "hecke") s += `<path d="${kurve(e.p, false)}" fill="none" stroke="#5E8A4C" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>`;
+    else if (e.typ === "teich") s += `<ellipse cx="${e.x}" cy="${e.y}" rx="${e.rx}" ry="${e.ry}" fill="#9CC9E6" stroke="#7FB2D4" stroke-width=".2"/>`;
+    else if (e.typ === "baum") s += `<circle cx="${e.x}" cy="${e.y}" r="${e.r}" fill="#7FA66A" opacity=".9"/><circle cx="${e.x - e.r * .25}" cy="${e.y - e.r * .25}" r="${e.r * .55}" fill="#97BE7F" opacity=".7"/>`;
+    else if (e.typ === "birke") s += `<circle cx="${e.x}" cy="${e.y}" r="${e.r || 1.3}" fill="#A9C98E"/><circle cx="${e.x}" cy="${e.y}" r=".18" fill="#F2F2F2"/>`;
+    else if (e.typ === "rondell") s += `<circle cx="${e.x}" cy="${e.y}" r="${e.r || .9}" fill="#C3D9AC" stroke="#B9B09C" stroke-width=".12"/><circle cx="${e.x}" cy="${e.y}" r="${(e.r || .9) * .66}" fill="#7FA66A"/>`;
+    else if (e.p && ["gebaeude", "nachbar", "stellplatz", "terrasse", "sitzecke"].includes(e.typ)) {
+      const f = { gebaeude: e.glas ? ["#D7ECEC", "#9DB8B8"] : ["#D6D2CA", "#3A3A3C"], nachbar: ["#E6E3DC", "#BDB7AA"], stellplatz: ["#E9E7E1", "#B9B4A8"], terrasse: ["#DCC6A4", "#9DB8B8"], sitzecke: ["#DCC6A4", "#B39A74"] }[e.typ];
+      s += `<polygon points="${pts(e.p)}" fill="${f[0]}" stroke="${f[1]}" stroke-width=".2"/>`;
+      if (e.name && e.typ === "gebaeude") { const [x, y] = mitteVon(e.p); s += `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle" font-size="1" font-weight="700" fill="#3A3A3C" opacity=".75">${esc(e.name)}</text>`; }
+    } else if (e.typ === "zaun" && e.p) s += `<polyline points="${pts(e.p)}" fill="none" stroke="#8B6F4E" stroke-width=".15" stroke-dasharray=".8 .4"/>`;
+  }
+  return s;
+}
+function segmentPunkte(b, p) {
+  const L = laengeVon(b.linie), von = Math.min(L, p.start / 100), bis = Math.min(L, (p.start + p.laenge) / 100);
+  return { von, bis, teil: teilLinie(b.linie, von, Math.max(von + 0.05, bis)) };
+}
+function pflanzenPunkte(b, p, pf) {
+  const { von, bis } = segmentPunkte(b, p), laenge = Math.max(0.05, bis - von), quer = b.breite * 0.9;
+  const reihen = Math.max(1, Math.min(p.anzahl, Math.floor(quer / Math.max(0.08, pf.reihe / 100)) || 1));
+  const proReihe = Math.ceil(p.anzahl / reihen), schritt = laenge / proReihe, qs = quer / reihen;
+  const rad = Math.max(0.05, Math.min(0.32, Math.min(schritt, qs) * 0.38));
+  const liste = [];
+  for (let i = 0; i < Math.min(p.anzahl, 150); i++) {
+    const reihe = i % reihen, pos = Math.floor(i / reihen);
+    const [x, y, dx, dy] = punktBei(b.linie, von + schritt * (pos + 0.5)), q = -quer / 2 + qs * (reihe + 0.5);
+    liste.push([x - dy * q, y + dx * q]);
+  }
+  return { liste, rad };
+}
+function kartenBox(art) {
+  const beete = alleBeete(), gh = ghForm || GH_VORLAGE;
+  let pk = [];
+  if (art !== "beete") pk = pk.concat(gh);
+  if (art !== "gewaechshaus") for (const b of beete.filter(b => b.bereich !== "gh")) pk = pk.concat(b.linie);
+  if (art === "alles") for (const e of daten.karte.elemente) pk.push([e.x - e.w / 2, e.y - e.h / 2], [e.x + e.w / 2, e.y + e.h / 2]);
+  if (!pk.length) pk = gh;
+  const xs = pk.map(q => q[0]), ys = pk.map(q => q[1]), rand = art === "alles" ? 4.5 : 2.5;
+  return { x: Math.min(...xs) - rand, y: Math.min(...ys) - rand, w: Math.max(...xs) - Math.min(...xs) + 2 * rand, h: Math.max(...ys) - Math.min(...ys) + 2 * rand };
+}
+function karteBauen(box) {
+  box = box || kartenBox(ansichtWahl);
+  const beete = alleBeete(), gh = ghForm || GH_VORLAGE;
+  const k = box.w / 60;   // Schriftgröße passend zum Ausschnitt
+  const segmente = [];
+  for (const b of beete.filter(b => PFLANZBAR.includes(b.art)))
+    for (const p of daten.pflanzungen.filter(p => p.beet === b.id).sort((x, y) => x.start - y.start))
+      if (PF[p.pflanze]) segmente.push({ p, b, pf: PF[p.pflanze] });
+  // nur Pflanzen im sichtbaren Ausschnitt bekommen Kärtchen
+  const ueberblick = ansichtWahl === "alles";
+  let sichtbar;
+  if (ueberblick) {
+    // Übersicht: ein Kärtchen je Beet (bei so kleinem Maßstab wären einzelne Pflanzen-Kärtchen zu viele)
+    sichtbar = beete.filter(b => segmente.some(s => s.b.id === b.id)).map(b => { const [x, y] = punktBei(b.linie, laengeVon(b.linie) / 2); return { beetKarte: true, b, mx: x, my: y }; });
+    sichtbar.forEach((s, i) => { s.nr = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i] || String(i + 1); s.links = s.mx < box.x + box.w / 2; });
+  } else {
+    sichtbar = segmente.filter(s => { const [x, y] = punktBei(s.b.linie, (s.p.start + s.p.laenge / 2) / 100); s.mx = x; s.my = y; return x > box.x && x < box.x + box.w && y > box.y && y < box.y + box.h; });
+    sichtbar.forEach((s, i) => { s.nr = i + 1; s.links = s.mx < box.x + box.w / 2; });
+  }
+  let svg = `<svg id="plansvg" viewBox="${box.x} ${box.y} ${box.w} ${box.h}" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, Roboto, Helvetica, Arial, sans-serif">
+    <defs><pattern id="rasen" width="1.6" height="1.6" patternUnits="userSpaceOnUse"><rect width="1.6" height="1.6" fill="#BFD8A6"/>
+      <path d="M.3 1.2l.08-.35M.8 1.45l.08-.4M1.25 1.1l.08-.35M.5 .5l.08-.35M1.3 .45l.08-.35" stroke="#A9C98E" stroke-width=".07" stroke-linecap="round"/></pattern>
+    <pattern id="haecksel" width=".9" height=".9" patternUnits="userSpaceOnUse"><rect width=".9" height=".9" fill="#C29A6B"/>
+      <path d="M.1 .17l.22.06M.5 .1l.17.17M.17 .56l.17-.11M.62 .5l.22.06M.34 .8l.17-.06" stroke="#9C7748" stroke-width=".07" stroke-linecap="round"/></pattern>
+    <pattern id="erde" width=".6" height=".6" patternUnits="userSpaceOnUse"><rect width=".6" height=".6" fill="#5E4129"/><circle cx=".15" cy=".15" r=".05" fill="#4A321F"/><circle cx=".45" cy=".4" r=".06" fill="#6F4E33"/></pattern>
+    <pattern id="holz" width="2" height=".5" patternUnits="userSpaceOnUse"><rect width="2" height=".5" fill="#D9B98C"/><path d="M0 .25h2" stroke="#C49E6C" stroke-width=".05"/></pattern></defs>
+    <rect x="${box.x - 50}" y="${box.y - 50}" width="${box.w + 100}" height="${box.h + 100}" fill="url(#rasen)"/>`;
+  svg += zeichneLandschaft(box);
+  // Gewächshaus: Holzhäcksel-Boden, Dach-Andeutung, Lattenzaun (außer am Eingang), Pfosten
+  const kanten = beete.filter(b => b.kante !== undefined);
+  svg += `<polygon points="${pts(gh)}" fill="url(#haecksel)"/>`;
+  svg += `<polygon points="${pts(gh)}" fill="rgba(255,255,255,.12)" stroke="rgba(255,255,255,.75)" stroke-width=".55" stroke-linejoin="round"/>`;
+  for (const kb of kanten) {
+    if (kb.art === "eingang") continue;
+    const [a, b2] = [kb.quad[0], kb.quad[1]];
+    svg += `<line x1="${a[0]}" y1="${a[1]}" x2="${b2[0]}" y2="${b2[1]}" stroke="#C99A62" stroke-width=".16" stroke-dasharray=".09 .06"/><line x1="${a[0]}" y1="${a[1]}" x2="${b2[0]}" y2="${b2[1]}" stroke="#9C7443" stroke-width=".04"/>`;
+  }
+  for (const [x, y] of gh) svg += `<rect x="${x - .14}" y="${y - .14}" width=".28" height=".28" fill="#6E5034" rx=".04"/>`;
+  // Beete am Rand des Gewächshauses
+  for (const kb of kanten) {
+    const ziel = bearbeiten ? `data-beet="${kb.id}"` : "";
+    if (kb.art === "hochbeet") svg += `<g data-beet="${kb.id}"><polygon points="${pts(kb.quad)}" fill="url(#erde)" stroke="${bearbeiten ? "#007AFF" : "#D2AE7C"}" stroke-width="${bearbeiten ? .12 : .13}" stroke-linejoin="round"/>${kb.warm ? `<polygon points="${pts(kb.quad)}" fill="none" stroke="#FF9500" stroke-width=".08" stroke-dasharray=".25 .15"/>` : ""}</g>`;
+    else if (kb.art === "tisch") { const [mx, my] = mitteVon(kb.quad); const w = Math.atan2(kb.quad[1][1] - kb.quad[0][1], kb.quad[1][0] - kb.quad[0][0]) * 180 / Math.PI; const wr = w > 90 || w < -90 ? w + 180 : w;
+      svg += `<g ${ziel || `data-beet="${kb.id}"`}><polygon points="${pts(kb.quad)}" fill="url(#holz)" stroke="#8B6F4E" stroke-width=".08"/><text x="${mx}" y="${my}" transform="rotate(${wr} ${mx} ${my})" text-anchor="middle" dominant-baseline="middle" font-size=".34" font-weight="700" fill="#5A4632">Arbeitstisch</text></g>`; }
+    else if (bearbeiten) svg += `<g data-beet="${kb.id}"><polygon points="${pts(kb.quad)}" fill="rgba(0,122,255,.08)" stroke="#007AFF" stroke-width=".06" stroke-dasharray=".2 .15"/></g>`;
+    if (kb.art === "eingang") { const [a, b2] = [kb.quad[0], kb.quad[1]], m = [(a[0] + b2[0]) / 2 + kb.aussen[0] * 1.1, (a[1] + b2[1]) / 2 + kb.aussen[1] * 1.1];
+      svg += `<text x="${m[0]}" y="${m[1]}" text-anchor="middle" dominant-baseline="middle" font-size="${k * .9}" font-weight="700" fill="#3A3A3C" stroke="#fff" stroke-width="${k * .2}" paint-order="stroke">Eingang</text>`; }
+  }
+  // Erdhaufen und Kästen
+  for (const b of beete.filter(b => b.kante === undefined)) {
+    if (b.art === "erdstreifen") svg += `<g data-beet="${b.id}"><path d="${kurve(b.p, false)}" fill="none" stroke="${bearbeiten ? "#007AFF" : "#3E2A18"}" stroke-width="${b.breite + .08}" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="${kurve(b.p, false)}" fill="none" stroke="#6B4A2E" stroke-width="${b.breite}" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="${kurve(b.p, false)}" fill="none" stroke="#86603E" stroke-width="${b.breite * .35}" stroke-linecap="round" stroke-linejoin="round"/>
+      ${b.warm ? `<path d="${kurve(b.p, false)}" fill="none" stroke="#FF9500" stroke-width="${b.breite + .3}" stroke-opacity=".5" stroke-dasharray=".3 .2"/>` : ""}</g>`;
+    else svg += `<g data-beet="${b.id}"><polyline points="${pts(b.linie)}" fill="none" stroke="${bearbeiten ? "#007AFF" : "#C9A06A"}" stroke-width="${b.breite + .14}" stroke-linecap="butt"/><polyline points="${pts(b.linie)}" fill="none" stroke="#5E4129" stroke-width="${b.breite}" stroke-linecap="butt"/></g>`;
+  }
+  // Häuschen (Pumpe) u. ä.
+  for (const e of daten.karte.elemente) svg += `<g data-element="${e.id}"><rect x="${e.x - e.w / 2}" y="${e.y - e.h / 2}" width="${e.w}" height="${e.h}" fill="#B8573F" stroke="${bearbeiten ? "#007AFF" : "#7A2A20"}" stroke-width=".1" rx=".05"/>
+    <path d="M${e.x - e.w / 2} ${e.y - e.h / 2} L${e.x + e.w / 2} ${e.y + e.h / 2} M${e.x + e.w / 2} ${e.y - e.h / 2} L${e.x - e.w / 2} ${e.y + e.h / 2}" stroke="#9E3A2E" stroke-width=".07"/></g>`;
+  // Pflanzen
+  for (const s of segmente) {
+    const { p, b, pf } = s, f = FARBE[pf.fam] || "#8BC34A", { teil } = segmentPunkte(b, p);
+    svg += `<g data-pflanzung="${p.id}"><polyline points="${pts(teil)}" fill="none" stroke="${f}" stroke-opacity=".35" stroke-width="${b.breite * .92}" stroke-linecap="butt" stroke-linejoin="round"/>`;
+    const { liste, rad } = pflanzenPunkte(b, p, pf);
+    for (const [x, y] of liste) svg += `<circle cx="${x}" cy="${y}" r="${rad}" fill="${f}" stroke="#fff" stroke-width="${rad * .2}"/>` +
+      (rad >= .14 ? `<path d="M${x} ${y + rad * .45} v${-rad * .8} m0 ${rad * .3} q${-rad * .45} ${-rad * .05} ${-rad * .5} ${-rad * .5} m${rad * .5} ${rad * .2} q${rad * .45} ${-rad * .05} ${rad * .5} ${-rad * .5}" stroke="#fff" stroke-width="${rad * .14}" fill="none" stroke-linecap="round"/>` : "");
+    if (s.nr && !ueberblick) { const [nx, ny] = punktBei(b.linie, p.start / 100 + .25), r0 = Math.max(.22, k * .45);
+      svg += `<circle cx="${nx}" cy="${ny}" r="${r0}" fill="#fff" stroke="${f}" stroke-width="${r0 * .22}" data-nr="${s.nr}"/><text x="${nx}" y="${ny + r0 * .05}" text-anchor="middle" dominant-baseline="middle" font-size="${r0 * 1.1}" font-weight="800" fill="#1C1C1E">${s.nr}</text>`; }
     svg += `</g>`;
   }
-  // Himmelsrichtung: Pfeil zur Sonnenseite, in die Ecke gesetzt (überdeckt nichts)
-  const su = ber.sued || "unten", ex = su === "links" ? -rand + 6 : ber.w + rand - 6, ey = su === "oben" ? -rand + 20 : ber.h + rand + 12;
-  svg += `<text x="${ex}" y="${ey}" text-anchor="${su === "links" ? "start" : "end"}" font-size="16" font-weight="700" fill="#C77700">${{ unten: "↓", oben: "↑", links: "←", rechts: "→" }[su]} Süden (Sonne)</text>`;
+  if (ueberblick) for (const s of sichtbar) { const r0 = k * .55;
+    svg += `<circle cx="${s.mx}" cy="${s.my}" r="${r0}" fill="#fff" stroke="#1C1C1E" stroke-width="${r0 * .2}" data-nr="${s.nr}" data-beet="${s.b.id}"/><text x="${s.mx}" y="${s.my + r0 * .05}" text-anchor="middle" dominant-baseline="middle" font-size="${r0 * 1.15}" font-weight="800" fill="#1C1C1E" pointer-events="none">${s.nr}</text>`; }
+  // Beschriftungen mit Pfeil: Gewächshaus, Erdhaufen, Pumpe
+  const belegt = [];
+  const schild = (x, y, zx, zy, text, farbe) => {
+    const fs = k * 1.05, breite = text.length * fs * 0.55;
+    // nicht auf ein anderes Schild setzen: so lange nach unten rücken, bis frei
+    for (let n = 0; n < 6 && belegt.some(([bx, by, bw]) => Math.abs(bx - x) < (bw + breite) / 2 && Math.abs(by - y) < fs * 1.3); n++) y += fs * 1.4;
+    belegt.push([x, y, breite]);
+    return `<line x1="${x}" y1="${y}" x2="${zx}" y2="${zy}" stroke="#3A3A3C" stroke-width="${k * .08}"/><circle cx="${zx}" cy="${zy}" r="${k * .17}" fill="#3A3A3C"/>
+      <text x="${x}" y="${y - fs * .3}" text-anchor="middle" font-size="${fs}" font-weight="800" fill="${farbe || "#1C1C1E"}" stroke="#fff" stroke-width="${fs * .22}" paint-order="stroke" stroke-linejoin="round">${esc(text)}</text>`;
+  };
+  const ghOben = gh.reduce((a, q) => q[1] < a[1] ? q : a, gh[0]);
+  let beschriftung = schild(ghOben[0], ghOben[1] - k * 2.2, ghOben[0], ghOben[1] - .2, GH_NAME);
+  for (const b of beete.filter(b => b.kante === undefined)) {
+    // Schild am südlichen Ende (unten) – dort ist Platz, oben steht das Gewächshaus
+    const sued = b.linie[0][1] > b.linie[b.linie.length - 1][1] ? b.linie[0] : b.linie[b.linie.length - 1];
+    beschriftung += schild(sued[0], sued[1] + k * 2.6, sued[0], sued[1] + b.breite / 2, b.name, b.warm ? "#C77700" : "#3E2A18");
+  }
+  for (const e of daten.karte.elemente) beschriftung += schild(e.x, e.y - e.h / 2 - k * 1.8, e.x, e.y - e.h / 2, e.name, "#7A2A20");
+  // Hochbeet-Namen klein außen am Zaun
+  for (const kb of kanten.filter(kb => kb.art === "hochbeet")) {
+    const [a, b2] = [kb.quad[0], kb.quad[1]], mx = (a[0] + b2[0]) / 2 + kb.aussen[0] * k * .75, my = (a[1] + b2[1]) / 2 + kb.aussen[1] * k * .75;
+    let w = Math.atan2(b2[1] - a[1], b2[0] - a[0]) * 180 / Math.PI; if (w > 90) w -= 180; if (w < -90) w += 180;
+    if (abst(a, b2) > 1.2) beschriftung += `<text x="${mx}" y="${my}" transform="rotate(${w} ${mx} ${my})" text-anchor="middle" dominant-baseline="middle" font-size="${k * .62}" font-weight="700" fill="#2C2C2E" stroke="#fff" stroke-width="${k * .15}" paint-order="stroke">${esc(kb.name)}${kb.warm ? " · Wärme" : ""}</text>`;
+  }
+  svg += beschriftung;
+  // Bearbeiten: Anfasser für die Punkte der Erdhaufen/Kästen
+  if (bearbeiten) for (const b of daten.karte.beete) b.p.forEach(([x, y], i) => { svg += `<circle cx="${x}" cy="${y}" r="${k * .45}" fill="#fff" stroke="#007AFF" stroke-width="${k * .14}" data-punkt="${b.id}:${i}"/>`; });
+  svg += `<text x="${box.x + box.w - k}" y="${box.y + box.h - k * .8}" text-anchor="end" font-size="${k * .8}" font-weight="700" fill="#C77700" stroke="#fff" stroke-width="${k * .15}" paint-order="stroke">↓ Süden (Sonne) · ↑ Norden</text>`;
   svg += `</svg>`;
+  return { svg, segmente, sichtbar, box, beete, ueberblick };
+}
+function zeichnePlan() {
+  if (!gelaende) { $("inhalt").innerHTML = `<div class="karte"><p class="klein">Grundriss wird geladen …</p></div>`; gelaendeLaden().then(zeichnePlan); return; }
+  const { svg, segmente, sichtbar, box, ueberblick } = karteBauen();
 
+  const beetKarte = s => {
+    const b = s.b, ps = segmente.filter(x => x.b.id === b.id), tags = [];
+    if (b.wasser) tags.push(["Tropfbewässerung", "#007AFF"]);
+    if (b.warm) tags.push(["Wärme-Ecke", "#FF9500"]);
+    else if (ps.some(x => WAERME[x.pf.id])) tags.push(["Wärme-Ecke fehlt", "#FF9500"]);
+    return `<div class="schild" data-a="beet" data-w="${b.id}" data-nr="${s.nr}">
+      <span class="nr" style="border-color:#1C1C1E">${s.nr}</span>
+      <div><b>${esc(b.name)}</b>
+        <div class="pflanzen-liste">${ps.map(x => `<span><i class="punkt" style="background:${FARBE[x.pf.fam]}"></i>${esc(x.pf.name)} ${x.p.anzahl}×</span>`).join("")}</div>
+        ${tags.length ? `<div class="tags">${tags.map(([t, c]) => `<span style="background:${c}1A;color:${c}">${esc(t)}</span>`).join("")}</div>` : ""}</div></div>`;
+  };
   const karte = s => {
-    const { pf, p, b } = s, m = monat(), tags = [];
+    if (s.beetKarte) return beetKarte(s);
+    const { pf, p, b } = s, m = monat(), tags = [], dach = b.bereich === "gh";
     if (pf.wasser === 3) tags.push(["viel Wasser", "#007AFF"]);
-    if (WAERME[pf.id] && dach && !b.warm) tags.push(["braucht Wärme", "#FF9500"]);
+    if (WAERME[pf.id] && !b.warm) tags.push(["braucht Wärme", "#FF9500"]);
     if (pf.ernte.includes(m)) tags.push(["Erntezeit", "#C77700"]);
     if ((dach ? pf.ghm : pf.draussen).includes(m)) tags.push(["jetzt pflanzen", "#34A853"]);
-    const nb = segmente.filter(x => x.b === b && x !== s && Math.abs(x.p.start - p.start) <= Math.max(x.p.laenge, p.laenge) + 5);
+    const nb = segmente.filter(x => x.b.id === b.id && x !== s && Math.abs(x.p.start - p.start) <= Math.max(x.p.laenge, p.laenge) + 5);
     const schlecht = nb.filter(x => nachbarn(pf.id, x.pf.id) < 0).map(x => x.pf.name), gut = nb.filter(x => nachbarn(pf.id, x.pf.id) > 0).map(x => x.pf.name);
     if (schlecht.length) tags.push(["schlecht neben " + schlecht.join(", "), "#FF3B30"]);
     else if (gut.length) tags.push(["gut mit " + gut.join(", "), "#34A853"]);
@@ -592,16 +817,15 @@ function zeichnePlan() {
         <div class="klein">${esc(b.name)} · ${pf.reihe}×${pf.abstand} cm · ${pf.hoehe >= 100 ? "hoch" : pf.hoehe >= 50 ? "mittel" : "niedrig"}</div>
         ${tags.length ? `<div class="tags">${tags.map(([t, c]) => `<span style="background:${c}1A;color:${c}">${esc(t)}</span>`).join("")}</div>` : ""}</div></div>`;
   };
-  const links = segmente.filter(s => s.links).sort((a, b) => a.my - b.my), rechts = segmente.filter(s => !s.links).sort((a, b) => a.my - b.my);
-  // Wärme-Hinweis: Paprika & Co. unter dem offenen Dach ohne Windschutz
-  const warmFehlt = dach ? [...new Set(segmente.filter(s => WAERME[s.pf.id] >= 1 && !s.b.warm).map(s => s.pf.name))] : [];
-  const leer = !segmente.length;
+  const links = sichtbar.filter(s => s.links).sort((a, b) => a.my - b.my), rechts = sichtbar.filter(s => !s.links).sort((a, b) => a.my - b.my);
+  const warmFehlt = [...new Set(segmente.filter(s => s.b.bereich === "gh" && WAERME[s.pf.id] >= 1 && !s.b.warm).map(s => s.pf.name))];
+  const leer = !sichtbar.length;
   $("inhalt").innerHTML = `
     <div class="karte">
       <div class="zeile" style="margin-bottom:10px">
-        <div class="segment">${daten.bereiche.map(b => `<button data-a="bereich" data-w="${b.id}" class="${b.id === bereichWahl ? "an" : ""}">${esc(b.name)}</button>`).join("")}</div>
+        <div class="segment">${[["alles", "Ganzer Garten"], ["gewaechshaus", "Gewächshaus"], ["beete", "Erdhaufen"]].map(([w, t]) => `<button data-a="ansicht" data-w="${w}" class="${w === ansichtWahl ? "an" : ""}">${t}</button>`).join("")}</div>
         <span class="luecke"></span>
-        ${bearbeiten ? `<button class="knopf klein-k" data-a="beet-neu">${ic("plus")} Beet / Element</button><button class="knopf klein-k" data-a="bereich-mass">Größe & Süden</button>` : ""}
+        ${bearbeiten ? `<button class="knopf klein-k" data-a="neu-erdhaufen">${ic("plus")} Erdhaufen</button><button class="knopf klein-k" data-a="neu-kasten">${ic("plus")} Kasten</button><button class="knopf klein-k" data-a="neu-haus">${ic("plus")} Häuschen</button><button class="knopf klein-k" data-a="gh-tiefe">Hochbeet-Tiefe</button>` : ""}
         <button class="knopf klein-k ${bearbeiten ? "blau" : ""}" data-a="bearbeiten">${ic("stift")} ${bearbeiten ? "Fertig" : "Beete ändern"}</button>
       </div>
       <div class="planlayout ${leer || bearbeiten ? "ohne" : ""}" id="planlayout">
@@ -610,8 +834,8 @@ function zeichnePlan() {
         <div class="spalte">${leer || bearbeiten ? "" : rechts.map(karte).join("")}</div>
         <svg class="linien" id="linien"></svg>
       </div>
-      <p class="klein">${bearbeiten ? "Beet, Tisch oder Eingang ziehen = verschieben (10-cm-Schritte), blauer Punkt = Größe ändern, antippen = Name, Maße, Art, Wärme-Ecke." :
-        leer ? "Noch nichts geplant – unter „Pflanzen“ auswählen und „Pflanzplan erstellen“ tippen." : "Jeder Punkt ist eine Pflanze. Kärtchen oder Pflanzen antippen = Infos, Anzahl ändern, verschieben."}</p>
+      <p class="klein">${bearbeiten ? "Hochbeet-Seite im Gewächshaus antippen = Hochbeet / Eingang / Arbeitstisch / frei, Name, Wärme-Ecke. Erdhaufen: weiße Punkte ziehen = Form ändern, Haufen ziehen = verschieben, antippen = Name & Breite. Häuschen ziehen = verschieben. Die Form des Gewächshauses kommt aus dem Grundriss (dort änderbar)." :
+        leer ? "Noch nichts geplant – unter „Pflanzen“ auswählen und „Pflanzplan erstellen“ tippen." : ueberblick ? "Für die einzelnen Pflanzen oben „Gewächshaus“ oder „Erdhaufen“ antippen – dann gibt es zu jeder Pflanze ein Kärtchen." : "Jeder Punkt ist eine Pflanze. Kärtchen oder Pflanzen antippen = Infos, Anzahl ändern, verschieben."}</p>
     </div>
     ${warmFehlt.length ? `<div class="karte tipp-waerme"><h2>${ic("sonne", "#FF9500")} Tipp: eine Wärme-Ecke bauen</h2>
       <p>${esc(warmFehlt.join(", "))} ${warmFehlt.length > 1 ? "mögen" : "mag"} es wärmer, als es unter dem offenen Dach ist. Mit wenig Aufwand wird eine Ecke 3–6 °C wärmer:</p>
@@ -635,48 +859,51 @@ function linienZeichnen() {
   if (getComputedStyle(lay).gridTemplateColumns.split(" ").length < 3) return;
   let html = "";
   lay.querySelectorAll(".schild").forEach(k => {
-    const g = svg.querySelector(`[data-pflanzung="${k.dataset.w}"] circle:last-of-type`) || svg.querySelector(`[data-pflanzung="${k.dataset.w}"]`);
+    const g = svg.querySelector(`circle[data-nr="${k.dataset.nr}"]`);
     if (!g) return;
     const kr = k.getBoundingClientRect(), gr = g.getBoundingClientRect();
     const links = kr.right <= pb.left + 2;
     const ax = (links ? kr.right : kr.left) - box.left, ay = kr.top + kr.height / 2 - box.top;
     const zx = gr.left + gr.width / 2 - box.left, zy = gr.top + gr.height / 2 - box.top;
     const kx = (links ? pb.left + 8 : pb.right - 8) - box.left;
-    html += `<polyline points="${ax},${ay} ${kx},${ay} ${zx},${zy}" fill="none" stroke="rgba(60,60,67,.55)" stroke-width="1.5"/><circle cx="${zx}" cy="${zy}" r="3" fill="#3A3A3C"/>`;
+    html += `<polyline points="${ax},${ay} ${kx},${ay} ${zx},${zy}" fill="none" stroke="rgba(60,60,67,.6)" stroke-width="1.5"/>`;
   });
   lin.innerHTML = html;
 }
 window.addEventListener("resize", () => { if (reiter === "plan") requestAnimationFrame(linienZeichnen); });
 
-// Beete verschieben / Größe ändern (Bearbeiten-Modus), Pflanzung/Beet antippen
+// Bearbeiten: Punkte/Erdhaufen/Häuschen ziehen; Antippen = Infos bzw. Einstellungen
 function planGesten() {
   const svg = $("plansvg"); if (!svg) return;
-  let zug = null;
+  let zug = null, raf = 0;
   const punkt = ev => { const p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY; return p.matrixTransform(svg.getScreenCTM().inverse()); };
   svg.addEventListener("pointerdown", ev => {
-    const griff = ev.target.closest("[data-griff]"), g = ev.target.closest("[data-beet]"), pfl = ev.target.closest("[data-pflanzung]");
-    const p = punkt(ev);
-    zug = { sx: ev.clientX, sy: ev.clientY, p, griff: griff && griff.dataset.griff, beet: g && g.dataset.beet, pfl: pfl && pfl.dataset.pflanzung, bewegt: false };
-    if (bearbeiten && (zug.griff || zug.beet)) { const b = beet(zug.griff || zug.beet); zug.start = { ...b }; svg.setPointerCapture(ev.pointerId); ev.preventDefault(); }
+    const pk = ev.target.closest("[data-punkt]"), g = ev.target.closest("[data-beet]"), el = ev.target.closest("[data-element]"), pfl = ev.target.closest("[data-pflanzung]");
+    zug = { sx: ev.clientX, sy: ev.clientY, p: punkt(ev), punkt: pk && pk.dataset.punkt, beet: g && g.dataset.beet, element: el && el.dataset.element, pfl: pfl && pfl.dataset.pflanzung, bewegt: false };
+    if (bearbeiten) {
+      if (zug.punkt) { const [id, i] = zug.punkt.split(":"); zug.ziel = daten.karte.beete.find(b => b.id === id); zug.i = +i; zug.start = zug.ziel.p.map(q => q.slice()); }
+      else if (zug.element) { zug.ziel = daten.karte.elemente.find(e => e.id === zug.element); zug.start = [zug.ziel.x, zug.ziel.y]; }
+      else if (zug.beet && daten.karte.beete.some(b => b.id === zug.beet)) { zug.ziel = daten.karte.beete.find(b => b.id === zug.beet); zug.start = zug.ziel.p.map(q => q.slice()); }
+      if (zug.ziel) { svg.setPointerCapture(ev.pointerId); ev.preventDefault(); }
+    }
   });
   svg.addEventListener("pointermove", ev => {
-    if (!zug || !bearbeiten || !zug.start) return;
+    if (!zug || !zug.ziel) return;
     if (Math.hypot(ev.clientX - zug.sx, ev.clientY - zug.sy) > 6) zug.bewegt = true;
     if (!zug.bewegt) return;
-    const p = punkt(ev), dx = Math.round((p.x - zug.p.x) / 10) * 10, dy = Math.round((p.y - zug.p.y) / 10) * 10;
-    const b = beet(zug.griff || zug.beet), ber = bereich(b.bereich);
-    if (zug.griff) { b.w = Math.max(20, zug.start.w + dx); b.h = Math.max(20, zug.start.h + dy); }
-    else { b.x = Math.max(0, Math.min(ber.w - b.w, zug.start.x + dx)); b.y = Math.max(0, Math.min(ber.h - b.h, zug.start.y + dy)); }
-    const gr = svg.querySelector(`[data-beet="${b.id}"]`);
-    if (gr) { const r = gr.querySelector("rect"); r.setAttribute("x", b.x); r.setAttribute("y", b.y); r.setAttribute("width", b.w); r.setAttribute("height", b.h); }
+    const p = punkt(ev), dx = Math.round((p.x - zug.p.x) * 10) / 10, dy = Math.round((p.y - zug.p.y) * 10) / 10;
+    if (zug.element) { zug.ziel.x = Math.round((zug.start[0] + dx) * 10) / 10; zug.ziel.y = Math.round((zug.start[1] + dy) * 10) / 10; }
+    else if (zug.punkt) zug.ziel.p[zug.i] = [Math.round((zug.start[zug.i][0] + dx) * 10) / 10, Math.round((zug.start[zug.i][1] + dy) * 10) / 10];
+    else zug.ziel.p = zug.start.map(([x, y]) => [Math.round((x + dx) * 10) / 10, Math.round((y + dy) * 10) / 10]);
+    if (!raf) raf = requestAnimationFrame(() => { raf = 0; const vb = svg.viewBox.baseVal, neu = karteBauen({ x: vb.x, y: vb.y, w: vb.width, h: vb.height }).svg; svg.innerHTML = neu.replace(/^<svg[^>]*>/, "").replace(/<\/svg>$/, ""); });
   });
   const ende = ev => {
     if (!zug) return;
     const z = zug; zug = null;
-    if (z.bewegt && bearbeiten) { geaendert(); zeichnePlan(); return; }
-    if (Math.hypot(ev.clientX - z.sx, ev.clientY - z.sy) > 10) return;
-    if (!tippErlaubt()) return;
-    if (bearbeiten && z.beet) beetBearbeiten(z.beet);
+    if (z.bewegt && z.ziel) { geaendert(); zeichnePlan(); return; }
+    if (Math.hypot(ev.clientX - z.sx, ev.clientY - z.sy) > 10 || !tippErlaubt()) return;
+    if (bearbeiten && z.element) elementBearbeiten(z.element);
+    else if (bearbeiten && z.beet) beetBearbeiten(z.beet);
     else if (z.pfl) pflanzungZeigen(z.pfl);
     else if (z.beet) beetZeigen(z.beet);
   };
@@ -735,15 +962,15 @@ function zeichneHeute() {
         "Unter dem Dach ist es genauso kalt wie draußen – Wintersalate vertragen das, frisch Gepflanztes mit Vlies abdecken.")]);
   }
   // Unter dem Dach: kein Regen → immer selbst gießen (Tropfbewässerung)
-  if (daten.beete.some(b => b.bereich === "gh")) {
-    const tropf = daten.beete.some(b => b.bereich === "gh" && b.wasser);
+  if (alleBeete().some(b => b.bereich === "gh" && b.art === "hochbeet")) {
+    const tropf = alleBeete().some(b => b.bereich === "gh" && b.art === "hochbeet" && b.wasser);
     const takt = tmax >= 28 ? "1× täglich morgens ca. 20 Minuten, an heißen Nachmittagen nochmal 10 Minuten" : tmax >= 20 ? "1× täglich morgens ca. 15 Minuten" : tmax >= 12 ? "alle 2 Tage morgens ca. 10–15 Minuten" : "nur alle 3–5 Tage, wenn die Erde 3 cm tief trocken ist";
     aufgaben.push(["tropfen", "#007AFF", "Gießen unter dem Dach", "Dort kommt kein Regen an. " + (tropf ? `Tropfbewässerung ${takt}. ` : `${takt.replace("Minuten", "Minuten gießen")}. `) +
       "Fingerprobe: 3 cm tief muss die Erde feucht sein. Faustregel: Tomate/Gurke im Sommer 2–3 l pro Pflanze und Tag." + (tropf ? " (Laufzeiten an euren Tropfschlauch anpassen.)" : "")]);
     if (tmax >= 30) aufgaben.push(["sonne", "#FF9500", "Hitze unter der Folie", "Unter dem Dach staut sich die Wärme – morgens gründlich gießen, Erde mulchen (Holzhäcksel/Rasenschnitt)."]);
   }
   // Draußen gießen
-  if (draussen.length || daten.beete.some(b => b.bereich !== "gh")) {
+  if (draussen.length || alleBeete().some(b => b.bereich !== "gh")) {
     if (regen2 >= 5) aufgaben.push(["tropfen", "#8E8E93", "Draußen nicht gießen", `In den nächsten 2 Tagen kommen ca. ${Math.round(regen2)} mm Regen.`]);
     else if (tmax >= 25) aufgaben.push(["tropfen", "#007AFF", "Erdstreifen kräftig gießen", "Früh morgens ca. 15–20 l pro Meter Erdstreifen, lieber selten und durchdringend als täglich ein bisschen. Danach mulchen (Rasenschnitt) hält die Feuchte."]);
     else if (tmax >= 15) aufgaben.push(["tropfen", "#007AFF", "Erdstreifen gießen, wenn trocken", "Alle 2–3 Tage ca. 10 l pro Meter, Keimlinge und frische Saat täglich mit feiner Brause."]);
@@ -872,40 +1099,38 @@ function pflanzungZeigen(id) {
       ${nb.map(x => `Neben ${esc(anzeigeName(x.pflanze))}: ${nachbarn(p.pflanze, x.pflanze) > 0 ? "gute Nachbarn" : nachbarn(p.pflanze, x.pflanze) < 0 ? "<b style='color:#FF3B30'>schlechte Nachbarn</b>" : "neutral"}.`).join(" ")}</p>
     <p><b>Dünger:</b> ${esc(pf.duenger)}<br><b>Tipp:</b> ${esc(pf.tipp)}</p>
     <label class="f">Anzahl</label><input type="number" id="pl-anzahl" min="1" value="${p.anzahl}">
-    <label class="f">Beet</label><select id="pl-beet">${daten.beete.map(x => `<option value="${x.id}" ${x.id === p.beet ? "selected" : ""}>${esc(bereich(x.bereich).name)} – ${esc(x.name)}</option>`).join("")}</select>
+    <label class="f">Beet</label><select id="pl-beet">${alleBeete().filter(x => PFLANZBAR.includes(x.art)).map(x => `<option value="${x.id}" ${x.id === p.beet ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
     <div class="zeile" style="margin-top:14px"><button class="knopf rot" data-a="pl-weg" data-w="${p.id}">Entfernen</button><span class="luecke"></span>
       <button class="knopf" data-a="zu">Abbrechen</button><button class="knopf voll" data-a="pl-ok" data-w="${p.id}">Übernehmen</button></div>`);
 }
 function beetZeigen(id) {
-  const b = beet(id), ps = daten.pflanzungen.filter(p => p.beet === id);
-  blatt(`<h3>${esc(b.name)}</h3><p class="klein">${b.w} × ${b.h} cm · ${{ hochbeet: "Hochbeet", erdstreifen: "Erdstreifen", kasten: "Kasten/Kübel" }[b.art] || b.art}${b.wasser ? " · mit Tropfbewässerung" : ""}</p>
+  const b = beet(id); if (!b) return;
+  const ps = daten.pflanzungen.filter(p => p.beet === id);
+  blatt(`<h3>${esc(b.name)}</h3><p class="klein">${bereichName(b)} · ${(lang(b) / 100).toFixed(1).replace(".", ",")} m lang, ${breit(b)} cm breit · ${{ hochbeet: "Hochbeet", erdstreifen: "Erdhaufen", kasten: "Kasten/Kübel" }[b.art] || b.art}${b.wasser ? " · mit Tropfbewässerung" : ""}${b.warm ? " · Wärme-Ecke" : ""}</p>
     ${ps.length ? `<p>${ps.map(p => `${esc(anzeigeName(p.pflanze))} ${p.anzahl}×`).join(", ")}</p>` : `<p class="klein">Noch leer.</p>`}
     ${daten.historie.filter(h => h.beet === id).length ? `<p class="klein">Früher: ${daten.historie.filter(h => h.beet === id).map(h => `${h.saison}: ${FAMILIE[h.fam] || ""}`).join(", ")}</p>` : ""}
     <div class="zeile"><button class="knopf voll" data-a="zu">Schließen</button></div>`);
 }
 function beetBearbeiten(id) {
-  const b = beet(id);
-  blatt(`<h3>Beet bearbeiten</h3>
+  const b = beet(id); if (!b) return;
+  const kante = b.kante !== undefined;
+  blatt(`<h3>${kante ? "Seite des Gewächshauses" : "Beet bearbeiten"}</h3>
+    ${kante ? `<label class="f">Was ist an dieser Seite?</label><select id="bt-art">${[["hochbeet", "Hochbeet"], ["eingang", "Eingang"], ["tisch", "Arbeitstisch"], ["frei", "nichts / frei"]].map(([v, t]) => `<option value="${v}" ${b.art === v ? "selected" : ""}>${t}</option>`).join("")}</select>` : ""}
     <label class="f">Name</label><input type="text" id="bt-name" value="${esc(b.name)}">
-    <div class="zwei"><div><label class="f">Breite (cm, waagrecht)</label><input type="number" id="bt-w" value="${b.w}"></div>
-      <div><label class="f">Länge (cm, senkrecht)</label><input type="number" id="bt-h" value="${b.h}"></div></div>
-    <div class="zwei"><div><label class="f">Position links (cm)</label><input type="number" id="bt-x" value="${b.x}"></div>
-      <div><label class="f">Position oben (cm)</label><input type="number" id="bt-y" value="${b.y}"></div></div>
-    <label class="f">Art</label><select id="bt-art">${[["hochbeet", "Hochbeet"], ["erdstreifen", "Erdstreifen"], ["kasten", "Kasten/Kübel"], ["tisch", "Tisch"], ["eingang", "Eingang"], ["haus", "Häuschen (z. B. Pumpe)"]].map(([v, t]) => `<option value="${v}" ${b.art === v ? "selected" : ""}>${t}</option>`).join("")}</select>
+    ${kante ? `<p class="klein">${(lang(b) / 100).toFixed(1).replace(".", ",")} m lang · Tiefe aller Hochbeete: ${breit(b)} cm (oben „Hochbeet-Tiefe“).</p>`
+      : `<label class="f">Breite (cm)</label><input type="number" id="bt-breite" value="${breit(b)}"><p class="klein">${(lang(b) / 100).toFixed(1).replace(".", ",")} m lang – Länge und Form: weiße Punkte auf dem Plan ziehen.</p>`}
     <label class="f"><input type="checkbox" id="bt-wasser" ${b.wasser ? "checked" : ""}> Tropfbewässerung vorhanden</label>
     <label class="f"><input type="checkbox" id="bt-warm" ${b.warm ? "checked" : ""}> Wärme-Ecke (Folie/Windschutz/Tunnel gebaut)</label>
-    <div class="zeile" style="margin-top:14px"><button class="knopf rot" data-a="bt-weg" data-w="${b.id}">Löschen</button><button class="knopf" data-a="bt-drehen" data-w="${b.id}">Drehen</button>
+    <div class="zeile" style="margin-top:14px">${kante ? "" : `<button class="knopf rot" data-a="bt-weg" data-w="${b.id}">Löschen</button><button class="knopf" data-a="bt-punkt" data-w="${b.id}">${ic("plus")} Punkt</button>`}
       <span class="luecke"></span><button class="knopf voll" data-a="bt-ok" data-w="${b.id}">Fertig</button></div>`);
 }
-function bereichMass() {
-  const ber = bereich(bereichWahl);
-  blatt(`<h3>${esc(ber.name)}: Größe & Himmelsrichtung</h3>
-    <div class="zwei"><div><label class="f">Breite (cm)</label><input type="number" id="br-w" value="${ber.w}"></div>
-      <div><label class="f">Länge (cm)</label><input type="number" id="br-h" value="${ber.h}"></div></div>
-    <label class="f">Wo ist Süden (Sonne) auf dem Plan?</label>
-    <select id="br-sued">${[["unten", "unten"], ["oben", "oben"], ["links", "links"], ["rechts", "rechts"]].map(([v, t]) => `<option value="${v}" ${ber.sued === v ? "selected" : ""}>${t}</option>`).join("")}</select>
-    <p class="klein">Hohe Pflanzen (Tomaten, Gurken, Stangenbohnen) kommen an die Nordseite, damit sie den niedrigen kein Licht wegnehmen.</p>
-    <div class="zeile"><span class="luecke"></span><button class="knopf voll" data-a="br-ok">Fertig</button></div>`);
+function elementBearbeiten(id) {
+  const e = daten.karte.elemente.find(e => e.id === id); if (!e) return;
+  blatt(`<h3>${esc(e.name)}</h3>
+    <label class="f">Name</label><input type="text" id="el-name" value="${esc(e.name)}">
+    <div class="zwei"><div><label class="f">Breite (cm)</label><input type="number" id="el-w" value="${Math.round(e.w * 100)}"></div>
+      <div><label class="f">Tiefe (cm)</label><input type="number" id="el-h" value="${Math.round(e.h * 100)}"></div></div>
+    <div class="zeile" style="margin-top:14px"><button class="knopf rot" data-a="el-weg" data-w="${e.id}">Löschen</button><span class="luecke"></span><button class="knopf voll" data-a="el-ok" data-w="${e.id}">Fertig</button></div>`);
 }
 
 // ================= Tippen (Monitor: Touch + Geister-Klick abfangen) =================
@@ -922,7 +1147,7 @@ async function aktion(a, w, el) {
   const zahlWert = id => { const v = parseInt($(id).value, 10); return isNaN(v) ? 0 : v; };
   switch (a) {
     case "reiter": reiter = w; bearbeiten = false; zeichnen(); $("inhalt").scrollTop = 0; break;
-    case "bereich": bereichWahl = w; zeichnePlan(); break;
+    case "ansicht": ansichtWahl = w; zeichnePlan(); break;
     case "bearbeiten": bearbeiten = !bearbeiten; zeichnePlan(); break;
     case "filter": filter = w; zeichnePflanzen(); break;
     case "plus": daten.wunsch[w] = (daten.wunsch[w] || 0) ? daten.wunsch[w] + 1 : vorschlag(PF[w]); geaendert(); zeichnePflanzen(); break;
@@ -933,29 +1158,53 @@ async function aktion(a, w, el) {
       break;
     case "plan-erstellen": planErstellen(); break;
     case "pflanzung": pflanzungZeigen(w); break;
+    case "beet": ansichtWahl = beet(w)?.bereich === "gh" ? "gewaechshaus" : "beete"; zeichnePlan(); break;
     case "zu": blattZu(); break;
-    case "beet-neu": {
-      const ber = bereich(bereichWahl), id = "b" + Date.now().toString(36);
-      daten.beete.push({ id, bereich: ber.id, name: "Neues Beet", art: ber.id === "gh" ? "hochbeet" : "erdstreifen", x: 20, y: 20, w: 60, h: 200, wasser: false });
+    case "neu-erdhaufen": case "neu-kasten": {
+      const vb = $("plansvg").viewBox.baseVal, cx = Math.round((vb.x + vb.width / 2) * 10) / 10, cy = Math.round((vb.y + vb.height / 2) * 10) / 10, id = "b" + Date.now().toString(36);
+      daten.karte.beete.push(a === "neu-kasten" ? { id, name: "Kasten", art: "kasten", breite: 0.6, wasser: false, p: [[cx - 0.5, cy], [cx + 0.5, cy]] }
+        : { id, name: "Neuer Erdhaufen", art: "erdstreifen", breite: 0.6, wasser: false, p: [[cx - 2, cy - 1], [cx, cy], [cx + 2, cy + 1]] });
       geaendert(); zeichnePlan(); beetBearbeiten(id); break;
     }
-    case "bereich-mass": bereichMass(); break;
-    case "br-ok": {
-      const ber = bereich(bereichWahl);
-      ber.w = Math.max(100, zahlWert("br-w")); ber.h = Math.max(100, zahlWert("br-h")); ber.sued = $("br-sued").value;
-      geaendert(); blattZu(); zeichnePlan(); break;
+    case "neu-haus": {
+      const vb = $("plansvg").viewBox.baseVal, id = "e" + Date.now().toString(36);
+      daten.karte.elemente.push({ id, name: "Häuschen", art: "haus", x: Math.round((vb.x + vb.width / 2) * 10) / 10, y: Math.round((vb.y + vb.height / 2) * 10) / 10, w: 1.5, h: 1.5 });
+      geaendert(); zeichnePlan(); elementBearbeiten(id); break;
     }
+    case "gh-tiefe": blatt(`<h3>Hochbeete im Gewächshaus</h3><label class="f">Tiefe der Hochbeete (cm, von der Wand nach innen)</label>
+      <input type="number" id="gh-t" value="${Math.round((daten.karte.ghTiefe || 0.8) * 100)}"><div class="zeile" style="margin-top:12px"><span class="luecke"></span><button class="knopf voll" data-a="gh-tiefe-ok">Fertig</button></div>`); break;
+    case "gh-tiefe-ok": daten.karte.ghTiefe = Math.max(0.3, Math.min(2, zahlWert("gh-t") / 100)); geaendert(); blattZu(); zeichnePlan(); break;
     case "bt-ok": {
-      const b = beet(w);
-      b.name = $("bt-name").value.trim() || b.name; b.w = Math.max(20, zahlWert("bt-w")); b.h = Math.max(20, zahlWert("bt-h"));
-      b.x = Math.max(0, zahlWert("bt-x")); b.y = Math.max(0, zahlWert("bt-y")); b.art = $("bt-art").value; b.wasser = $("bt-wasser").checked; b.warm = $("bt-warm").checked;
+      const b = beet(w); if (!b) return;
+      const name = $("bt-name").value.trim(), wasser = $("bt-wasser").checked, warm = $("bt-warm").checked;
+      if (b.kante !== undefined) {
+        const art = $("bt-art").value, alt = daten.karte.kanten[b.kante] || {};
+        daten.karte.kanten[b.kante] = { art, wasser, warm, name: name && name !== b.name ? name : alt.art === art ? alt.name : undefined };
+        if (art !== "hochbeet") daten.pflanzungen = daten.pflanzungen.filter(p => p.beet !== b.id);
+      } else {
+        const z = daten.karte.beete.find(x => x.id === w);
+        z.name = name || z.name; z.wasser = wasser; z.warm = warm; z.breite = Math.max(0.2, Math.min(3, zahlWert("bt-breite") / 100));
+      }
       geaendert(); blattZu(); zeichnePlan(); break;
     }
-    case "bt-drehen": { const b = beet(w); [b.w, b.h] = [b.h, b.w]; geaendert(); blattZu(); zeichnePlan(); break; }
+    case "bt-punkt": {
+      const z = daten.karte.beete.find(x => x.id === w), l = z.p, a2 = l[l.length - 2], b2 = l[l.length - 1];
+      l.push([Math.round((2 * b2[0] - a2[0]) * 10) / 10, Math.round((2 * b2[1] - a2[1]) * 10) / 10]);
+      geaendert(); blattZu(); zeichnePlan(); break;
+    }
     case "bt-weg": {
       if (el.dataset.scharf !== "1") { el.dataset.scharf = "1"; el.textContent = "Wirklich löschen?"; return; }
-      daten.beete = daten.beete.filter(b => b.id !== w); daten.pflanzungen = daten.pflanzungen.filter(p => p.beet !== w);
+      daten.karte.beete = daten.karte.beete.filter(b => b.id !== w); daten.pflanzungen = daten.pflanzungen.filter(p => p.beet !== w);
       geaendert(); blattZu(); zeichnePlan(); break;
+    }
+    case "el-ok": {
+      const e = daten.karte.elemente.find(e => e.id === w);
+      e.name = $("el-name").value.trim() || e.name; e.w = Math.max(0.3, zahlWert("el-w") / 100); e.h = Math.max(0.3, zahlWert("el-h") / 100);
+      geaendert(); blattZu(); zeichnePlan(); break;
+    }
+    case "el-weg": {
+      if (el.dataset.scharf !== "1") { el.dataset.scharf = "1"; el.textContent = "Wirklich löschen?"; return; }
+      daten.karte.elemente = daten.karte.elemente.filter(e => e.id !== w); geaendert(); blattZu(); zeichnePlan(); break;
     }
     case "pl-ok": {
       const p = daten.pflanzungen.find(x => x.id === w), pf = PF[p.pflanze];
@@ -965,7 +1214,6 @@ async function aktion(a, w, el) {
         p.beet = neuBeet; p.start = ziel.reduce((s, x) => Math.max(s, x.start + x.laenge), 0);
       }
       p.anzahl = anzahl; p.laenge = bedarf(pf, anzahl, beet(p.beet));
-      bereichWahl = beet(p.beet).bereich;
       geaendert(); blattZu(); zeichnePlan();
       if (p.start + p.laenge > lang(beet(p.beet))) meldung("Achtung: passt nicht ganz ins Beet – Anzahl verringern oder anderes Beet wählen", 5000);
       break;
@@ -989,7 +1237,7 @@ async function aktion(a, w, el) {
       el.innerHTML = `<span class="warten"></span> Claude schaut …`; el.disabled = true; $("foto-antwort").textContent = "";
       try {
         const a = await kiFragen({ art: "foto", frage, pflanze: p ? anzeigeName(p.pflanze) : "", beet: p ? beet(p.beet)?.name : "",
-          bereich: p ? bereich(beet(p.beet).bereich).name : "", wetter: wetterText(), datum: new Date().toLocaleDateString("de-DE") }, fotoDaten.b64);
+          bereich: p ? bereichName(beet(p.beet)) : "", wetter: wetterText(), datum: new Date().toLocaleDateString("de-DE") }, fotoDaten.b64);
         $("foto-antwort").textContent = a.ok ? a.text : "Hat nicht geklappt: " + (a.fehler || "unbekannt");
         if (a.ok) {
           daten.fotos.push({ datum: new Date().toLocaleDateString("de-DE"), pflanze: p ? anzeigeName(p.pflanze) : "", beet: p ? beet(p.beet)?.name : "", frage, text: a.text, bild: fotoDaten.klein });

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Gartenplan speichern (Aufruf aus script.garten_speichern).
 
-Argumente: Base64 des JSON {version, bereiche, beete, pflanzungen, wunsch, historie, fotos}, in
+Argumente: Base64 des JSON {version, karte, pflanzungen, wunsch, historie, fotos}, in
 Stücke geteilt (lange Texte passen nicht in ein einzelnes Argument) – hier wieder zusammengesetzt.
 Schreibt /config/www/garten_daten.json (bleibt lokal, nicht im öffentlichen Repository);
 die vorherige Fassung bleibt als garten_daten.vorher.json erhalten.
@@ -17,7 +17,7 @@ ZIEL = "/config/www/garten_daten.json"
 
 def main():
     daten = json.loads(base64.b64decode("".join(sys.argv[1:])).decode("utf-8"))
-    if not (isinstance(daten, dict) and isinstance(daten.get("beete"), list) and isinstance(daten.get("bereiche"), list)):
+    if not (isinstance(daten, dict) and isinstance(daten.get("karte"), dict) and isinstance(daten["karte"].get("beete"), list)):
         raise ValueError("unerwartetes Format")
     os.makedirs(os.path.dirname(ZIEL), exist_ok=True)
     if os.path.exists(ZIEL):
@@ -26,7 +26,7 @@ def main():
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(daten, f, ensure_ascii=False)
     os.replace(tmp, ZIEL)
-    print(f"ok · {len(daten['beete'])} Beete, {len(daten.get('pflanzungen', []))} Pflanzungen")
+    print(f"ok · {len(daten['karte']['beete'])} Beete, {len(daten.get('pflanzungen', []))} Pflanzungen")
 
 
 if __name__ == "__main__":

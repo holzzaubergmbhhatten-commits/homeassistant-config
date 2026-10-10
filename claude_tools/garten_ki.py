@@ -48,8 +48,8 @@ def plan_aus_datei():
             d = json.load(f)
     except (OSError, ValueError):
         return ""
-    beete = {b["id"]: b.get("name", "") for b in d.get("beete", [])}
-    return "; ".join(f"{beete.get(p.get('beet'), '')}: {p.get('pflanze', '')} {p.get('anzahl', '')}×"
+    beete = {b["id"]: b.get("name", "") for b in (d.get("karte") or {}).get("beete", [])}
+    return "; ".join(f"{beete.get(p.get('beet'), 'Hochbeet im Gewächshaus' if str(p.get('beet', '')).startswith('gh-') else '')}: {p.get('pflanze', '')} {p.get('anzahl', '')}×"
                      for p in d.get("pflanzungen", []))[:1500]
 
 
@@ -90,7 +90,7 @@ def merken(auftrag, text, bild):
             d = json.load(f)
     except (OSError, ValueError):
         return
-    if not isinstance(d, dict) or not isinstance(d.get("beete"), list):
+    if not isinstance(d, dict) or not isinstance(d.get("karte"), dict):
         return
     fotos = d.setdefault("fotos", [])
     fotos.append({"datum": datetime.now().strftime("%d.%m.%Y"), "pflanze": auftrag.get("pflanze", ""), "beet": "",
