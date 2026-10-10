@@ -150,7 +150,7 @@
 <div class="meldung" id="meldung"></div>
 
 <script>
-const SEITEN_VERSION = 11;
+const SEITEN_VERSION = 12;
 const DATEN_URL = "/local/garten_daten.json";
 const WETTER = "weather.touchmonitor_home";
 const $ = id => document.getElementById(id);
@@ -952,10 +952,13 @@ function karteBauen(box) {
   if (ueberblick) {
     // Übersicht: ein Kärtchen je Beet (bei so kleinem Maßstab wären einzelne Pflanzen-Kärtchen zu viele)
     sichtbar = beete.filter(b => segmente.some(s => s.b.id === b.id)).map(b => { const [x, y] = punktBei(b.linie, laengeVon(b.linie) / 2); return { beetKarte: true, b, mx: x, my: y }; });
-    sichtbar.forEach((s, i) => { s.nr = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i] || String(i + 1); s.links = s.mx < box.x + box.w / 2; });
+    const g = kartenBox(ansichtWahl);
+    sichtbar.forEach((s, i) => { s.nr = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i] || String(i + 1); s.links = s.mx < g.x + g.w / 2; });
   } else {
-    sichtbar = segmente.filter(s => { const [x, y] = punktBei(s.b.linie, (s.p.start + s.p.laenge / 2) / 100); s.mx = x; s.my = y; return x > box.x && x < box.x + box.w && y > box.y && y < box.y + box.h; });
-    sichtbar.forEach((s, i) => { s.nr = i + 1; s.links = s.mx < box.x + box.w / 2; });
+    // Kärtchen wie in der Anfangsansicht – beim Hineinzoomen bleiben sie stehen
+    const g = kartenBox(ansichtWahl);
+    sichtbar = segmente.filter(s => { const [x, y] = punktBei(s.b.linie, (s.p.start + s.p.laenge / 2) / 100); s.mx = x; s.my = y; return x > g.x && x < g.x + g.w && y > g.y && y < g.y + g.h; });
+    sichtbar.forEach((s, i) => { s.nr = i + 1; s.links = s.mx < g.x + g.w / 2; });
   }
   let svg = `<svg id="plansvg" viewBox="${box.x} ${box.y} ${box.w} ${box.h}" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, Roboto, Helvetica, Arial, sans-serif">
     <defs><pattern id="rasen" width="1.6" height="1.6" patternUnits="userSpaceOnUse"><rect width="1.6" height="1.6" fill="#BFD8A6"/>
@@ -1140,6 +1143,9 @@ function linienZeichnen() {
     const g = svg.querySelector(`circle[data-nr="${k.dataset.nr}"]`);
     if (!g) return;
     const kr = k.getBoundingClientRect(), gr = g.getBoundingClientRect();
+    // beim Hineinzoomen liegt die Pflanze evtl. außerhalb des Ausschnitts → keine Linie
+    const gx = gr.left + gr.width / 2, gy = gr.top + gr.height / 2;
+    if (gx < pb.left || gx > pb.right || gy < pb.top || gy > pb.bottom) return;
     const links = kr.right <= pb.left + 2;
     const ax = (links ? kr.right : kr.left) - box.left, ay = kr.top + kr.height / 2 - box.top;
     const zx = gr.left + gr.width / 2 - box.left, zy = gr.top + gr.height / 2 - box.top;
@@ -1165,16 +1171,22 @@ async function grundrissSpeichern() {
     $("speicher").textContent = "gespeichert";
   } catch (e) { $("speicher").textContent = "nicht gespeichert"; meldung("Gelände nicht gespeichert: " + (e && e.message || e)); }
 }
-// Zoomen: zwei Finger (auseinander/zusammen), Mausrad, Knöpfe +/−; ein Finger auf freier Fläche = verschieben
+// Zoomen: zwei Finger (auseinander/zusammen), Mausrad, Knöpfe +/−; ein Finger auf freier Fläche = verschieben.
+// Nur INNERHALB der gewählten Ansicht (Ganzer Garten / Gewächshaus / Erdhaufen): weiter heraus als die
+// Anfangsansicht geht es nicht, und verschieben lässt sich nur bis zu deren Rand.
 let zoomBox = null, zoomBenutzt = false;
-function zoomSetzen(v) {
-  const w = Math.max(3, Math.min(250, v.w)), f = w / v.w, h = v.h * f;
-  zoomBox = { x: v.x + (v.w - w) / 2, y: v.y + (v.h - h) / 2, w, h };
+function zoomBegrenzen(v) {
+  const g = kartenBox(ansichtWahl);
+  if (v.w >= g.w * 0.999) return null;   // ganz herausgezoomt = Anfangsansicht
+  const w = Math.max(3, v.w), h = w * g.h / g.w;
+  const mx = v.x + v.w / 2, my = v.y + v.h / 2;
+  return { x: Math.max(g.x, Math.min(g.x + g.w - w, mx - w / 2)), y: Math.max(g.y, Math.min(g.y + g.h - h, my - h / 2)), w, h };
 }
+function zoomSetzen(v) { zoomBox = zoomBegrenzen(v); }
 function zoomGesten(svg) {
   const zeiger = new Map(); let st = null, neuZeichnen = 0;
   const vb = () => { const v = svg.viewBox.baseVal; return { x: v.x, y: v.y, w: v.width, h: v.height }; };
-  const setze = v => { svg.setAttribute("viewBox", `${v.x} ${v.y} ${v.w} ${v.h}`); zoomBox = v; };
+  const setze = v => { zoomBox = zoomBegrenzen(v); const z = zoomBox || kartenBox(ansichtWahl); svg.setAttribute("viewBox", `${z.x} ${z.y} ${z.w} ${z.h}`); };
   const spaeter = () => { clearTimeout(neuZeichnen); neuZeichnen = setTimeout(() => { if (!zeiger.size) zeichnePlan(); }, 250); };
   svg.addEventListener("pointerdown", ev => {
     zeiger.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
@@ -1188,7 +1200,7 @@ function zoomGesten(svg) {
     const r = svg.getBoundingClientRect(), skal = Math.max(st.v.w / r.width, st.v.h / r.height);
     if (st.pinch && zeiger.size >= 2) {
       const [a, b] = [...zeiger.values()], d = Math.hypot(a.x - b.x, a.y - b.y) || 1, mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-      const f = Math.max(3 / st.v.w, Math.min(250 / st.v.w, st.d / d));
+      const f = Math.max(3 / st.v.w, st.d / d);
       const wx = st.v.x + (st.mx - r.left - (r.width - st.v.w / skal) / 2) * skal, wy = st.v.y + (st.my - r.top - (r.height - st.v.h / skal) / 2) * skal;
       const w = st.v.w * f, h = st.v.h * f, s2 = skal * f;
       setze({ x: wx - (mx - r.left - (r.width - w / s2) / 2) * s2, y: wy - (my - r.top - (r.height - h / s2) / 2) * s2, w, h });
@@ -1205,7 +1217,7 @@ function zoomGesten(svg) {
     ev.preventDefault();
     const v = vb(), r = svg.getBoundingClientRect(), skal = Math.max(v.w / r.width, v.h / r.height), f = Math.exp(ev.deltaY * 0.0015);
     const wx = v.x + (ev.clientX - r.left - (r.width - v.w / skal) / 2) * skal, wy = v.y + (ev.clientY - r.top - (r.height - v.h / skal) / 2) * skal;
-    const w = Math.max(3, Math.min(250, v.w * f)), k2 = w / v.w;
+    const w = Math.max(3, v.w * f), k2 = w / v.w;
     setze({ x: wx - (wx - v.x) * k2, y: wy - (wy - v.y) * k2, w, h: v.h * k2 }); spaeter();
   }, { passive: false });
 }
