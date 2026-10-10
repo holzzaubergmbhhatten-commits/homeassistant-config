@@ -23,6 +23,8 @@ import urllib.request
 from datetime import date, datetime, timedelta
 
 DATEN = "/config/wartung_daten.json"
+# eigene Aufgaben aus dem Repository, solange sie noch nicht im Handbuch stehen (z. B. die Ape)
+EXTRA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "wartung_extra.json")
 BALD_TAGE = 21
 
 # Jahreszeit aus dem Hinweis: Aufgaben ohne Datum stehen dann zur passenden Zeit an
@@ -97,11 +99,27 @@ def plus_monate(d, n):
     return date(j, m, min(d.day, calendar.monthrange(j, m)[1]))
 
 
+def extra_aufgaben():
+    try:
+        with open(EXTRA, encoding="utf-8") as f:
+            liste = json.load(f).get("aufgaben", [])
+    except (OSError, ValueError, AttributeError):
+        return []
+    return [{"key": schluessel(a["titel"]), "bereich": a.get("bereich", "Sonstiges"), "titel": a["titel"],
+             "intervall": int(a.get("intervall", 12)), "hinweis": a.get("hinweis", "")} for a in liste if a.get("titel")]
+
+
+def alle_aufgaben(d):
+    liste = list(d.get("aufgaben") or [])
+    schon = {a["key"] for a in liste}
+    return liste + [a for a in extra_aufgaben() if a["key"] not in schon]
+
+
 def auswerten(d):
     heute = date.today()
     erledigt = d.get("erledigt") or {}
     alle, anstehend, ohne = [], [], 0
-    for a in d.get("aufgaben") or []:
+    for a in alle_aufgaben(d):
         e = dict(a)
         zuletzt = erledigt.get(a["key"])
         monate = (d.get("intervall") or {}).get(a["key"], a["intervall"])
@@ -143,7 +161,7 @@ def main():
             d["geholt"] = datetime.now().isoformat(timespec="seconds")
             speichern(d)
     elif aktion in ("erledigt", "offen"):
-        keys = {a["key"] for a in d.get("aufgaben") or []}
+        keys = {a["key"] for a in alle_aufgaben(d)}
         if wert not in keys:
             raise ValueError("Unbekannte Aufgabe")
         d.setdefault("erledigt", {})
