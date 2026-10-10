@@ -121,6 +121,24 @@ views:
         {{ '<br>' if not loop.first }}<font color="#8E8E93"><ha-icon icon="{{ t.icon }}"></ha-icon></font> {{ t.titel }}{{ ' – ' ~ t.kurz if t.kurz }}
         {%- endfor %}
         {%- endif %}
+    # Wartung (Regenrinne, Heizung, FI-Test …) aus dem Haus-Handbuch – nur was ansteht; abhaken im Reiter "Wartung"
+    - type: heading
+      heading: Wartung
+      heading_style: title
+      icon: mdi:wrench-clock
+      tap_action:
+        action: navigate
+        navigation_path: /flur-display/wartung
+    - type: markdown
+      grid_options:
+        columns: full
+      content: |-
+        {% set a = state_attr('sensor.wartung', 'anstehend') or [] %}
+        {% for t in a[:6] %}
+        {{ '<br>' if not loop.first }}{% if t.status == 'ueberfaellig' %}<font color="#FF3B30"><ha-icon icon="mdi:alert-circle"></ha-icon></font>{% elif t.status == 'bald' %}<font color="#FFCC00"><ha-icon icon="mdi:clock-outline"></ha-icon></font>{% else %}<font color="#FF9500"><ha-icon icon="mdi:wrench"></ha-icon></font>{% endif %} {{ t.titel }} <font color="#8E8E93">· {{ 'überfällig' if t.status == 'ueberfaellig' else ('in ' ~ t.tage ~ ' Tagen' if t.status == 'bald' else 'jetzt dran') }}</font>
+        {%- endfor %}
+        {%- if a | count > 6 %}<br><font color="#8E8E93">+ {{ a | count - 6 }} weitere</font>{% endif %}
+        {%- if not a %}<font color="#34C759"><ha-icon icon="mdi:check-circle"></ha-icon></font> <font color="#8E8E93">Nichts fällig</font>{% endif %}
   - type: grid
     cards:
     - type: heading
@@ -1522,6 +1540,14 @@ views:
   cards:
   - type: iframe
     url: /local/garten.html?v=14
+    aspect_ratio: 53.3%
+- title: Wartung
+  path: wartung
+  icon: mdi:wrench-clock
+  type: panel
+  cards:
+  - type: iframe
+    url: /local/wartung.html?v=1
     aspect_ratio: 53.3%
 - title: Infos
   path: infos

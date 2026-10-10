@@ -1,0 +1,76 @@
+# Wartungskalender: Aufgaben (Regenrinne, Heizung, FI-Test, Wohnwagen …) kommen von der Wartungsseite des
+# Haus-Handbuchs (Adresse nur in input_text.zuhause_seite_link, nicht im Repository) – claude_tools/wartung.py.
+# Wann etwas erledigt wurde, merkt sich Home Assistant (/config/wartung_daten.json, lokal).
+# Anstehendes steht auf dem Start-Dashboard ("Wartung"), abhaken im Reiter "Wartung" (www/wartung.html).
+shell_command:
+  wartung_befehl: python3 /config/claude_tools/wartung.py {{ aktion }} {{ wert }} {{ extra }}
+
+script:
+  wartung_erledigt:
+    alias: "Wartung: erledigt / zurücknehmen"
+    mode: queued
+    fields:
+      key:
+        description: Kennung der Aufgabe
+      datum:
+        description: JJJJ-MM-TT, leer = heute
+      offen:
+        description: true = "erledigt" zurücknehmen
+    sequence:
+      - action: shell_command.wartung_befehl
+        data:
+          aktion: "{{ 'offen' if offen | default(false) | bool else 'erledigt' }}"
+          wert: "{{ key }}"
+          extra: "{{ datum | default('heute', true) }}"
+        response_variable: ergebnis
+      - event: wartung_geaendert
+      - variables:
+          r: >-
+            {% set a = ergebnis.stdout | default('') if ergebnis is defined and ergebnis is mapping else '' %}
+            {{ a if a is mapping else (a | from_json if (a | string).startswith('{') else {'fehler': 'keine Antwort'}) }}
+          antwort:
+            ok: "{{ r.fehler | default('') == '' }}"
+            fehler: "{{ r.fehler | default('') }}"
+      - stop: fertig
+        response_variable: antwort
+
+  wartung_neu_laden:
+    alias: "Wartung: Liste von der Infos-Seite neu holen"
+    sequence:
+      - event: wartung_geaendert
+        event_data:
+          neu: true
+
+template:
+  - triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: 11
+      - trigger: event
+        event_type: wartung_geaendert
+      - trigger: state
+        entity_id: input_text.zuhause_seite_link
+    actions:
+      - action: shell_command.wartung_befehl
+        continue_on_error: true
+        data:
+          aktion: laden
+          wert: "{{ states('input_text.zuhause_seite_link') | default('-', true) | replace(' ', '') or '-' }}"
+          extra: "{{ 'neu' if trigger.platform == 'event' and trigger.event.data.neu | default(false) or trigger.platform == 'state' else '-' }}"
+        response_variable: ergebnis
+      - variables:
+          w: >-
+            {% set a = ergebnis.stdout | default('') if ergebnis is defined and ergebnis is mapping else '' %}
+            {{ a if a is mapping else (a | from_json if (a | string).startswith('{') else {}) }}
+    sensor:
+      - name: Wartung
+        unique_id: wartung
+        icon: mdi:wrench-clock
+        state: "{{ w.anstehend | default([]) | count }}"
+        attributes:
+          anstehend: "{{ w.anstehend | default([]) }}"
+          alle: "{{ w.alle | default([]) }}"
+          ohne_datum: "{{ w.ohne_datum | default(0) }}"
+          stand: "{{ w.stand | default('') }}"
+          fehler: "{{ w.fehler | default('') }}"
