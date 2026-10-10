@@ -104,10 +104,13 @@ automation:
         value_template: "{{ lampen | count > 0 and (dunkel or is_state('input_boolean.haustuer_licht_auto', 'on')) }}"
       - if: "{{ aus | count > 0 }}"
         then:
+          # immer mit 60 % Helligkeit (sonst bleibt die zuletzt eingestellte, oft zu schwache Helligkeit)
           - action: light.turn_on
             continue_on_error: true
             target:
               entity_id: "{{ aus }}"
+            data:
+              brightness_pct: 60
           - action: input_boolean.turn_on
             target:
               entity_id: input_boolean.haustuer_licht_auto
