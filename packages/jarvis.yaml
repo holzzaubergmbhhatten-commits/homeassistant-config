@@ -129,7 +129,8 @@ script:
       dann bei den Aufgaben NUR die fälligen und die neuen (neu = seit gestern auf der Liste) nennen, höchstens
       fünf; die übrigen nur als Anzahl ("und sieben weitere offene Aufgaben") – die Familie kennt sie schon und
       will sie nicht jeden Tag vorgelesen bekommen. Nur wenn ausdrücklich nach allen Aufgaben gefragt wird, alle
-      nennen. Dann kurz das Wetter und die Ferienwohnung. Keine Aufzählungszeichen, weil es vorgelesen wird.
+      nennen. Dann kurz das Wetter und die Ferienwohnung. Anstehende Wartung (Feld wartung) höchstens kurz mit
+      ein, zwei Beispielen erwähnen. Keine Aufzählungszeichen, weil es vorgelesen wird.
     icon: mdi:calendar-today
     mode: parallel
     fields:
@@ -207,6 +208,10 @@ script:
               {% set ab = b | selectattr('ende', 'search', '^' ~ datum) | list | count > 0 %}
               {% set belegt = b | selectattr('start', 'le', datum) | selectattr('ende', 'gt', datum) | list | count > 0 %}
               {{ 'Anreise und Abreise' if an and ab else ('Anreise' if an else ('Abreise' if ab else ('belegt' if belegt else 'frei'))) }}
+            # Wartung aus dem Haus-Handbuch (Regenrinne, Heizung …): nur Überfälliges und was jetzt dran ist
+            wartung: >-
+              {{ (state_attr('sensor.wartung', 'anstehend') or []) | selectattr('status', 'in', ['ueberfaellig', 'jetzt'])
+                 | map(attribute='titel') | list }}
             stellplatz_buchungen: >-
               {{ (state_attr('sensor.termine_vorschau', 'buchungen') or []) | selectattr('kalender', 'search', 'stellpl')
                  | selectattr('start', 'le', datum) | selectattr('ende', 'ge', datum) | list | count }}
