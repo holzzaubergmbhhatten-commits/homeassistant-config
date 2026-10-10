@@ -1,19 +1,19 @@
 {
   "_hinweis": "Zusätzliche Wartungsaufgaben, die (noch) nicht auf der Wartungsseite des Haus-Handbuchs stehen. Keine Kennzeichen, Fahrgestellnummern oder persönlichen Daten eintragen.",
   "aufgaben": [
-    {"bereich": "Ape", "titel": "Ape: Hauptuntersuchung (TÜV)", "intervall": 24,
+    {"bereich": "Garten & Maschinen", "titel": "Ape: Hauptuntersuchung (TÜV)", "intervall": 24,
      "hinweis": "Piaggio Ape TM (Dreirad, Baujahr 2003, 218 cm³ Zweitakt-Benziner). Laut Fahrzeugschein war die HU 09/2021 fällig – bitte das Datum der aktuellen Plakette als „erledigt am“ eintragen."},
-    {"bereich": "Ape", "titel": "Ape: Zweitakt-Schmierung prüfen", "intervall": 1,
+    {"bereich": "Garten & Maschinen", "titel": "Ape: Zweitakt-Schmierung prüfen", "intervall": 1,
      "hinweis": "Zweitakter: Öltank bzw. Mischungsverhältnis vor dem Tanken laut Bedienungsanleitung prüfen (bitte bestätigen, ob Getrennt- oder Gemischschmierung)."},
-    {"bereich": "Ape", "titel": "Ape: Getriebeöl prüfen", "intervall": 12,
+    {"bereich": "Garten & Maschinen", "titel": "Ape: Getriebeöl prüfen", "intervall": 12,
      "hinweis": "Ölstand und Sorte laut Bedienungsanleitung (bitte bestätigen)."},
-    {"bereich": "Ape", "titel": "Ape: Zündkerze prüfen oder wechseln", "intervall": 12,
+    {"bereich": "Garten & Maschinen", "titel": "Ape: Zündkerze prüfen oder wechseln", "intervall": 12,
      "hinweis": "Zweitakter verrußen die Kerze leichter – bei schlechtem Anspringen zuerst hier schauen."},
-    {"bereich": "Ape", "titel": "Ape: Reifen und Luftdruck prüfen", "intervall": 3,
+    {"bereich": "Garten & Maschinen", "titel": "Ape: Reifen und Luftdruck prüfen", "intervall": 3,
      "hinweis": "Reifengröße 125 R12 C (laut Fahrzeugschein), Luftdruck laut Anleitung bzw. Aufkleber."},
-    {"bereich": "Ape", "titel": "Ape: Bremsen und Bremsflüssigkeit prüfen", "intervall": 24,
+    {"bereich": "Garten & Maschinen", "titel": "Ape: Bremsen und Bremsflüssigkeit prüfen", "intervall": 24,
      "hinweis": "Bremsflüssigkeit etwa alle 2 Jahre wechseln, Bremswirkung vor jeder Saison testen."},
-    {"bereich": "Ape", "titel": "Ape: Batterie im Winter laden", "intervall": 3,
+    {"bereich": "Garten & Maschinen", "titel": "Ape: Batterie im Winter laden", "intervall": 3,
      "hinweis": "Bei längerer Standzeit im Winterlager Erhaltungsladegerät anschließen."}
   ]
 }
