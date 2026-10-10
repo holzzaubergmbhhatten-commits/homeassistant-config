@@ -1305,6 +1305,7 @@ function svgZuPng(text, breitePx, hoehePx) {
       } catch (e) { fehler(e); }
     };
     img.onerror = () => fehler(new Error("Bild konnte nicht erzeugt werden"));
+    setTimeout(() => fehler(new Error("Bild dauert zu lange")), 15000);   // manche Browser melden sich sonst nie
     img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(text)));
   });
 }
@@ -1334,7 +1335,7 @@ async function alsDateiSchicken() {
     }
     meldung("Wird per Telegram geschickt …");
     const r = await h.callWS({ type: "call_service", domain: "script", service: "grundriss_dateien_senden", service_data: { namen }, return_response: true });
-    if (r && r.response && r.response.ok) meldung("Per Telegram geschickt ✓ (" + namen.length + " Dateien)");
+    if (r && r.response && r.response.ok) meldung("Per Telegram geschickt ✓ (" + namen.length + " Dateien) – sonst liegen sie unter Medien → grundriss_export");
     else meldung("⚠️ Kein Telegram-Empfänger eingerichtet");
   } catch (e) { meldung("⚠️ Hat nicht geklappt: " + (e && e.message || e)); }
   exportLaeuft = false;
