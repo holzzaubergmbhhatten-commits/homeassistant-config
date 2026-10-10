@@ -92,6 +92,16 @@ views:
       tap_action:
         action: navigate
         navigation_path: /flur-display/garten
+      # Fragen oder "erledigt" melden: öffnet auf der Garten-Seite gleich den Reiter "Fragen"
+      badges:
+      - type: entity
+        entity: sensor.knopf_claude_fragen
+        show_icon: true
+        show_state: true
+        color: green
+        tap_action:
+          action: navigate
+          navigation_path: /flur-display/garten#fragen
     - type: markdown
       grid_options:
         columns: full
@@ -99,38 +109,18 @@ views:
         {% set a = state_attr('sensor.garten_aufgaben', 'aufgaben') or [] %}
         {% set b = state_attr('sensor.garten_aufgaben', 'bald') or [] %}
         {% for t in a %}
-        {{ '<br>' if not loop.first }}<font color="{{ t.farbe }}"><ha-icon icon="{{ t.icon }}"></ha-icon></font> <b>{{ t.titel }}</b>{{ ' – ' ~ t.text if t.text }}
+        {{ '<br>' if not loop.first }}<font color="{{ t.farbe }}"><ha-icon icon="{{ t.icon }}"></ha-icon></font> <b>{{ t.titel }}</b>{{ ' – ' ~ t.kurz if t.kurz }}
         {%- endfor %}
         {%- if not a %}
         <font color="#34C759"><ha-icon icon="mdi:check-circle"></ha-icon></font> <font color="#8E8E93">Heute nichts Besonderes im Garten</font>
         {%- endif %}
         {%- if b %}
 
-        ### <font color="#8E8E93">Die nächsten Tage</font>
+        <font color="#8E8E93"><b>Die nächsten Tage</b></font><br>
         {% for t in b %}
-        {{ '<br>' if not loop.first }}<font color="#8E8E93"><ha-icon icon="{{ t.icon }}"></ha-icon></font> {{ t.titel }}{{ ' – ' ~ t.text if t.text }}
+        {{ '<br>' if not loop.first }}<font color="#8E8E93"><ha-icon icon="{{ t.icon }}"></ha-icon></font> {{ t.titel }}{{ ' – ' ~ t.kurz if t.kurz }}
         {%- endfor %}
         {%- endif %}
-    # Frage stellen oder melden, was erledigt ist ("Kürbis habe ich geerntet") – Claude antwortet darunter
-    - type: entities
-      grid_options:
-        columns: full
-      entities:
-      - entity: input_text.garten_nachricht
-        name: Erledigt? Oder Frage an Claude …
-    - type: conditional
-      grid_options:
-        columns: full
-      conditions:
-      - condition: state
-        entity: binary_sensor.garten_antwort_zeigen
-        state: 'on'
-      card:
-        type: markdown
-        content: |-
-          <font color="#8E8E93"><ha-icon icon="mdi:account"></ha-icon> {{ state_attr('sensor.garten_aufgaben', 'frage') }}</font>
-
-          <ha-icon icon="mdi:sprout"></ha-icon> {{ state_attr('sensor.garten_aufgaben', 'antwort') }}
   - type: grid
     cards:
     - type: heading
@@ -149,27 +139,33 @@ views:
         tap_action:
           action: navigate
           navigation_path: /flur-display/aufgaben
+    # Kompakt: eine Zeile je Aufgabe mit Datum (seit wann sie auf der Liste steht); abhaken im Reiter "Aufgaben"
     - type: markdown
-      text_only: true
       grid_options:
         columns: full
-      content: |
-        {% set n = states('todo.aufgaben') | int(0) %}
-        {%- if n > 0 %}
-        ## <font color="#FF9500">{{ n }}</font> <font color="#8E8E93">offen</font>
-        {%- else %}
-        ## <font color="#34C759"><ha-icon icon="mdi:check-circle"></ha-icon></font> <font color="#8E8E93">Alles erledigt</font>
-        {%- endif %}
-    - type: todo-list
-      entity: todo.aufgaben
-      hide_completed: true
-      hide_create: true
-      display_order: none
-      grid_options:
-        columns: full
+      content: |-
+        {% set l = state_attr('sensor.aufgaben_liste', 'items') or [] %}
+        {% set heute = now().strftime('%Y-%m-%d') %}
+        {% set gestern = (now() - timedelta(days=1)).strftime('%Y-%m-%d') %}
+        {% set faellig = l | selectattr('faellig', 'ne', '') | selectattr('faellig', 'le', heute) | list %}
+        {% set rest = l | reject('in', faellig) | sort(attribute='seit', reverse=true) | list %}
+        {% for x in (faellig + rest)[:10] %}
+        {%- set d = as_datetime(x.seit, none) %}
+        {{ '<br>' if not loop.first }}{% if x in faellig %}<font color="#FF3B30"><ha-icon icon="mdi:alert-circle"></ha-icon></font>{% elif x.seit >= gestern %}<font color="#34C759"><ha-icon icon="mdi:new-box"></ha-icon></font>{% else %}<font color="#8E8E93"><ha-icon icon="mdi:checkbox-blank-outline"></ha-icon></font>{% endif %} {{ x.titel[:60] }}{{ '…' if x.titel | length > 60 }} <font color="#8E8E93">· {{ 'fällig ' ~ x.faellig[8:10] ~ '.' ~ x.faellig[5:7] ~ '.' if x in faellig else ('neu' if x.seit >= gestern else 'seit ' ~ (d.strftime('%d.%m.') if d else x.seit)) }}</font>
+        {%- endfor %}
+        {%- if l | count > 10 %}<br><font color="#8E8E93">+ {{ l | count - 10 }} weitere</font>{% endif %}
+        {%- if not l %}<font color="#34C759"><ha-icon icon="mdi:check-circle"></ha-icon></font> <font color="#8E8E93">Alles erledigt</font>{% endif %}
     - type: heading
       heading: Ferienwohnung & Stellplätze
       heading_style: title
+      badges:
+      - type: entity
+        entity: sensor.knopf_stellplaetze
+        show_icon: true
+        show_state: true
+        tap_action:
+          action: perform-action
+          perform_action: script.stellplaetze_verwalten
     - type: markdown
       grid_options:
         columns: full
@@ -225,16 +221,6 @@ views:
         {%- endif %}
 
         {% endfor %}
-    - type: button
-      name: Stellplätze verwalten
-      icon: mdi:rv-truck
-      show_state: false
-      tap_action:
-        action: perform-action
-        perform_action: script.stellplaetze_verwalten
-      grid_options:
-        columns: full
-        rows: 1
     - type: heading
       heading: Einkaufsliste
       heading_style: title
@@ -270,7 +256,7 @@ views:
       tap_action:
         action: toggle
       grid_options:
-        columns: full
+        columns: 6
         rows: 2
       vertical: true
     - type: button
@@ -285,97 +271,106 @@ views:
         confirmation:
           text: Wirklich alle Lichter ausschalten?
       grid_options:
-        columns: full
+        columns: 6
         rows: 2
     - type: button
       name: Grundriss & Licht
       icon: mdi:floor-plan
       show_state: false
+      icon_height: 34px
       tap_action:
         action: navigate
         navigation_path: /flur-display/grundriss
       grid_options:
-        columns: 6
+        columns: 4
         rows: 2
     - type: button
       name: Musik
       icon: mdi:music
       show_state: false
+      icon_height: 34px
       tap_action:
         action: navigate
         navigation_path: /flur-display/musik
       grid_options:
-        columns: 6
+        columns: 4
         rows: 2
     - type: button
       name: Kalender
       icon: mdi:calendar-month
       show_state: false
+      icon_height: 34px
       tap_action:
         action: navigate
         navigation_path: /flur-display/kalender-buchungen
       grid_options:
-        columns: 6
+        columns: 4
         rows: 2
     - type: button
       name: Einkauf
       icon: mdi:cart
       show_state: false
+      icon_height: 34px
       tap_action:
         action: navigate
         navigation_path: /flur-display/einkauf
       grid_options:
-        columns: 6
+        columns: 4
         rows: 2
     - type: button
       name: Aufgaben
       icon: mdi:checkbox-marked-circle-outline
       show_state: false
+      icon_height: 34px
       tap_action:
         action: navigate
         navigation_path: /flur-display/aufgaben
       grid_options:
-        columns: 6
+        columns: 4
         rows: 2
     - type: button
       name: Mucki
       icon: mdi:star-face
       show_state: false
+      icon_height: 34px
       tap_action:
         action: navigate
         navigation_path: /flur-display/mucki
       grid_options:
-        columns: 6
+        columns: 4
         rows: 2
     - type: button
       name: Kameras
       icon: mdi:cctv
       show_state: false
+      icon_height: 34px
       tap_action:
         action: navigate
         navigation_path: /flur-display/kameras
       grid_options:
-        columns: 6
+        columns: 4
         rows: 2
     - type: button
       name: Amazon
       icon: mdi:cart
       show_state: false
+      icon_height: 34px
       tap_action:
         action: perform-action
         perform_action: script.amazon_startseite
       grid_options:
-        columns: 6
+        columns: 4
         rows: 2
     - type: button
-      name: Amazon-Bestellungen
+      name: Bestellungen
       icon: mdi:package-variant
       show_state: false
+      icon_height: 34px
       tap_action:
         action: perform-action
         perform_action: script.amazon_auf_monitor
       grid_options:
-        columns: 6
+        columns: 4
         rows: 2
     - type: tile
       entity: input_select.design
@@ -1526,7 +1521,7 @@ views:
   type: panel
   cards:
   - type: iframe
-    url: /local/garten.html?v=13
+    url: /local/garten.html?v=14
     aspect_ratio: 53.3%
 - title: Infos
   path: infos

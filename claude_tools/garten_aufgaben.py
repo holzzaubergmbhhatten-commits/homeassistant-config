@@ -19,8 +19,15 @@ ERLEDIGT = "/config/www/garten_erledigt.json"
 MONATE = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"]
 
 
-def aufgabe(icon, farbe, titel, text="", key=""):
-    return {"icon": icon, "farbe": farbe, "titel": titel, "text": text, "key": key}
+def aufgabe(icon, farbe, titel, text="", key="", kurz=None):
+    """kurz = Text für das Start-Dashboard (lange Erklärungen stehen nur auf der Garten-Seite)."""
+    return {"icon": icon, "farbe": farbe, "titel": titel, "text": text, "key": key,
+            "kurz": text if kurz is None and len(text) <= 60 else (kurz or "")}
+
+
+def kurz_namen(liste, n=4):
+    liste = sorted(set(liste))
+    return ", ".join(liste[:n]) + (f" + {len(liste) - n} weitere" if len(liste) > n else "")
 
 
 def erledigt_laden(heute):
@@ -164,13 +171,13 @@ def main():
         if naechster in p.get("vorziehen", []) + p.get("draussen", []) + p.get("ghm", []) and m not in p.get("vorziehen", []) + p.get("draussen", []) + p.get("ghm", []):
             bald_saat.append(p["name"])
     if (n := je_pflanze("vorziehen", vorziehen, "vorgezogen")):
-        aufgaben.append(aufgabe("mdi:sprout", "#007AFF", "Auf der Fensterbank vorziehen", namen(n), "vorziehen"))
+        aufgaben.append(aufgabe("mdi:sprout", "#007AFF", "Auf der Fensterbank vorziehen", namen(n), "vorziehen", kurz_namen(n)))
     if (n := je_pflanze("saeen", saeen, "draußen gesät/gepflanzt")):
-        aufgaben.append(aufgabe("mdi:seed", "#34A853", "Draußen säen/pflanzen", namen(n) + (" (nicht bei Frost)" if tmin < 2 else ""), "saeen"))
+        aufgaben.append(aufgabe("mdi:seed", "#34A853", "Draußen säen/pflanzen", namen(n) + (" (nicht bei Frost)" if tmin < 2 else ""), "saeen", kurz_namen(n)))
     if (n := je_pflanze("dach", dach, "unters Dach gesät/gepflanzt")):
-        aufgaben.append(aufgabe("mdi:seed", "#34A853", "Unters Dach säen/pflanzen", namen(n), "dach"))
+        aufgaben.append(aufgabe("mdi:seed", "#34A853", "Unters Dach säen/pflanzen", namen(n), "dach", kurz_namen(n)))
     if (n := je_pflanze("kaufen", kaufen, "gekauft und gepflanzt")):
-        aufgaben.append(aufgabe("mdi:cart-outline", "#FF9500", "Jungpflanzen kaufen und pflanzen", namen(n), "kaufen"))
+        aufgaben.append(aufgabe("mdi:cart-outline", "#FF9500", "Jungpflanzen kaufen und pflanzen", namen(n), "kaufen", kurz_namen(n)))
     if bald_saat:
         bald.append(aufgabe("mdi:calendar-arrow-right", "#34A853", f"Im {MONATE[naechster - 1]} säen/pflanzen", namen(bald_saat)))
 
@@ -181,7 +188,7 @@ def main():
             dazu(aufgaben, "mdi:bottle-tonic-plus", "#A0522D", "Düngen", f"{namen(stark)}: Flüssigdünger oder Brennnesseljauche (1:10).", "duengen")
     # "ernte:x" = ganz abgeerntet (fällt oben schon aus aktiv heraus); "ernten:x" = für ein paar Tage erledigt
     if (n := je_pflanze("ernten", [pid for pid, _ in aktiv if m in pf(pid).get("ernte", [])], "geerntet (es kommt noch mehr)")):
-        aufgaben.append(aufgabe("mdi:basket-outline", "#FF9500", "Erntezeit", namen(n), "ernte"))
+        aufgaben.append(aufgabe("mdi:basket-outline", "#FF9500", "Erntezeit", namen(n), "ernte", kurz_namen(n)))
     for pid in sorted({pid for pid, _ in aktiv}):
         melde(f"ernte:{pid}", f"{pf(pid)['name']} ganz abgeerntet / abgeräumt")
 

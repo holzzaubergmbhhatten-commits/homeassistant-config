@@ -126,8 +126,10 @@ script:
       Ferienwohnung (Anreise/Abreise/belegt/frei) und Stellplätze. Nutze das IMMER bei Fragen wie
       "Was liegt heute an?", "Was steht morgen an?", "Was habe ich heute für Termine?", "Guten Morgen".
       Fasse das Ergebnis dann in natürlicher gesprochener Sprache zusammen: erst die Termine mit Uhrzeit,
-      dann die wichtigsten Aufgaben (fällige zuerst, höchstens fünf nennen), dann kurz das Wetter und die
-      Ferienwohnung. Keine Aufzählungszeichen, weil es vorgelesen wird.
+      dann bei den Aufgaben NUR die fälligen und die neuen (neu = seit gestern auf der Liste) nennen, höchstens
+      fünf; die übrigen nur als Anzahl ("und sieben weitere offene Aufgaben") – die Familie kennt sie schon und
+      will sie nicht jeden Tag vorgelesen bekommen. Nur wenn ausdrücklich nach allen Aufgaben gefragt wird, alle
+      nennen. Dann kurz das Wetter und die Ferienwohnung. Keine Aufzählungszeichen, weil es vorgelesen wird.
     icon: mdi:calendar-today
     mode: parallel
     fields:
@@ -181,9 +183,13 @@ script:
             aufgaben: >-
               {% set items = aufg[aufgaben_entity]['items'] if aufg is defined and aufgaben_entity in aufg else [] %}
               {% set ns = namespace(l=[]) %}
+              {% set seit = (state_attr('sensor.aufgaben_liste', 'seit_merker') or {}) %}
+              {% set gestern = (strptime(datum, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d') %}
               {% for x in items if not x.summary.startswith('⏰') %}
                 {% set f = (x.due | default('', true) | string)[:10] %}
-                {% set ns.l = ns.l + [{'titel': x.summary, 'faellig': f, 'ueberfaellig_oder_heute': f != '' and f <= datum}] %}
+                {% set s = seit.get(x.uid, '') %}
+                {% set ns.l = ns.l + [{'titel': x.summary, 'faellig': f, 'ueberfaellig_oder_heute': f != '' and f <= datum,
+                   'auf_der_liste_seit': s, 'neu': s != '' and s >= gestern}] %}
               {% endfor %}
               {{ ns.l | sort(attribute='ueberfaellig_oder_heute', reverse=true) }}
             erinnerungen: >-
@@ -265,7 +271,8 @@ script:
           language: de
           text: >-
             Es ist {{ now().strftime('%H:%M') }} Uhr. Schreib den Tagesüberblick für heute als kurze, freundliche
-            Morgenansage zum Vorlesen, höchstens sechs Sätze: Termine, wichtige Aufgaben, Wetter, Ferienwohnung.
+            Morgenansage zum Vorlesen, höchstens sechs Sätze: Termine, nur neue und fällige Aufgaben (den Rest nur als
+            Anzahl), Wetter, Ferienwohnung.
             Die ganze Familie hört zu: beginne mit "Guten Morgen zusammen" und sag NICHT "Sir".
             Benutze KEIN Werkzeug für Durchsagen oder Nachrichten – antworte nur mit dem Text, die Durchsage mache ich selbst.
         response_variable: antwort

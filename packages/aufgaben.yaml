@@ -1,0 +1,85 @@
+# Aufgabenliste (todo.aufgaben) kompakt für das Start-Dashboard und die Morgen-Ansage:
+# jede offene Aufgabe mit dem Datum, seit dem sie auf der Liste steht (aus der Datei der lokalen
+# To-do-Liste, claude_tools/aufgaben_daten.py). So nennt Jarvis morgens nur Neues und Fälliges,
+# statt jeden Tag alles vorzulesen.
+shell_command:
+  aufgaben_daten_lesen: python3 /config/claude_tools/aufgaben_daten.py
+
+template:
+  - triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/5"
+      # sofort nach Änderungen an einer Liste (Monitor, App, Jarvis, Telegram) –
+      # nur Ändern/Anlegen/Löschen, sonst würde das eigene todo.get_items den Sensor immer wieder auslösen
+      - trigger: event
+        event_type: call_service
+        event_data:
+          domain: todo
+          service: add_item
+      - trigger: event
+        event_type: call_service
+        event_data:
+          domain: todo
+          service: update_item
+      - trigger: event
+        event_type: call_service
+        event_data:
+          domain: todo
+          service: remove_item
+      - trigger: event
+        event_type: call_service
+        event_data:
+          domain: todo
+          service: remove_completed_items
+    actions:
+      - delay: 1
+      - action: todo.get_items
+        continue_on_error: true
+        target:
+          entity_id: todo.aufgaben
+        data:
+          status: needs_action
+        response_variable: liste
+      - action: shell_command.aufgaben_daten_lesen
+        continue_on_error: true
+        response_variable: daten
+      - variables:
+          seit_datei: >-
+            {% set t = daten.stdout | default('') if daten is defined and daten is mapping else '' %}
+            {{ t if t is mapping else (t | from_json if (t | string).startswith('{') else {}) }}
+          eintraege: >-
+            {% set items = liste['todo.aufgaben']['items'] if liste is defined and liste is mapping and 'todo.aufgaben' in liste else [] %}
+            {% set vorher = this.attributes.get('seit_merker', {}) if this is defined else {} %}
+            {% set heute = now().strftime('%Y-%m-%d') %}
+            {% set ns = namespace(l=[]) %}
+            {% for x in items if not x.summary.startswith('⏰') %}
+              {% set s = seit_datei.get(x.uid) or vorher.get(x.uid) or heute %}
+              {% set ns.l = ns.l + [{'uid': x.uid, 'titel': x.summary, 'seit': s,
+                 'faellig': (x.due | default('', true) | string)[:10], 'notiz': x.description | default('', true)}] %}
+            {% endfor %}
+            {{ ns.l }}
+    sensor:
+      - name: Aufgaben Liste
+        unique_id: aufgaben_liste
+        icon: mdi:checkbox-marked-circle-outline
+        state: "{{ eintraege | count }}"
+        attributes:
+          items: "{{ eintraege }}"
+          # Merker für Aufgaben ohne Datum in der Datei (erstes Auftauchen)
+          seit_merker: >-
+            {% set ns = namespace(d={}) %}
+            {% for e in eintraege %}{% set ns.d = dict(ns.d, **{e.uid: e.seit}) %}{% endfor %}
+            {{ ns.d }}
+
+  # Beschriftete Knöpfe in Überschriften des Start-Dashboards (eine Überschrift zeigt nur Symbol + Zustand)
+  - sensor:
+      - name: Knopf Claude fragen
+        unique_id: knopf_claude_fragen
+        icon: mdi:message-question-outline
+        state: Claude fragen
+      - name: Knopf Stellplätze
+        unique_id: knopf_stellplaetze
+        icon: mdi:rv-truck
+        state: Stellplätze verwalten

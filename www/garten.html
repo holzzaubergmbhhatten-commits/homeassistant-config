@@ -159,7 +159,7 @@
 <div class="meldung" id="meldung"></div>
 
 <script>
-const SEITEN_VERSION = 13;
+const SEITEN_VERSION = 14;
 const DATEN_URL = "/local/garten_daten.json";
 const WETTER = "weather.touchmonitor_home";
 const $ = id => document.getElementById(id);
@@ -518,6 +518,14 @@ async function laden() {
   // ältere Speicherstände: Kurzfassung für die Dashboard-To-dos einmal nachtragen
   if (letzterText && (!daten.info || daten.info.v !== 1)) geaendert();
 }
+// Knopf "Claude fragen" auf dem Start-Dashboard öffnet /flur-display/garten#fragen → gleich den Reiter "Fragen" zeigen
+setInterval(async () => {
+  let ort; try { ort = window.parent.location; } catch (e) { return; }
+  if (ort.hash !== "#fragen") return;
+  try { window.parent.history.replaceState(window.parent.history.state, "", ort.pathname + ort.search); } catch (e) { /* egal */ }
+  blattZu(); bearbeiten = false; reiter = "fragen"; await chatDatenLaden(); zeichnen();
+  setTimeout(() => { const t = $("chat-text"); if (t) t.focus(); }, 300);
+}, 700);
 // Änderungen von anderen Geräten übernehmen
 setInterval(async () => {
   if (bearbeiten || $("schleier").classList.contains("offen") || speicherTimer && $("speicher").textContent === "…") return;
