@@ -79,6 +79,7 @@ template:
         unique_id: knopf_claude_fragen
         icon: mdi:message-question-outline
         state: Claude fragen
+      # Home Assistant macht aus "ä" ein "a": die Entität heißt sensor.knopf_stellplatze
       - name: Knopf Stellplätze
         unique_id: knopf_stellplaetze
         icon: mdi:rv-truck

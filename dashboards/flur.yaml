@@ -160,7 +160,7 @@ views:
       heading_style: title
       badges:
       - type: entity
-        entity: sensor.knopf_stellplaetze
+        entity: sensor.knopf_stellplatze
         show_icon: true
         show_state: true
         tap_action:
