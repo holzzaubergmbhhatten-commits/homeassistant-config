@@ -1479,7 +1479,7 @@ views:
   type: panel
   cards:
   - type: iframe
-    url: /local/garten.html?v=2
+    url: /local/garten.html?v=3
     aspect_ratio: 53.3%
 - title: Infos
   path: infos

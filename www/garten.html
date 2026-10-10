@@ -47,11 +47,26 @@
   .segment button { padding: 6px 12px; border-radius: 8px; font-size: 14px; font-weight: 600; }
   .segment button.an { background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
   /* Plan */
-  .planbox { background: #DCE8CF; border-radius: 14px; overflow: hidden; position: relative; touch-action: none; }
-  .planbox svg { width: 100%; display: block; }
+  .planbox { background: transparent; border-radius: 14px; overflow: hidden; position: relative; touch-action: none; }
+  .planbox svg { width: 100%; display: block; max-height: calc(100vh - 150px); }
   .legende { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 8px; font-size: 13px; }
   .legende span { display: inline-flex; align-items: center; gap: 5px; }
   .punkt { width: 12px; height: 12px; border-radius: 50%; display: inline-block; flex: none; }
+  .planlayout { position: relative; display: grid; grid-template-columns: 1fr; gap: 12px; }
+  .planlayout .spalte { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; align-content: start; }
+  .planlayout .spalte:first-child { order: 2; } .planlayout .spalte:nth-child(3) { order: 3; }
+  @media (min-width: 900px) {
+    .planlayout:not(.ohne) { grid-template-columns: minmax(190px, 250px) 1fr minmax(190px, 250px); gap: 26px; align-items: center; }
+    .planlayout .spalte { display: flex; flex-direction: column; justify-content: space-around; gap: 10px; order: initial !important; }
+  }
+  .linien { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+  .schild { display: flex; gap: 9px; align-items: flex-start; background: #fff; border-radius: 14px; padding: 9px 11px; box-shadow: 0 1px 4px rgba(0,0,0,.12); cursor: pointer; position: relative; z-index: 1; }
+  .schild .nr { width: 26px; height: 26px; border-radius: 50%; border: 3px solid; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; flex: none; background: #fff; }
+  .schild b { font-size: 15px; } .schild .anz { color: var(--grau); font-weight: 600; }
+  .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+  .tags span { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 7px; }
+  .tipp-waerme { border: 2px solid #FFD08A; }
+  .liste-tipps { padding-left: 18px; margin: 6px 0; line-height: 1.5; font-size: 14px; }
   /* Pflanzenliste */
   .pliste { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; }
   .pflanze { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 12px; background: var(--bg); }
@@ -111,7 +126,7 @@
 <div class="meldung" id="meldung"></div>
 
 <script>
-const SEITEN_VERSION = 2;
+const SEITEN_VERSION = 3;
 const DATEN_URL = "/local/garten_daten.json";
 const WETTER = "weather.touchmonitor_home";
 const $ = id => document.getElementById(id);
@@ -266,6 +281,8 @@ const VORLAGE = {
     { id: "gh2", bereich: "gh", name: "Hochbeet hinten", art: "hochbeet", x: 80, y: 0, w: 440, h: 80, wasser: true },
     { id: "gh3", bereich: "gh", name: "Hochbeet rechts", art: "hochbeet", x: 520, y: 0, w: 80, h: 250, wasser: true },
     { id: "gh4", bereich: "gh", name: "Kasten Mitte", art: "kasten", x: 250, y: 170, w: 100, h: 60, wasser: false },
+    { id: "gh5", bereich: "gh", name: "Arbeitstisch", art: "tisch", x: 520, y: 265, w: 75, h: 125 },
+    { id: "gh6", bereich: "gh", name: "Eingang", art: "eingang", x: 240, y: 392, w: 120, h: 8 },
     { id: "ga1", bereich: "garten", name: "Erdstreifen 1", art: "erdstreifen", x: 50, y: 40, w: 60, h: 560, wasser: false },
     { id: "ga2", bereich: "garten", name: "Erdstreifen 2", art: "erdstreifen", x: 180, y: 40, w: 60, h: 560, wasser: false },
     { id: "ga3", bereich: "garten", name: "Erdstreifen 3", art: "erdstreifen", x: 310, y: 40, w: 60, h: 560, wasser: false },
@@ -305,7 +322,8 @@ async function laden() {
   try {
     const r = await fetch(DATEN_URL + "?t=" + Date.now(), { cache: "no-store" });
     if (r.ok) { const d = await r.json(); if (d && Array.isArray(d.beete)) { daten = { ...JSON.parse(JSON.stringify(VORLAGE)), ...d }; letzterText = JSON.stringify(daten);
-      const gh = daten.bereiche.find(b => b.id === "gh"); if (gh && gh.name === "Gewächshaus") { gh.name = "Überdachter Garten"; geaendert(); } } }
+      const gh = daten.bereiche.find(b => b.id === "gh"); if (gh && gh.name === "Gewächshaus") { gh.name = "Überdachter Garten"; geaendert(); }
+      if (!daten.elemente2) { daten.elemente2 = true; for (const v of VORLAGE.beete.filter(v => ["tisch", "eingang"].includes(v.art))) if (!daten.beete.some(b => b.art === v.art && b.bereich === v.bereich)) daten.beete.push({ ...v }); geaendert(); } } }
   } catch (e) { /* noch nichts gespeichert */ }
   zeichnen();
   wetterLaden();
@@ -375,7 +393,7 @@ function planErstellen() {
     if (p.saison && p.saison < jahr && !daten.historie.some(h => h.saison === p.saison && h.beet === p.beet && h.fam === PF[p.pflanze]?.fam))
       daten.historie.push({ saison: p.saison, beet: p.beet, fam: PF[p.pflanze]?.fam });
   }
-  const beete = daten.beete.filter(b => b.art !== "weg");
+  const beete = daten.beete.filter(b => PFLANZBAR.includes(b.art));
   const frei = Object.fromEntries(beete.map(b => [b.id, lang(b)]));
   const inhalt = Object.fromEntries(beete.map(b => [b.id, []]));
   const hinweise = [];
@@ -398,6 +416,8 @@ function planErstellen() {
         if (daten.historie.some(h => h.beet === b.id && h.fam === pf.fam && h.saison === jahr - 1)) s -= 4;
         if (pf.zehrer === "stark" && b.art === "hochbeet") s += 1;
         if (pf.wasser === 3 && b.wasser) s += 1;
+        // wärmeliebend: in die Wärme-Ecke und an die sonnige Südseite
+        if (WAERME[pf.id]) s += (b.warm ? 5 : 0) + (1 - nw) * 2;
         s += Math.min(braucht, platz) / Math.max(1, braucht);  // lieber dorthin, wo alles hinpasst
         if (!best || s > best.s) best = { b, s };
       }
@@ -449,60 +469,184 @@ function zeichnen() {
   f();
 }
 
+// ================= Plan als Zeichnung (Zaun, Pfosten, Holzhäcksel, Hochbeete, einzelne Pflanzen) =================
+const PFLANZBAR = ["hochbeet", "erdstreifen", "kasten"];
+// Pflanzen, die es wärmer brauchen, als es unter dem offenen Dach ist
+const WAERME = { paprika: 2, chili: 2, aubergine: 2, melone: 2, basilikum: 1, gurke: 1 };
+function segmentRechteck(b, p) {
+  const innen = b.art === "erdstreifen" ? 4 : 7, senkrecht = b.h >= b.w, L = lang(b) - 2 * innen;
+  const a = Math.min(p.start, L), l = Math.max(6, Math.min(p.laenge, L - a));
+  return senkrecht ? { x: b.x + innen, y: b.y + innen + a, w: b.w - 2 * innen, h: l, senkrecht } : { x: b.x + innen + a, y: b.y + innen, w: l, h: b.h - 2 * innen, senkrecht };
+}
+function pflanzenPunkte(r, pf, anzahl) {
+  // Reihen quer zum Beet, Pflanzen im Abstand entlang des Beets
+  const quer = r.senkrecht ? r.w : r.h, laengs = r.senkrecht ? r.h : r.w;
+  const reihen = Math.max(1, Math.min(anzahl, Math.floor(quer / Math.max(8, pf.reihe)) || 1));
+  const proReihe = Math.ceil(anzahl / reihen), schritt = laengs / proReihe, qs = quer / reihen;
+  const rad = Math.max(3, Math.min(24, Math.min(schritt, qs) * 0.36));
+  const pkte = [];
+  for (let i = 0; i < Math.min(anzahl, 150); i++) {
+    const reihe = i % reihen, pos = Math.floor(i / reihen);
+    const l = schritt * (pos + 0.5), q = qs * (reihe + 0.5);
+    pkte.push(r.senkrecht ? [r.x + q, r.y + l] : [r.x + l, r.y + q]);
+  }
+  return { pkte, rad };
+}
+function grafikDefs() {
+  return `<defs>
+    <pattern id="haecksel" width="16" height="16" patternUnits="userSpaceOnUse"><rect width="16" height="16" fill="#B48A5E"/>
+      <path d="M2 3l4 1M9 2l3 3M3 10l3-2M11 9l4 1M6 14l3-1M13 13l2 2" stroke="#8E6A43" stroke-width="1.6" stroke-linecap="round"/></pattern>
+    <pattern id="rasen" width="18" height="18" patternUnits="userSpaceOnUse"><rect width="18" height="18" fill="#A9CB8B"/>
+      <path d="M3 14l1-4M8 16l1-5M13 13l1-4M5 6l1-4M14 6l1-4" stroke="#8DB46E" stroke-width="1.4" stroke-linecap="round"/></pattern>
+    <pattern id="erde" width="12" height="12" patternUnits="userSpaceOnUse"><rect width="12" height="12" fill="#5E4129"/>
+      <circle cx="3" cy="3" r="1.1" fill="#4A321F"/><circle cx="9" cy="8" r="1.3" fill="#6F4E33"/></pattern>
+    <linearGradient id="damm" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#4E3420"/><stop offset=".5" stop-color="#7A5636"/><stop offset="1" stop-color="#4E3420"/></linearGradient>
+    <linearGradient id="dammq" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#4E3420"/><stop offset=".5" stop-color="#7A5636"/><stop offset="1" stop-color="#4E3420"/></linearGradient>
+    <pattern id="holz" width="40" height="10" patternUnits="userSpaceOnUse"><rect width="40" height="10" fill="#D9B98C"/><path d="M0 5h40" stroke="#C49E6C" stroke-width="1"/></pattern>
+  </defs>`;
+}
+function zeichneZaun(ber) {
+  // Lattenzaun rundherum, Pfosten an den Ecken und etwa alle 2 m
+  let s = `<rect x="-6" y="-6" width="${ber.w + 12}" height="${ber.h + 12}" fill="none" stroke="#C99A62" stroke-width="12" stroke-dasharray="7 5"/>`;
+  s += `<rect x="-6" y="-6" width="${ber.w + 12}" height="${ber.h + 12}" fill="none" stroke="#9C7443" stroke-width="2.5"/>`;
+  const pf = (x, y) => `<rect x="${x - 8}" y="${y - 8}" width="16" height="16" fill="#7A5A3A" rx="2"/>`;
+  for (let x = 0; x <= ber.w + 1; x += ber.w / Math.max(1, Math.round(ber.w / 200))) { s += pf(x, -6) + pf(x, ber.h + 6); }
+  for (let y = 0; y <= ber.h + 1; y += ber.h / Math.max(1, Math.round(ber.h / 200))) { s += pf(-6, y) + pf(ber.w + 6, y); }
+  return s;
+}
+function zeichneElement(b, ber) {
+  const sel = bearbeiten ? `stroke="#007AFF" stroke-width="4"` : "";
+  if (b.art === "tisch") return `<g data-beet="${b.id}"><rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="url(#holz)" ${sel || `stroke="#8B6F4E" stroke-width="3"`} rx="3"/>
+      <text x="${b.x + b.w / 2}" y="${b.y + b.h / 2}" text-anchor="middle" dominant-baseline="middle" font-size="15" font-weight="700" fill="#5A4632" ${b.h > b.w ? `transform="rotate(-90 ${b.x + b.w / 2} ${b.y + b.h / 2})"` : ""}>${esc(b.name)}</text></g>`;
+  if (b.art === "eingang") return `<g data-beet="${b.id}"><rect x="${b.x}" y="${b.y - 10}" width="${b.w}" height="${b.h + 20}" fill="url(#haecksel)" ${sel}/>
+      <text x="${b.x + b.w / 2}" y="${b.y + b.h + 32}" text-anchor="middle" font-size="16" font-weight="700" fill="#3A3A3C">${esc(b.name)}</text>
+      <path d="M${b.x + b.w / 2} ${b.y + b.h + 8} l-9 -14 h18 z" fill="#3A3A3C"/></g>`;
+  if (b.art === "haus") return `<g data-beet="${b.id}"><rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="#C2483A" ${sel || `stroke="#7A2A20" stroke-width="3"`} rx="2"/>
+      <path d="M${b.x} ${b.y} L${b.x + b.w} ${b.y + b.h} M${b.x + b.w} ${b.y} L${b.x} ${b.y + b.h}" stroke="#9E3A2E" stroke-width="2"/>
+      <text x="${b.x + b.w / 2}" y="${b.y + b.h + 18}" text-anchor="middle" font-size="15" font-weight="700" fill="#3A3A3C">${esc(b.name)}</text></g>`;
+  // Beete
+  const senk = b.h >= b.w;
+  let s = `<g data-beet="${b.id}">`;
+  if (b.art === "erdstreifen") {
+    s += `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="url(#${senk ? "damm" : "dammq"})" ${sel || `stroke="#3E2A18" stroke-width="2"`} rx="${Math.min(b.w, b.h) / 2.2}"/>`;
+  } else {
+    s += `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="url(#holz)" ${sel || `stroke="#A8834F" stroke-width="2.5"`} rx="3"/>`;
+    s += `<rect x="${b.x + 7}" y="${b.y + 7}" width="${b.w - 14}" height="${b.h - 14}" fill="url(#erde)" rx="2"/>`;
+  }
+  if (b.warm) s += `<rect x="${b.x - 5}" y="${b.y - 5}" width="${b.w + 10}" height="${b.h + 10}" fill="none" stroke="#FF9500" stroke-width="3" stroke-dasharray="10 6" rx="6"/>`;
+  return s;
+}
 function zeichnePlan() {
-  const ber = bereich(bereichWahl), rand = 30;
-  const beete = daten.beete.filter(b => b.bereich === ber.id);
-  let svg = `<svg id="plansvg" viewBox="${-rand} ${-rand} ${ber.w + 2 * rand} ${ber.h + 2 * rand}" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, Roboto, Helvetica, Arial, sans-serif">`;
-  svg += `<rect x="0" y="0" width="${ber.w}" height="${ber.h}" fill="${ber.id === "gh" ? "#C9B79C" : "#B9D39E"}" rx="4"/>`;
-  if (ber.id === "gh") svg += `<rect x="0" y="0" width="${ber.w}" height="${ber.h}" fill="none" stroke="#8B6F4E" stroke-width="6" rx="4"/>`;
-  // Himmelsrichtung
-  const pfeil = { unten: [ber.w / 2, ber.h + 22], oben: [ber.w / 2, -10], links: [-14, ber.h / 2], rechts: [ber.w + 14, ber.h / 2] }[ber.sued || "unten"];
-  svg += `<text x="${pfeil[0]}" y="${pfeil[1]}" text-anchor="middle" font-size="16" font-weight="700" fill="#E08A00">S</text>`;
-  for (const b of beete) {
-    const farbeBeet = b.art === "hochbeet" ? "#D9B98C" : b.art === "kasten" ? "#B0A99F" : "#6B4A2E";
-    const rand2 = b.art === "erdstreifen" ? "#4E3420" : "#A8834F";
-    svg += `<g data-beet="${b.id}"><rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="${farbeBeet}" stroke="${bearbeiten ? "#007AFF" : rand2}" stroke-width="${bearbeiten ? 4 : 3}" rx="3"/>`;
-    const innen = 6, senkrecht = b.h >= b.w;
-    svg += `<rect x="${b.x + innen}" y="${b.y + innen}" width="${b.w - 2 * innen}" height="${b.h - 2 * innen}" fill="${b.art === "erdstreifen" ? "#7A5636" : "#5B4130"}" rx="2"/>`;
-    for (const p of daten.pflanzungen.filter(p => p.beet === b.id)) {
-      const pf = PF[p.pflanze]; if (!pf) continue;
-      const L = lang(b) - 2 * innen;
-      const a = Math.min(p.start, L), l = Math.max(4, Math.min(p.laenge, L - a));
-      const r = senkrecht ? { x: b.x + innen, y: b.y + innen + a, w: b.w - 2 * innen, h: l } : { x: b.x + innen + a, y: b.y + innen, w: l, h: b.h - 2 * innen };
-      svg += `<g data-pflanzung="${p.id}"><rect x="${r.x + 1}" y="${r.y + 1}" width="${r.w - 2}" height="${r.h - 2}" fill="${FARBE[pf.fam] || "#8BC34A"}" rx="4" opacity="0.92"/>`;
-      const kurz = Math.min(r.w, r.h), schrift = Math.max(9, Math.min(16, kurz * 0.28)), drehen = senkrecht && r.h > r.w * 1.6;
-      const mx = r.x + r.w / 2, my = r.y + r.h / 2;
-      svg += `<text x="${mx}" y="${my}" text-anchor="middle" dominant-baseline="middle" font-size="${schrift}" font-weight="700" fill="#fff" stroke="rgba(0,0,0,.35)" stroke-width="${schrift * 0.12}" paint-order="stroke" ${drehen ? `transform="rotate(-90 ${mx} ${my})"` : ""}>${esc(pf.name)} ${p.anzahl}×</text></g>`;
+  const ber = bereich(bereichWahl), rand = 46, dach = ber.id === "gh";
+  const alle = daten.beete.filter(b => b.bereich === ber.id);
+  const beete = alle.filter(b => PFLANZBAR.includes(b.art));
+  const segmente = [];
+  for (const b of beete) for (const p of daten.pflanzungen.filter(p => p.beet === b.id).sort((x, y) => x.start - y.start)) if (PF[p.pflanze]) segmente.push({ p, b, pf: PF[p.pflanze], r: segmentRechteck(b, p) });
+  segmente.forEach((s, i) => { s.nr = i + 1; s.mx = s.r.x + s.r.w / 2; s.my = s.r.y + s.r.h / 2; s.links = s.mx < ber.w / 2; });
+  let svg = `<svg id="plansvg" viewBox="${-rand} ${-rand} ${ber.w + 2 * rand} ${ber.h + 2 * rand + 20}" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, Roboto, Helvetica, Arial, sans-serif">${grafikDefs()}`;
+  svg += `<rect x="${-rand}" y="${-rand}" width="${ber.w + 2 * rand}" height="${ber.h + 2 * rand + 20}" fill="url(#rasen)"/>`;
+  if (dach) {
+    svg += `<rect x="0" y="0" width="${ber.w}" height="${ber.h}" fill="url(#haecksel)"/>` + zeichneZaun(ber);
+    // Dach (Folie) als heller Rand angedeutet
+    svg += `<rect x="-22" y="-22" width="${ber.w + 44}" height="${ber.h + 44}" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="3" stroke-dasharray="2 8"/>`;
+    svg += `<text x="${ber.w - 4}" y="-28" text-anchor="end" font-size="14" fill="#4A6A3A" font-weight="600">Folien-Dach · offen</text>`;
+  }
+  for (const b of alle.filter(b => b.art === "eingang")) svg += zeichneElement(b, ber);
+  for (const b of alle.filter(b => !["eingang"].includes(b.art))) {
+    svg += zeichneElement(b, ber);
+    if (!PFLANZBAR.includes(b.art)) { if (bearbeiten) svg += `<circle cx="${b.x + b.w}" cy="${b.y + b.h}" r="11" fill="#007AFF" stroke="#fff" stroke-width="3" data-griff="${b.id}"/>`; continue; }
+    for (const s of segmente.filter(s => s.b === b)) {
+      const { r, pf, p } = s, f = FARBE[pf.fam] || "#8BC34A";
+      svg += `<g data-pflanzung="${p.id}"><rect x="${r.x + 1}" y="${r.y + 1}" width="${r.w - 2}" height="${r.h - 2}" fill="${f}" fill-opacity=".22" stroke="${f}" stroke-width="2" stroke-dasharray="6 4" rx="5"/>`;
+      const { pkte, rad } = pflanzenPunkte(r, pf, p.anzahl);
+      for (const [x, y] of pkte) svg += `<circle cx="${x}" cy="${y}" r="${rad}" fill="${f}" stroke="#fff" stroke-width="${Math.max(1, rad * 0.18)}"/>` +
+        (rad >= 7 ? `<path d="M${x} ${y + rad * 0.45} v${-rad * 0.8} m0 ${rad * 0.3} q${-rad * 0.45} ${-rad * 0.05} ${-rad * 0.5} ${-rad * 0.5} m${rad * 0.5} ${rad * 0.2} q${rad * 0.45} ${-rad * 0.05} ${rad * 0.5} ${-rad * 0.5}" stroke="#fff" stroke-width="${rad * 0.14}" fill="none" stroke-linecap="round"/>` : "");
+      // Nummer passend zum Infokärtchen
+      const nx = r.x + 13, ny = r.y + 13;
+      svg += `<circle cx="${nx}" cy="${ny}" r="12" fill="#fff" stroke="${f}" stroke-width="3"/><text x="${nx}" y="${ny + 1}" text-anchor="middle" dominant-baseline="middle" font-size="13" font-weight="800" fill="#1C1C1E">${s.nr}</text></g>`;
     }
-    // Nummer am Beet, Namen stehen unter dem Plan (lange Beschriftungen würden sich überlappen)
-    const nr = beete.indexOf(b) + 1;
-    svg += `<circle cx="${b.x + 14}" cy="${b.y + 14}" r="12" fill="#fff" stroke="#3A3A3C" stroke-width="2"/><text x="${b.x + 14}" y="${b.y + 15}" text-anchor="middle" dominant-baseline="middle" font-size="14" font-weight="800" fill="#1C1C1E">${nr}</text>`;
+    // Beetname klein am Rand
+    const senk = b.h >= b.w, tx = senk ? b.x - 10 : b.x + 6, ty = senk ? b.y + 6 : b.y - 10;
+    svg += `<text x="${tx}" y="${ty}" font-size="13" font-weight="700" fill="#2C2C2E" ${senk ? `transform="rotate(-90 ${tx} ${ty})" text-anchor="end"` : ""}>${esc(b.name)}${b.warm ? " · Wärme-Ecke" : ""}</text>`;
     if (bearbeiten) svg += `<circle cx="${b.x + b.w}" cy="${b.y + b.h}" r="11" fill="#007AFF" stroke="#fff" stroke-width="3" data-griff="${b.id}"/>`;
     svg += `</g>`;
   }
+  // Himmelsrichtung: Pfeil zur Sonnenseite, in die Ecke gesetzt (überdeckt nichts)
+  const su = ber.sued || "unten", ex = su === "links" ? -rand + 6 : ber.w + rand - 6, ey = su === "oben" ? -rand + 20 : ber.h + rand + 12;
+  svg += `<text x="${ex}" y="${ey}" text-anchor="${su === "links" ? "start" : "end"}" font-size="16" font-weight="700" fill="#C77700">${{ unten: "↓", oben: "↑", links: "←", rechts: "→" }[su]} Süden (Sonne)</text>`;
   svg += `</svg>`;
-  const belegt = daten.pflanzungen.filter(p => beete.some(b => b.id === p.beet));
-  const fams = [...new Set(belegt.map(p => PF[p.pflanze]?.fam).filter(Boolean))];
+
+  const karte = s => {
+    const { pf, p, b } = s, m = monat(), tags = [];
+    if (pf.wasser === 3) tags.push(["viel Wasser", "#007AFF"]);
+    if (WAERME[pf.id] && dach && !b.warm) tags.push(["braucht Wärme", "#FF9500"]);
+    if (pf.ernte.includes(m)) tags.push(["Erntezeit", "#C77700"]);
+    if ((dach ? pf.ghm : pf.draussen).includes(m)) tags.push(["jetzt pflanzen", "#34A853"]);
+    const nb = segmente.filter(x => x.b === b && x !== s && Math.abs(x.p.start - p.start) <= Math.max(x.p.laenge, p.laenge) + 5);
+    const schlecht = nb.filter(x => nachbarn(pf.id, x.pf.id) < 0).map(x => x.pf.name), gut = nb.filter(x => nachbarn(pf.id, x.pf.id) > 0).map(x => x.pf.name);
+    if (schlecht.length) tags.push(["schlecht neben " + schlecht.join(", "), "#FF3B30"]);
+    else if (gut.length) tags.push(["gut mit " + gut.join(", "), "#34A853"]);
+    return `<div class="schild" data-a="pflanzung" data-w="${p.id}" data-nr="${s.nr}">
+      <span class="nr" style="border-color:${FARBE[pf.fam]}">${s.nr}</span>
+      <div><b>${esc(pf.name)}</b> <span class="anz">${p.anzahl}×</span>
+        <div class="klein">${esc(b.name)} · ${pf.reihe}×${pf.abstand} cm · ${pf.hoehe >= 100 ? "hoch" : pf.hoehe >= 50 ? "mittel" : "niedrig"}</div>
+        ${tags.length ? `<div class="tags">${tags.map(([t, c]) => `<span style="background:${c}1A;color:${c}">${esc(t)}</span>`).join("")}</div>` : ""}</div></div>`;
+  };
+  const links = segmente.filter(s => s.links).sort((a, b) => a.my - b.my), rechts = segmente.filter(s => !s.links).sort((a, b) => a.my - b.my);
+  // Wärme-Hinweis: Paprika & Co. unter dem offenen Dach ohne Windschutz
+  const warmFehlt = dach ? [...new Set(segmente.filter(s => WAERME[s.pf.id] >= 1 && !s.b.warm).map(s => s.pf.name))] : [];
+  const leer = !segmente.length;
   $("inhalt").innerHTML = `
     <div class="karte">
       <div class="zeile" style="margin-bottom:10px">
         <div class="segment">${daten.bereiche.map(b => `<button data-a="bereich" data-w="${b.id}" class="${b.id === bereichWahl ? "an" : ""}">${esc(b.name)}</button>`).join("")}</div>
         <span class="luecke"></span>
-        ${bearbeiten ? `<button class="knopf klein-k" data-a="beet-neu">${ic("plus")} Beet</button><button class="knopf klein-k" data-a="bereich-mass">Größe & Süden</button>` : ""}
+        ${bearbeiten ? `<button class="knopf klein-k" data-a="beet-neu">${ic("plus")} Beet / Element</button><button class="knopf klein-k" data-a="bereich-mass">Größe & Süden</button>` : ""}
         <button class="knopf klein-k ${bearbeiten ? "blau" : ""}" data-a="bearbeiten">${ic("stift")} ${bearbeiten ? "Fertig" : "Beete ändern"}</button>
       </div>
-      <div class="planbox" id="planbox">${svg}</div>
-      <div class="legende">${beete.map((b, i) => `<span><b>${i + 1}</b> ${esc(b.name)} <span class="klein">${b.w}×${b.h} cm</span></span>`).join("")}</div>
-      <div class="legende">${fams.map(f => `<span><i class="punkt" style="background:${FARBE[f]}"></i>${FAMILIE[f]}</span>`).join("")}</div>
-      <p class="klein">${bearbeiten ? "Beet ziehen = verschieben (10-cm-Schritte), blauer Punkt = Größe ändern, Beet antippen = Name, Maße, Art. Maße bitte nachmessen und eintragen." :
-        belegt.length ? "Pflanze antippen = Infos, Anzahl ändern, in ein anderes Beet verschieben." : "Noch nichts geplant – unter „Pflanzen“ auswählen und „Pflanzplan erstellen“ tippen."}</p>
+      <div class="planlayout ${leer || bearbeiten ? "ohne" : ""}" id="planlayout">
+        <div class="spalte">${leer || bearbeiten ? "" : links.map(karte).join("")}</div>
+        <div class="planbox" id="planbox">${svg}</div>
+        <div class="spalte">${leer || bearbeiten ? "" : rechts.map(karte).join("")}</div>
+        <svg class="linien" id="linien"></svg>
+      </div>
+      <p class="klein">${bearbeiten ? "Beet, Tisch oder Eingang ziehen = verschieben (10-cm-Schritte), blauer Punkt = Größe ändern, antippen = Name, Maße, Art, Wärme-Ecke." :
+        leer ? "Noch nichts geplant – unter „Pflanzen“ auswählen und „Pflanzplan erstellen“ tippen." : "Jeder Punkt ist eine Pflanze. Kärtchen oder Pflanzen antippen = Infos, Anzahl ändern, verschieben."}</p>
     </div>
-    ${belegt.length ? `<div class="karte"><h2>Was wohin – ${esc(ber.name)}</h2>${beete.map(b => {
-      const ps = daten.pflanzungen.filter(p => p.beet === b.id).sort((x, y) => x.start - y.start);
-      return ps.length ? `<h3>${esc(b.name)}</h3><div class="klein">${ps.map(p => `<b style="color:#1C1C1E">${esc(anzeigeName(p.pflanze))}</b> ${p.anzahl} Stück auf ${Math.round(p.laenge)} cm (ab ${Math.round(p.start)} cm)`).join(" · ")}</div>` : "";
-    }).join("")}</div>` : ""}`;
+    ${warmFehlt.length ? `<div class="karte tipp-waerme"><h2>${ic("sonne", "#FF9500")} Tipp: eine Wärme-Ecke bauen</h2>
+      <p>${esc(warmFehlt.join(", "))} ${warmFehlt.length > 1 ? "mögen" : "mag"} es wärmer, als es unter dem offenen Dach ist. Mit wenig Aufwand wird eine Ecke 3–6 °C wärmer:</p>
+      <ul class="liste-tipps">
+        <li><b>Windschutz:</b> Den Lattenzaun an der Süd- und Westseite des Beets innen mit klarer Gewächshausfolie (oder Doppelstegplatten) bis ca. 1,5 m Höhe verkleiden – der Wind ist der größte Wärmeräuber.</li>
+        <li><b>Folientunnel:</b> Über das Beet 3–4 Bögen (Glasfiberstäbe oder Rohr) und Folie, an warmen Tagen seitlich hochrollen.</li>
+        <li><b>Wärmespeicher:</b> Ein paar dunkle, mit Wasser gefüllte Kanister oder Steine ins Beet – speichern tagsüber Wärme und geben sie nachts ab.</li>
+        <li><b>Mulch:</b> Schwarzes Mulchvlies auf die Erde erwärmt den Boden im Frühjahr schneller.</li>
+      </ul>
+      <p class="klein">Wenn eine Ecke fertig ist: „Beete ändern“ → Beet antippen → „Wärme-Ecke“ ankreuzen. Dann setze ich die wärmeliebenden Pflanzen beim nächsten Plan bevorzugt dorthin.</p></div>` : ""}`;
   planGesten();
+  requestAnimationFrame(linienZeichnen);
 }
+// Linien von den Kärtchen zu den Pflanzen (nur wenn die Kärtchen links/rechts neben dem Plan stehen)
+function linienZeichnen() {
+  const lay = $("planlayout"), lin = $("linien"), svg = $("plansvg");
+  if (!lay || !lin || !svg) return;
+  lin.innerHTML = "";
+  const box = lay.getBoundingClientRect(), pb = $("planbox").getBoundingClientRect();
+  lin.setAttribute("width", box.width); lin.setAttribute("height", box.height); lin.setAttribute("viewBox", `0 0 ${box.width} ${box.height}`);
+  if (getComputedStyle(lay).gridTemplateColumns.split(" ").length < 3) return;
+  let html = "";
+  lay.querySelectorAll(".schild").forEach(k => {
+    const g = svg.querySelector(`[data-pflanzung="${k.dataset.w}"] circle:last-of-type`) || svg.querySelector(`[data-pflanzung="${k.dataset.w}"]`);
+    if (!g) return;
+    const kr = k.getBoundingClientRect(), gr = g.getBoundingClientRect();
+    const links = kr.right <= pb.left + 2;
+    const ax = (links ? kr.right : kr.left) - box.left, ay = kr.top + kr.height / 2 - box.top;
+    const zx = gr.left + gr.width / 2 - box.left, zy = gr.top + gr.height / 2 - box.top;
+    const kx = (links ? pb.left + 8 : pb.right - 8) - box.left;
+    html += `<polyline points="${ax},${ay} ${kx},${ay} ${zx},${zy}" fill="none" stroke="rgba(60,60,67,.55)" stroke-width="1.5"/><circle cx="${zx}" cy="${zy}" r="3" fill="#3A3A3C"/>`;
+  });
+  lin.innerHTML = html;
+}
+window.addEventListener("resize", () => { if (reiter === "plan") requestAnimationFrame(linienZeichnen); });
 
 // Beete verschieben / Größe ändern (Bearbeiten-Modus), Pflanzung/Beet antippen
 function planGesten() {
@@ -610,6 +754,9 @@ function zeichneHeute() {
     const stark = [...new Set(plaene.filter(p => p.pf.zehrer === "stark").map(p => p.pf.name))];
     if (stark.length) aufgaben.push(["duenger", "#A0522D", "Alle 2 Wochen düngen", `${stark.join(", ")}: Flüssigdünger oder Brennnesseljauche (1:10) zum Gießwasser.`]);
   }
+  // Wärme-Ecke: wärmeliebende Pflanzen unter dem offenen Dach
+  const warmFehlt = [...new Set(imGh.filter(p => WAERME[p.pf.id] && !p.b.warm).map(p => p.pf.name))];
+  if (warmFehlt.length && m >= 3 && m <= 9) aufgaben.push(["sonne", "#FF9500", "Wärme-Ecke bauen", `${warmFehlt.join(", ")} mögen es wärmer als unter dem offenen Dach: Zaun an der Süd-/Westseite innen mit Folie verkleiden oder einen Folientunnel über das Beet bauen (Details im Plan).`]);
   // Pflanzkalender für die ausgewählten Pflanzen
   const ausgewaehlt = Object.entries(daten.wunsch).filter(([id, n]) => n > 0 && PF[id]).map(([id]) => PF[id]);
   const jetzt = [];
@@ -744,8 +891,9 @@ function beetBearbeiten(id) {
       <div><label class="f">Länge (cm, senkrecht)</label><input type="number" id="bt-h" value="${b.h}"></div></div>
     <div class="zwei"><div><label class="f">Position links (cm)</label><input type="number" id="bt-x" value="${b.x}"></div>
       <div><label class="f">Position oben (cm)</label><input type="number" id="bt-y" value="${b.y}"></div></div>
-    <label class="f">Art</label><select id="bt-art">${[["hochbeet", "Hochbeet"], ["erdstreifen", "Erdstreifen"], ["kasten", "Kasten/Kübel"]].map(([v, t]) => `<option value="${v}" ${b.art === v ? "selected" : ""}>${t}</option>`).join("")}</select>
+    <label class="f">Art</label><select id="bt-art">${[["hochbeet", "Hochbeet"], ["erdstreifen", "Erdstreifen"], ["kasten", "Kasten/Kübel"], ["tisch", "Tisch"], ["eingang", "Eingang"], ["haus", "Häuschen (z. B. Pumpe)"]].map(([v, t]) => `<option value="${v}" ${b.art === v ? "selected" : ""}>${t}</option>`).join("")}</select>
     <label class="f"><input type="checkbox" id="bt-wasser" ${b.wasser ? "checked" : ""}> Tropfbewässerung vorhanden</label>
+    <label class="f"><input type="checkbox" id="bt-warm" ${b.warm ? "checked" : ""}> Wärme-Ecke (Folie/Windschutz/Tunnel gebaut)</label>
     <div class="zeile" style="margin-top:14px"><button class="knopf rot" data-a="bt-weg" data-w="${b.id}">Löschen</button><button class="knopf" data-a="bt-drehen" data-w="${b.id}">Drehen</button>
       <span class="luecke"></span><button class="knopf voll" data-a="bt-ok" data-w="${b.id}">Fertig</button></div>`);
 }
@@ -784,6 +932,7 @@ async function aktion(a, w, el) {
       else pflanzeInfo(w);
       break;
     case "plan-erstellen": planErstellen(); break;
+    case "pflanzung": pflanzungZeigen(w); break;
     case "zu": blattZu(); break;
     case "beet-neu": {
       const ber = bereich(bereichWahl), id = "b" + Date.now().toString(36);
@@ -799,7 +948,7 @@ async function aktion(a, w, el) {
     case "bt-ok": {
       const b = beet(w);
       b.name = $("bt-name").value.trim() || b.name; b.w = Math.max(20, zahlWert("bt-w")); b.h = Math.max(20, zahlWert("bt-h"));
-      b.x = Math.max(0, zahlWert("bt-x")); b.y = Math.max(0, zahlWert("bt-y")); b.art = $("bt-art").value; b.wasser = $("bt-wasser").checked;
+      b.x = Math.max(0, zahlWert("bt-x")); b.y = Math.max(0, zahlWert("bt-y")); b.art = $("bt-art").value; b.wasser = $("bt-wasser").checked; b.warm = $("bt-warm").checked;
       geaendert(); blattZu(); zeichnePlan(); break;
     }
     case "bt-drehen": { const b = beet(w); [b.w, b.h] = [b.h, b.w]; geaendert(); blattZu(); zeichnePlan(); break; }
