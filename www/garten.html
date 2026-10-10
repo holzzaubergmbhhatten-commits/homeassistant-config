@@ -134,7 +134,7 @@
 <div class="meldung" id="meldung"></div>
 
 <script>
-const SEITEN_VERSION = 5;
+const SEITEN_VERSION = 6;
 const DATEN_URL = "/local/garten_daten.json";
 const WETTER = "weather.touchmonitor_home";
 const $ = id => document.getElementById(id);
@@ -261,14 +261,71 @@ const PFLANZEN = [
     ["tomate", "zucchini", "kuerbis", "kartoffel", "melone"], [], "Kein Dünger.", "Lockt Läuse von den Gemüsepflanzen weg, Blüten sind essbar."),
   P("tagetes", "Tagetes", "korb", "schwach", 25, 25, 30, "geeignet", [3], [5], [5], [7, 8, 9], 1, true,
     ["tomate", "aubergine", "kartoffel"], [], "Kein Dünger.", "Hält Fadenwürmer und Weiße Fliege fern – zwischen die Tomaten."),
+  P("blumenkohl", "Blumenkohl", "kreuz", "stark", 50, 50, 50, "draussen", [3, 4], [5, 6], [], [7, 8, 9, 10], 3, false,
+    ["sellerie", "salat", "buschbohne", "tomate", "spinat", "dill", "salbei"], ["zwiebel", "knoblauch", "erdbeere"],
+    "Viel Kompost beim Pflanzen, dann alle 3 Wochen Brennnesseljauche – braucht gleichmäßig Nährstoffe.",
+    "Sobald die Blume zu sehen ist, ein paar große Blätter darüber knicken – dann bleibt sie weiß. Gleichmäßig gießen, sonst bildet er keine Blume. Kohlnetz gegen Kohlweißling."),
+  P("weisskohl", "Weißkohl", "kreuz", "stark", 60, 50, 50, "draussen", [3, 4], [5, 6], [], [8, 9, 10, 11], 3, false,
+    ["sellerie", "buschbohne", "salat", "spinat", "tomate", "dill", "salbei"], ["zwiebel", "knoblauch", "erdbeere"],
+    "Viel Kompost, im Juni/Juli alle 3 Wochen Jauche.", "Kohlnetz gegen Kohlweißling, Boden mulchen, gleichmäßig gießen (sonst platzen die Köpfe)."),
+  P("rotkohl", "Rotkohl", "kreuz", "stark", 60, 50, 50, "draussen", [3, 4], [5, 6], [], [9, 10, 11], 3, false,
+    ["sellerie", "buschbohne", "salat", "spinat", "tomate", "dill", "salbei"], ["zwiebel", "knoblauch", "erdbeere"],
+    "Viel Kompost, im Sommer alle 3 Wochen Jauche.", "Wie Weißkohl – Kohlnetz auflegen, verträgt die ersten leichten Fröste."),
+  P("wirsing", "Wirsing", "kreuz", "stark", 50, 50, 45, "draussen", [4, 5], [6, 7], [], [9, 10, 11, 12], 2, false,
+    ["sellerie", "buschbohne", "salat", "spinat", "tomate", "salbei"], ["zwiebel", "knoblauch", "erdbeere"],
+    "Kompost, im Juli 1× Jauche.", "Winterwirsing verträgt Frost und kann bis in den Dezember stehen bleiben."),
+  P("spitzkohl", "Spitzkohl", "kreuz", "stark", 50, 40, 40, "draussen", [2, 3], [4, 5], [], [6, 7, 8, 9], 3, false,
+    ["sellerie", "salat", "spinat", "buschbohne", "dill"], ["zwiebel", "knoblauch", "erdbeere"],
+    "Kompost, nach 4 Wochen 1× Jauche.", "Der schnellste Kohl – ab Juni erntereif, zart und mild."),
+  P("rosenkohl", "Rosenkohl", "kreuz", "stark", 60, 60, 90, "draussen", [4], [5, 6], [], [10, 11, 12, 1, 2], 2, false,
+    ["sellerie", "salat", "spinat", "buschbohne"], ["zwiebel", "knoblauch", "erdbeere"],
+    "Viel Kompost, bis August alle 3 Wochen Jauche.", "Erst nach dem ersten Frost ernten (schmeckt dann süßer), im September die Spitze kappen = dickere Röschen."),
+  P("chinakohl", "Chinakohl", "kreuz", "mittel", 40, 30, 40, "geeignet", [], [7, 8], [8], [9, 10, 11], 3, false,
+    ["salat", "spinat", "buschbohne", "erbse"], ["zwiebel", "knoblauch"], "Kompost, 1× Jauche.", "Erst ab Juli säen, sonst schießt er in Blüte. Kohlnetz gegen Erdflöhe."),
+  P("kopfsalat", "Kopfsalat", "korb", "schwach", 30, 30, 20, "geeignet", [2, 3], [3, 4, 5, 6, 7, 8], [3, 4, 8, 9], [5, 6, 7, 8, 9, 10], 2, false,
+    ["radieschen", "karotte", "erdbeere", "zwiebel", "gurke", "tomate", "kohlrabi", "buschbohne", "dill"], ["petersilie", "sellerie"],
+    "Etwas Kompost.", "Flach pflanzen – das Herz darf nicht unter die Erde. Alle 3–4 Wochen nachpflanzen."),
+  P("eissalat", "Eissalat", "korb", "schwach", 35, 30, 20, "geeignet", [3, 4], [4, 5, 6, 7], [4, 8], [6, 7, 8, 9], 2, false,
+    ["radieschen", "karotte", "zwiebel", "gurke", "tomate", "kohlrabi", "buschbohne"], ["petersilie", "sellerie"],
+    "Etwas Kompost.", "Verträgt Hitze besser als Kopfsalat, morgens gießen."),
+  P("endivie", "Endivie", "korb", "schwach", 35, 30, 30, "geeignet", [], [6, 7], [8], [9, 10, 11], 2, false,
+    ["fenchel", "kohlrabi", "lauch", "buschbohne"], [], "Etwas Kompost.", "Herbstsalat, verträgt leichten Frost – unter dem Dach bis in den Winter."),
+  P("rettich", "Rettich", "kreuz", "schwach", 25, 10, 30, "geeignet", [], [3, 4, 5, 6, 7, 8], [3, 9], [5, 6, 7, 8, 9, 10, 11], 2, false,
+    ["salat", "karotte", "spinat", "tomate", "erbse", "buschbohne"], ["gurke"], "Kein Dünger nötig.", "Gleichmäßig feucht halten, sonst wird er pelzig und scharf."),
+  P("steckruebe", "Steckrübe", "kreuz", "mittel", 40, 25, 40, "draussen", [], [5, 6, 7], [], [9, 10, 11, 12], 2, false,
+    ["salat", "erbse", "buschbohne"], ["zwiebel"], "Kompost.", "Norddeutscher Klassiker – nach dem ersten Frost süßer, bis Dezember im Beet lassen."),
+  P("fruehlingszwiebel", "Frühlingszwiebel", "lauch", "schwach", 20, 5, 40, "geeignet", [], [3, 4, 5, 6, 7, 8], [3, 9], [5, 6, 7, 8, 9, 10, 11], 1, false,
+    ["karotte", "tomate", "salat", "erdbeere", "gurke"], ["buschbohne", "erbse", "kohlrabi"], "Kaum Dünger.", "Alle 4 Wochen nachsäen, dann gibt es den ganzen Sommer frische."),
+  P("schalotte", "Schalotte", "lauch", "schwach", 20, 15, 30, "draussen", [], [3, 4, 10], [], [7, 8], 1, false,
+    ["karotte", "tomate", "erdbeere", "salat", "rote_bete"], ["buschbohne", "erbse", "kohlrabi"], "Kaum Dünger.", "Wie Steckzwiebeln stecken – aus einer werden 6–10."),
+  P("dickebohne", "Dicke Bohne", "huelsen", "schwach", 45, 15, 100, "draussen", [], [3, 4], [], [6, 7], 2, false,
+    ["kartoffel", "salat", "spinat", "bohnenkraut"], ["zwiebel", "knoblauch", "erbse", "fenchel"], "Kein Dünger nötig.",
+    "Früh säen (verträgt Frost), Spitzen abknipsen, sobald Läuse kommen."),
+  P("zuckererbse", "Zuckererbse", "huelsen", "schwach", 40, 5, 150, "draussen", [], [3, 4, 5], [], [6, 7], 2, false,
+    ["karotte", "radieschen", "salat", "gurke", "kohlrabi", "zucchini"], ["buschbohne", "stangenbohne", "zwiebel", "knoblauch", "lauch", "tomate", "kartoffel"],
+    "Kein Dünger nötig.", "Mit Schote essen – jung ernten. Braucht ein Netz zum Ranken."),
+  P("rhabarber", "Rhabarber", "knoeterich", "stark", 100, 100, 80, "draussen", [], [3, 4, 9, 10], [], [4, 5, 6], 2, false,
+    [], [], "Im Herbst eine dicke Schicht Kompost oder Mist.", "Mehrjährig – braucht eine feste Ecke. Nach dem 24. Juni nicht mehr ernten, Blütenstängel ausbrechen."),
+  P("sonnenblume", "Sonnenblume", "korb", "mittel", 50, 40, 200, "draussen", [4], [4, 5], [], [8, 9], 2, true,
+    ["gurke", "mais"], ["kartoffel"], "Kompost.", "Als Sichtschutz und für Bienen an die Nordseite – wirft sonst Schatten."),
+  P("bohnenkraut", "Bohnenkraut", "lippen", "schwach", 25, 20, 30, "draussen", [4], [5], [], [6, 7, 8, 9], 1, false,
+    ["buschbohne", "stangenbohne", "dickebohne"], [], "Kein Dünger.", "Zwischen die Bohnen – hält Läuse fern und würzt sie."),
+  P("thymian", "Thymian", "lippen", "schwach", 25, 25, 25, "draussen", [3], [5], [], [5, 6, 7, 8, 9, 10], 1, false,
+    ["weisskohl", "rotkohl", "kohlrabi", "brokkoli", "erdbeere"], [], "Kein Dünger.", "Mehrjährig, mag es trocken und sonnig – an den Beetrand."),
+  P("salbei", "Salbei", "lippen", "schwach", 40, 40, 50, "draussen", [], [4, 5], [], [5, 6, 7, 8, 9, 10], 1, false,
+    ["weisskohl", "rotkohl", "blumenkohl", "wirsing", "karotte"], ["gurke"], "Kein Dünger.", "Mehrjährig, hält den Kohlweißling fern."),
+  P("oregano", "Oregano", "lippen", "schwach", 30, 30, 40, "draussen", [], [4, 5], [], [6, 7, 8, 9], 1, false,
+    ["tomate", "paprika"], [], "Kein Dünger.", "Mehrjährig, lockt Bienen an."),
+  P("minze", "Minze", "lippen", "schwach", 40, 40, 50, "draussen", [], [4, 5], [], [5, 6, 7, 8, 9, 10], 2, false,
+    ["tomate", "weisskohl"], ["petersilie"], "Etwas Kompost.", "Wuchert stark – am besten in einen Kübel oder eine eingegrabene Wanne."),
   P("roggen", "Gründüngung (Winterroggen)", "gras", "schwach", 15, 3, 40, "draussen", [], [9, 10], [], [], 1, false,
     [], [], "Kein Dünger.", "Über den Winter auf freie Erdstreifen säen, im April abmähen und flach einarbeiten – lockert und düngt den Boden."),
 ];
 const PF = Object.fromEntries(PFLANZEN.map(p => [p.id, p]));
 const FAMILIE = { nacht: "Nachtschatten", kuerbis: "Kürbisgewächse", korb: "Korbblütler", baldrian: "Baldriangewächse", portulak: "Portulak", kreuz: "Kreuzblütler (Kohl)",
-  gaensefuss: "Gänsefuß", dolden: "Doldenblütler", lauch: "Lauch/Zwiebel", huelsen: "Hülsenfrüchte", gras: "Gräser", rosen: "Rosengewächse", lippen: "Lippenblütler", kresse: "Kresse" };
+  gaensefuss: "Gänsefuß", dolden: "Doldenblütler", lauch: "Lauch/Zwiebel", huelsen: "Hülsenfrüchte", gras: "Gräser", rosen: "Rosengewächse", lippen: "Lippenblütler", kresse: "Kresse", knoeterich: "Knöterichgewächse" };
 const FARBE = { nacht: "#E5534B", kuerbis: "#F2A33A", korb: "#8BC34A", baldrian: "#6FBF73", portulak: "#4DB6AC", kreuz: "#7E9CD8", gaensefuss: "#C2185B",
-  dolden: "#FF8A3D", lauch: "#B39DDB", huelsen: "#43A047", gras: "#D4B106", rosen: "#EC407A", lippen: "#26A69A", kresse: "#FFB300" };
+  dolden: "#FF8A3D", lauch: "#B39DDB", huelsen: "#43A047", gras: "#D4B106", rosen: "#EC407A", lippen: "#26A69A", kresse: "#FFB300", knoeterich: "#B71C1C" };
 const anzeigeName = id => (PF[id] || { name: id }).name;
 function nachbarn(a, b) {
   const A = PF[a], B = PF[b]; if (!A || !B || a === b) return 0;
@@ -997,7 +1054,7 @@ function planGesten() {
 function zeichnePflanzen() {
   const m = monat();
   const jetztPassend = pf => [...pf.vorziehen, ...pf.draussen, ...pf.ghm].some(x => x === m || x === (m % 12) + 1);
-  const liste = PFLANZEN.filter(pf => filter === "alle" || (filter === "jetzt" ? jetztPassend(pf) : filter === "gh" ? pf.gh !== "draussen" : pf.gh !== "bevorzugt"));
+  const liste = PFLANZEN.slice().sort((a, b) => a.name.localeCompare(b.name, "de")).filter(pf => filter === "alle" || (filter === "jetzt" ? jetztPassend(pf) : filter === "gh" ? pf.gh !== "draussen" : pf.gh !== "bevorzugt"));
   const gewaehlt = Object.entries(daten.wunsch).filter(([id, n]) => n > 0 && PF[id]);
   $("inhalt").innerHTML = `
     <div class="karte">
