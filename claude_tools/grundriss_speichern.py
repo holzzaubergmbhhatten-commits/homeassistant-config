@@ -15,7 +15,7 @@ ZIEL = "/config/www/grundriss_daten.json"
 
 
 def main():
-    daten = json.loads(base64.b64decode(sys.argv[1]).decode("utf-8"))
+    daten = json.loads(base64.b64decode("".join(sys.argv[1:])).decode("utf-8"))
     if not (isinstance(daten, dict) and isinstance(daten.get("lampen"), list)):
         raise ValueError("unerwartetes Format")
     if os.path.exists(ZIEL):

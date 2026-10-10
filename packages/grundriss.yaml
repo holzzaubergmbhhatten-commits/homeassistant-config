@@ -15,7 +15,10 @@ script:
       - action: shell_command.grundriss_schreiben
         data:
           # schon hier kodieren – sonst würde Home Assistant den JSON-Text in ein Objekt umwandeln
-          b64: "{{ (daten if daten is string else (daten | to_json)) | base64_encode }}"
+          # in Stücken (ein einzelnes Argument darf nicht beliebig lang sein); das Skript setzt sie wieder zusammen
+          b64: >-
+            {% set s = (daten if daten is string else (daten | to_json)) | base64_encode %}
+            {% for i in range(0, s | length, 100000) %}{{ s[i:i + 100000] }} {% endfor %}
         response_variable: ergebnis
       - if: "{{ not (ergebnis.stdout | default('') | trim).startswith('ok') }}"
         then:
