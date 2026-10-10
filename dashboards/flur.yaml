@@ -1547,7 +1547,7 @@ views:
   type: panel
   cards:
   - type: iframe
-    url: /local/wartung.html?v=1
+    url: /local/wartung.html?v=2
     aspect_ratio: 53.3%
 - title: Infos
   path: infos
@@ -1562,11 +1562,29 @@ views:
   path: verwaltung
   icon: mdi:rv-truck
   type: panel
+  # Eingebettet klappt der Login nicht (Browser blockieren das Anmelde-Cookie in fremden Seiten),
+  # deshalb zwei Knöpfe: am Monitor im Kiosk-Browser (springt nach 10 Minuten zurück) oder am Handy im Browser
   cards:
-  - type: iframe
-    url: https://urlaub-wie-zuhause.eu/verwaltung.html
-    aspect_ratio: 53.3%
-    allow: fullscreen; clipboard-write
+  - type: vertical-stack
+    cards:
+    - type: markdown
+      content: |-
+        ## <ha-icon icon="mdi:rv-truck"></ha-icon> Buchungen verwalten
+        Ferienwohnung und Stellplätze im Verwaltungsbereich der Homepage.
+    - type: button
+      name: Hier am Monitor öffnen
+      icon: mdi:monitor
+      icon_height: 60px
+      tap_action:
+        action: perform-action
+        perform_action: script.stellplaetze_verwalten
+    - type: button
+      name: Im Browser öffnen (Handy)
+      icon: mdi:cellphone-arrow-down
+      icon_height: 60px
+      tap_action:
+        action: url
+        url_path: https://urlaub-wie-zuhause.eu/verwaltung.html
 - title: Es klingelt
   path: klingel
   icon: mdi:doorbell-video

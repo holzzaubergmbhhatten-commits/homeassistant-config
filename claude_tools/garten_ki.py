@@ -52,6 +52,53 @@ Gesät/gepflanzt/vorgezogen/gekauft/vorgekeimt/gelegt → "saison". Angehäufelt
 Herbst- oder Frühjahrsarbeit erledigt → "saison". Ist es nur eine Frage, bleibt "erledigt" leer."""
 
 
+HAUS = """Du bist ein erfahrener Haustechniker und Hausmeister und hilfst einer Familie in Norddeutschland bei der Wartung
+ihres Resthofs (Haus mit Wärmepumpe, Kamin mit Wassertasche, Pufferspeicher, Solaranlage, Regenwasser-Zisterne, Kleinkläranlage,
+Nebengebäude mit Werkstatt, Maschinen, Wohnwagen). Erkläre konkret und Schritt für Schritt, so dass ein Laie es sicher umsetzen kann:
+was man braucht (Werkzeug, Material mit Menge), die einzelnen Handgriffe, worauf man achten muss und woran man erkennt, dass es
+richtig ist. Nutze die Angaben aus dem Haus-Handbuch (Gerätetypen, Sicherungen, Standorte), wenn sie passen, und nenne sie.
+Sicherheit zuerst: Bei Arbeiten an Strom (außer Testtaste/Sicherung schalten), Gas, Kältemittel, Abgas oder auf hohen Leitern
+klar sagen, wann der Fachbetrieb ran muss. Wenn du etwas über die konkrete Anlage nicht sicher weißt, sag das ehrlich und
+sag, wo es steht (Typenschild, Anleitung). Antworte auf Deutsch, freundlich, ohne Markdown-Tabellen und ohne Überschriften
+mit #, höchstens einfache Aufzählungen mit "- " oder "1." und kurze Zwischenzeilen wie "Du brauchst:", "So geht's:", "Achtung:"."""
+
+HANDBUCH = "/config/wartung_handbuch.txt"
+
+
+def handbuch_text(link):
+    """Seiten des Haus-Handbuchs (Haustechnik, Geräte, Maschinen, Wohnwagen) als Text – einmal am Tag neu geholt."""
+    try:
+        if os.path.getmtime(HANDBUCH) > datetime.now().timestamp() - 86400:
+            with open(HANDBUCH, encoding="utf-8") as f:
+                return f.read()
+    except OSError:
+        pass
+    if not re.match(r"^https?://", link or ""):
+        return ""
+    import html as html_mod
+    import urllib.parse
+    import urllib.request
+    basis = link if link.endswith("/") or link.rsplit("/", 1)[-1].count(".") else link + "/"
+    teile = []
+    for seite in ("haustechnik.html", "geraete.html", "maschinen.html", "wohnwagen.html", "sicherungen.html"):
+        try:
+            req = urllib.request.Request(urllib.parse.urljoin(basis, seite), headers={"User-Agent": "HomeAssistant-Wartung"})
+            with urllib.request.urlopen(req, timeout=8) as r:
+                roh = r.read().decode("utf-8", "replace")
+        except Exception:  # noqa: BLE001 – dann ohne diese Seite
+            continue
+        roh = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", roh)
+        text = re.sub(r"\s+", " ", html_mod.unescape(re.sub(r"<[^>]+>", " ", roh))).strip()
+        teile.append(f"[{seite}] {text[:9000]}")
+    text = "\n".join(teile)[:30000]
+    try:
+        with open(HANDBUCH, "w", encoding="utf-8") as f:
+            f.write(text)
+    except OSError:
+        pass
+    return text
+
+
 def json_laden(pfad, leer):
     try:
         with open(pfad, encoding="utf-8") as f:
@@ -227,6 +274,19 @@ def main():
         vorher = json_laden(FRAGEN, [])[-3:]
         if vorher:
             kontext.append("Unser letztes Gespräch: " + " | ".join(f"Wir: {x.get('frage', '')} – Du: {x.get('antwort', '')[:300]}" for x in vorher))
+    if auftrag.get("art") == "wartung":
+        a = auftrag.get("aufgabe") or {}
+        kontext.append(f"Wartungsaufgabe: {a.get('titel', '')} (Bereich {a.get('bereich', '')}, alle {a.get('intervall', '?')} Monate)")
+        if a.get("hinweis"):
+            kontext.append(f"Hinweis aus dem Handbuch: {a['hinweis']}")
+        if a.get("zuletzt"):
+            kontext.append(f"Zuletzt erledigt: {a['zuletzt']}")
+        hb = handbuch_text(auftrag.get("link", ""))
+        if hb:
+            kontext.append("Auszug aus unserem Haus-Handbuch (Geräte, Technik, Sicherungen):\n" + hb)
+        for x in (auftrag.get("verlauf") or [])[-4:]:
+            if isinstance(x, dict):
+                kontext.append(f"Vorher gefragt: {x.get('frage', '')} – deine Antwort: {str(x.get('antwort', ''))[:1200]}")
     kontext.append(f"Datum: {auftrag.get('datum') or date.today().strftime('%d.%m.%Y')}")
     frage = (auftrag.get("frage") or "").strip()
     if auftrag.get("art") == "foto":
@@ -244,7 +304,7 @@ def main():
     antwort = client.messages.create(
         model=MODELL,
         max_tokens=3000,
-        system=SYSTEM + (CHAT if auftrag.get("art") == "chat" else ""),
+        system=HAUS if auftrag.get("art") == "wartung" else SYSTEM + (CHAT if auftrag.get("art") == "chat" else ""),
         messages=[{"role": "user", "content": inhalt}],
         # schnelle, alltagstaugliche Antwort (Home Assistant wartet höchstens 60 Sekunden);
         # lehnt das Modell ab, springt automatisch ein passendes anderes Modell ein
