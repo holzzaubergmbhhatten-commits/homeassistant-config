@@ -73,6 +73,15 @@
   .vorschlag .mitte { flex: 1; min-width: 0; }
   .pflanzen-wahl { display: flex; flex-wrap: wrap; gap: 6px; }
   .pflanzen-wahl .knopf.voll .punkt { box-shadow: 0 0 0 2px #fff; }
+  .familien { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; margin-top: 8px; }
+  .familie { background: var(--bg); border-radius: 12px; padding: 10px 12px; }
+  .familie .kopf-f { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+  .punkt.gross { width: 18px; height: 18px; }
+  .familie .info-f { font-size: 13px; margin-top: 5px; line-height: 1.4; }
+  .folge { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; margin: 8px 0; }
+  .folge > div { background: var(--bg); border-radius: 12px; padding: 10px 12px; }
+  .nrf { display: inline-flex; width: 22px; height: 22px; border-radius: 50%; background: var(--akzent); color: #fff; font-weight: 800; font-size: 13px; align-items: center; justify-content: center; margin-right: 6px; }
+  .farben-link { font-size: 12px; font-weight: 700; color: var(--blau); padding: 4px 9px; border-radius: 8px; background: #E8F1FF; }
   .tipp-waerme { border: 2px solid #FFD08A; }
   .liste-tipps { padding-left: 18px; margin: 6px 0; line-height: 1.5; font-size: 14px; }
   /* Pflanzenliste */
@@ -125,6 +134,7 @@
     <button data-a="reiter" data-w="pflanzen">Pflanzen</button>
     <button data-a="reiter" data-w="heute">Heute</button>
     <button data-a="reiter" data-w="foto">Foto-Check</button>
+    <button data-a="reiter" data-w="wissen">Wissen</button>
   </div>
   <span class="luecke"></span>
   <span class="speicher" id="speicher"></span>
@@ -134,7 +144,7 @@
 <div class="meldung" id="meldung"></div>
 
 <script>
-const SEITEN_VERSION = 7;
+const SEITEN_VERSION = 8;
 const DATEN_URL = "/local/garten_daten.json";
 const WETTER = "weather.touchmonitor_home";
 const $ = id => document.getElementById(id);
@@ -547,7 +557,7 @@ function ordnen(r) {
 function zeichnen() {
   beeteCache = null;
   document.querySelectorAll("#reiter button").forEach(b => b.classList.toggle("an", b.dataset.w === reiter));
-  const f = { plan: zeichnePlan, pflanzen: zeichnePflanzen, heute: zeichneHeute, foto: zeichneFoto }[reiter];
+  const f = { plan: zeichnePlan, pflanzen: zeichnePflanzen, heute: zeichneHeute, foto: zeichneFoto, wissen: zeichneWissen }[reiter];
   f();
 }
 
@@ -992,6 +1002,7 @@ function zeichnePlan() {
         ${bearbeiten && !gelaendeEdit ? `<button class="knopf klein-k" data-a="neu-hochbeet">${ic("plus")} Hochbeet</button><button class="knopf klein-k" data-a="neu-erdhaufen">${ic("plus")} Erdhaufen</button><button class="knopf klein-k" data-a="neu-kasten">${ic("plus")} Kasten</button><button class="knopf klein-k" data-a="neu-haus">${ic("plus")} Häuschen</button>` : ""}
         ${bearbeiten && gelaendeEdit ? `<button class="knopf klein-k" data-a="neu-baum">${ic("plus")} Baum</button>` : ""}
         ${bearbeiten ? `<button class="knopf klein-k ${gelaendeEdit ? "blau" : ""}" data-a="gelaende-edit">Bäume, Hecke & Wege</button>` : ""}
+        ${bearbeiten ? "" : `<button class="farben-link" data-a="reiter" data-w="wissen">Farben?</button>`}
         <button class="knopf klein-k ${bearbeiten ? "blau" : ""}" data-a="bearbeiten">${ic("stift")} ${bearbeiten ? "Fertig" : "Beete ändern"}</button>
       </div>
       <div class="planlayout ${leer || bearbeiten ? "ohne" : ""}" id="planlayout">
@@ -1117,6 +1128,7 @@ function zeichnePflanzen() {
         <div class="segment">${[["jetzt", "Jetzt passend"], ["gh", "Unter Dach"], ["draussen", "Draußen"], ["alle", "Alle"]].map(([w, t]) =>
           `<button data-a="filter" data-w="${w}" class="${w === filter ? "an" : ""}">${t}</button>`).join("")}</div>
         <span class="luecke"></span>
+        <button class="farben-link" data-a="reiter" data-w="wissen">Was bedeuten die Farben?</button>
         <button class="knopf voll" data-a="plan-erstellen">${ic("zauber")} Pflanzplan erstellen${gewaehlt.length ? ` (${gewaehlt.length})` : ""}</button>
       </div>
       <div class="pliste">${liste.map(pf => {
@@ -1206,6 +1218,63 @@ function zeichneHeute() {
       <div id="ki-antwort" class="antwort" style="margin-top:10px"></div>
     </div>`;
   if (!tage.length && Date.now() - wetterGeladen > 60000) wetterLaden();
+}
+
+// ================= Wissen: Farben, Familien, Fruchtfolge, Mischkultur =================
+const FAMILIE_INFO = {
+  nacht: "Wärmeliebend, meist Starkzehrer. Anfällig für Kraut- und Braunfäule – deshalb nie zwei Jahre hintereinander ins selbe Beet.",
+  kuerbis: "Starkzehrer mit großen Blättern, brauchen viel Wasser und Nährstoffe. Mehltau mögen sie nicht – Blätter trocken halten.",
+  kreuz: "Die große Kohl-Familie. Teilt sich Schädlinge (Kohlweißling, Kohlhernie im Boden) – mindestens 3 Jahre Pause im selben Beet.",
+  dolden: "Meist Wurzelgemüse und Kräuter. Möhrenfliege mag sie – Zwiebeln/Lauch daneben halten sie fern.",
+  lauch: "Schwachzehrer mit starkem Geruch – schützt Nachbarn (z. B. Möhren) vor Schädlingen, verträgt sich aber nicht mit Bohnen und Erbsen.",
+  huelsen: "Holen sich Stickstoff aus der Luft und hinterlassen einen gedüngten Boden – ideal als Vorfrucht für Starkzehrer.",
+  korb: "Salate und Blumen. Meist schnell und genügsam – gute Lückenfüller zwischen langsamen Pflanzen.",
+  gaensefuss: "Spinat, Mangold, Rote Bete. Untereinander unverträglich – nicht nebeneinander und nicht nacheinander.",
+  lippen: "Duftende Kräuter. Viele halten Schädlinge fern und locken Bienen an.",
+  baldrian: "Feldsalat – der Wintersalat, verträgt Frost.", portulak: "Winterportulak – winterhart, für die kalte Jahreszeit.",
+  gras: "Mais und Winterroggen (Gründüngung).", rosen: "Erdbeeren – mehrjährig, alle 3–4 Jahre an eine neue Stelle.",
+  kresse: "Kapuzinerkresse – lockt Läuse von Gemüse weg, Blüten essbar.", knoeterich: "Rhabarber – mehrjährig, bleibt jahrelang am selben Platz.",
+};
+function zeichneWissen() {
+  const fams = Object.keys(FAMILIE).filter(f => PFLANZEN.some(p => p.fam === f));
+  $("inhalt").innerHTML = `
+    <div class="karte"><h2>Was bedeuten die Farben?</h2>
+      <p class="klein">Jede Farbe steht für eine <b>Pflanzenfamilie</b>. Pflanzen derselben Familie sind verwandt: Sie brauchen ähnliche Nährstoffe und haben dieselben Krankheiten und Schädlinge. Die Farben siehst du überall – in der Pflanzenliste, auf den Kärtchen und als Punkte im Plan.</p>
+      <div class="familien">${fams.map(f => `<div class="familie"><div class="kopf-f"><i class="punkt gross" style="background:${FARBE[f]}"></i><b>${esc(FAMILIE[f])}</b></div>
+        <div class="klein">${esc(PFLANZEN.filter(p => p.fam === f).map(p => p.name).join(", "))}</div>
+        ${FAMILIE_INFO[f] ? `<div class="info-f">${esc(FAMILIE_INFO[f])}</div>` : ""}</div>`).join("")}</div>
+    </div>
+    <div class="karte"><h2>Fruchtfolge – warum jedes Jahr wechseln?</h2>
+      <p>Steht dieselbe Familie mehrere Jahre im selben Beet, laugt der Boden einseitig aus und Krankheiten und Schädlinge reichern sich an. Deshalb wandert jede Familie jedes Jahr ein Beet weiter. Faustregel:</p>
+      <div class="folge">
+        <div><span class="nrf">1</span><b>Starkzehrer</b><div class="klein">Tomate, Gurke, Zucchini, Kohl, Kartoffel, Lauch – frischer Kompost</div></div>
+        <div><span class="nrf">2</span><b>Mittelzehrer</b><div class="klein">Möhre, Rote Bete, Spinat, Kohlrabi, Fenchel – Reste reichen</div></div>
+        <div><span class="nrf">3</span><b>Schwachzehrer</b><div class="klein">Salat, Radieschen, Zwiebel, Bohne, Erbse, Kräuter – kaum Dünger</div></div>
+        <div><span class="nrf">4</span><b>Gründüngung / Pause</b><div class="klein">Winterroggen, Phacelia – Boden erholt sich, dann wieder von vorn</div></div>
+      </div>
+      <p class="klein">Darum ist es wichtig, bei jedem Beet einzutragen, was dieses Jahr drin war (Plan → Beet antippen → „Was war … drin?“). Dann schlage ich fürs nächste Jahr das Richtige vor.</p>
+    </div>
+    <div class="karte"><h2>Mischkultur – gute und schlechte Nachbarn</h2>
+      <p>Manche Pflanzen helfen sich gegenseitig, andere stören sich. Beispiele:</p>
+      <ul class="liste-tipps">
+        <li><b>Möhre + Zwiebel:</b> Der Zwiebelduft vertreibt die Möhrenfliege, der Möhrenduft die Zwiebelfliege.</li>
+        <li><b>Tomate + Basilikum:</b> Basilikum hält Weiße Fliege fern und mag die Wärme neben der Tomate.</li>
+        <li><b>Gurke + Dill:</b> Dill fördert die Gurken und lockt Nützlinge an.</li>
+        <li><b>Kohl + Salbei/Thymian:</b> Der Duft verwirrt den Kohlweißling.</li>
+        <li><b>Bohne + Bohnenkraut:</b> hält die Schwarze Bohnenlaus fern.</li>
+        <li style="color:#C62828"><b>Bohne/Erbse + Zwiebel/Lauch:</b> hemmen sich gegenseitig – auseinander pflanzen.</li>
+        <li style="color:#C62828"><b>Tomate + Kartoffel:</b> gleiche Familie, gleiche Krankheit (Braunfäule).</li>
+      </ul>
+      <p class="klein">Auf den Kärtchen im Plan steht grün „gut mit …“ oder rot „schlecht neben …“. Unter „Pflanzen“ zeigt ein Tipp auf den Namen alle guten und schlechten Nachbarn.</p>
+    </div>
+    <div class="karte"><h2>Stark-, Mittel- und Schwachzehrer</h2>
+      <p>„Zehren“ heißt, wie viele Nährstoffe eine Pflanze aus dem Boden holt.</p>
+      <ul class="liste-tipps">
+        <li><b>Starkzehrer</b> brauchen viel Kompost beim Pflanzen und im Sommer alle 2–3 Wochen Flüssigdünger (Brennnesseljauche 1:10).</li>
+        <li><b>Mittelzehrer</b> kommen mit etwas Kompost aus.</li>
+        <li><b>Schwachzehrer</b> brauchen kaum Dünger – zu viel schadet sogar (Salat sammelt sonst Nitrat).</li>
+      </ul>
+    </div>`;
 }
 
 let fotoDaten = null;
