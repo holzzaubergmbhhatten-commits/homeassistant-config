@@ -147,7 +147,7 @@
 <div class="leiste">
   <span class="titel">Grundriss</span><span class="info" id="info"></span>
   <span class="luecke"></span>
-  <span id="knoepfe-ansicht"><button id="alle-aus"></button> <button id="bearbeiten"></button></span>
+  <span id="knoepfe-ansicht"><button id="alle-aus"></button> <button id="als-datei"></button> <button id="bearbeiten"></button></span>
   <span id="knoepfe-bearbeiten" style="display:none">
     <button id="raum-neu"></button> <button id="tuer-neu"></button> <button id="geraet-neu"></button> <button id="foto"></button> <button id="gelaende"></button> <button id="gelaende-neu"></button>
     <button id="abbrechen" class="rot"></button> <button id="speichern" class="voll"></button>
@@ -1194,6 +1194,8 @@ function knoepfe() {
 }
 K("alle-aus").innerHTML = `${icon("alleaus")} Alle aus`;
 K("bearbeiten").innerHTML = `${icon("stift")} Bearbeiten`;
+K("als-datei").innerHTML = `${icon("plan")} Als Datei`;
+K("als-datei").onclick = () => alsDateiSchicken();
 K("raum-neu").innerHTML = `${icon("plus")} Fläche`;
 K("geraet-neu").innerHTML = `${icon("plus")} Gerät / Kamera`;
 K("abbrechen").innerHTML = `${icon("x")} Abbrechen`;
@@ -1272,6 +1274,70 @@ function detailsZeigen(id) {
     const ha = window.parent.document.querySelector("home-assistant");
     ha.dispatchEvent(new CustomEvent("hass-more-info", { detail: { entityId: id }, bubbles: true, composed: true }));
   } catch (e) { meldung("Lampen-Einstellungen konnten nicht geöffnet werden"); }
+}
+// ================= Plan als Datei per Telegram (Haus + Grundstück, SVG zum Bearbeiten und PNG) =================
+// Das SVG enthält alles wie am Bildschirm; Farben stehen direkt an den Elementen, damit es ohne diese Seite funktioniert.
+// Koordinaten in Metern: 0,0 = Außenecke oben links vom Haupthaus, x nach rechts, y nach unten.
+function planAlsSvg(b, breitePx) {
+  const clone = svg.cloneNode(true);
+  const props = ["fill", "fill-opacity", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "stroke-linejoin", "opacity",
+    "font-size", "font-weight", "font-family", "letter-spacing", "text-anchor", "dominant-baseline", "paint-order"];
+  const a = svg.querySelectorAll("*"), c = clone.querySelectorAll("*");
+  a.forEach((e, i) => { const cs = getComputedStyle(e); c[i].setAttribute("style", props.map(p => `${p}:${cs.getPropertyValue(p)}`).join(";")); c[i].removeAttribute("class"); });
+  // Lichtschein, Bauplan-Foto und Bedien-Flächen weglassen
+  clone.querySelectorAll("image,[data-wand],[data-tuer],[data-fenster]").forEach(e => e.remove());
+  clone.querySelectorAll("circle").forEach(e => { if ((e.getAttribute("fill") || "").includes("lichtschein")) e.remove(); });
+  [...clone.attributes].forEach(at => { if (at.name !== "xmlns") clone.removeAttribute(at.name); });
+  clone.setAttribute("xmlns", NS);
+  clone.setAttribute("viewBox", `${b.x} ${b.y} ${b.w} ${b.h}`);
+  clone.setAttribute("width", breitePx); clone.setAttribute("height", Math.round(breitePx * b.h / b.w));
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<!-- Grundriss vom ${new Date().toLocaleString("de-DE")}. Maße in Metern: 0,0 = Außenecke oben links vom Haupthaus, x nach rechts, y nach unten. -->\n`
+    + new XMLSerializer().serializeToString(clone);
+}
+function svgZuPng(text, breitePx, hoehePx) {
+  return new Promise((ok, fehler) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const cv = document.createElement("canvas"); cv.width = breitePx; cv.height = hoehePx;
+        const cx = cv.getContext("2d"); cx.fillStyle = "#fff"; cx.fillRect(0, 0, breitePx, hoehePx); cx.drawImage(img, 0, 0, breitePx, hoehePx);
+        ok(cv.toDataURL("image/png").split(",")[1]);
+      } catch (e) { fehler(e); }
+    };
+    img.onerror = () => fehler(new Error("Bild konnte nicht erzeugt werden"));
+    img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(text)));
+  });
+}
+async function dateiHochladen(h, name, b64) {
+  const STUECK = 120000;   // durch 4 teilbar, damit jedes Stück für sich lesbar ist
+  for (let i = 0; i < b64.length; i += STUECK) {
+    const r = await h.callWS({ type: "call_service", domain: "script", service: "grundriss_datei_teil",
+      service_data: { name, neu: i === 0, teil: b64.slice(i, i + STUECK) }, return_response: true });
+    const a = (r && r.response) || {};
+    if (a.ok === false || a.ok === "False") throw new Error(a.text || "Schreiben fehlgeschlagen");
+  }
+}
+let exportLaeuft = false;
+async function alsDateiSchicken() {
+  const h = hass(); if (!h || exportLaeuft) return;
+  exportLaeuft = true; meldung("Plan wird erstellt …");
+  try {
+    const rand = (b, r) => ({ x: b.x - r, y: b.y - r, w: b.w + 2 * r, h: b.h + 2 * r });
+    const teile = [["haus", rand(inhaltsBoxHaus(), 1.2), 2400], ["grundstueck", rand(grundstueckBox(), 3), 3000]];
+    const namen = [];
+    for (const [art, b, px] of teile) {
+      const text = planAlsSvg(b, px);
+      await dateiHochladen(h, `grundriss_${art}.svg`, btoa(unescape(encodeURIComponent(text))));
+      namen.push(`grundriss_${art}.svg`);
+      try { await dateiHochladen(h, `grundriss_${art}.png`, await svgZuPng(text, px, Math.round(px * b.h / b.w))); namen.push(`grundriss_${art}.png`); }
+      catch (e) { /* ohne Bild weiter, das SVG reicht */ }
+    }
+    meldung("Wird per Telegram geschickt …");
+    const r = await h.callWS({ type: "call_service", domain: "script", service: "grundriss_dateien_senden", service_data: { namen }, return_response: true });
+    if (r && r.response && r.response.ok) meldung("Per Telegram geschickt ✓ (" + namen.length + " Dateien)");
+    else meldung("⚠️ Kein Telegram-Empfänger eingerichtet");
+  } catch (e) { meldung("⚠️ Hat nicht geklappt: " + (e && e.message || e)); }
+  exportLaeuft = false;
 }
 function verlassen() { bearbeiten = false; auswahl = null; fotoAn = false; panelZeigen(); knoepfe(); zeichnen(); }
 

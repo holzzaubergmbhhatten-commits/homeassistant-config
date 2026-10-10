@@ -3,8 +3,65 @@
 # und hierüber in /config/www/grundriss_daten.json gespeichert.
 shell_command:
   grundriss_schreiben: python3 /config/claude_tools/grundriss_speichern.py {{ b64 }}
+  # Knopf "Als Datei" auf der Grundriss-Seite: Plan in Stücken nach /media/grundriss_export schreiben
+  grundriss_export_teil: python3 /config/claude_tools/grundriss_export.py {{ name }} {{ modus }} {{ teil }}
 
 script:
+  grundriss_datei_teil:
+    alias: "Grundriss als Datei: Stück schreiben"
+    mode: queued
+    max: 50
+    fields:
+      name:
+        description: Dateiname, z. B. grundriss_haus.svg
+      neu:
+        description: true beim ersten Stück
+      teil:
+        description: Base64-Stück
+    sequence:
+      - action: shell_command.grundriss_export_teil
+        data:
+          name: "{{ name }}"
+          modus: "{{ 'neu' if neu | default(false) | bool else 'dazu' }}"
+          teil: "{{ teil }}"
+        response_variable: ergebnis
+      - variables:
+          antwort:
+            ok: "{{ (ergebnis.stdout | default('') | trim) == 'ok' }}"
+            text: "{{ ergebnis.stdout | default('keine Antwort') }}"
+      - stop: fertig
+        response_variable: antwort
+
+  grundriss_dateien_senden:
+    alias: "Grundriss als Datei per Telegram schicken"
+    mode: single
+    fields:
+      namen:
+        description: Liste der Dateinamen in /media/grundriss_export
+    sequence:
+      - variables:
+          empfaenger: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
+      - if: "{{ empfaenger | string | length < 4 }}"
+        then:
+          - stop: kein Empfänger
+            response_variable: fehler
+      - repeat:
+          for_each: "{{ namen }}"
+          sequence:
+            - action: telegram_bot.send_document
+              data:
+                chat_id: "{{ empfaenger | int }}"
+                file: "/media/grundriss_export/{{ repeat.item }}"
+                caption: >-
+                  {{ ('Grundriss Haus' if 'haus' in repeat.item else 'Grundriss Grundstück')
+                     ~ (' – zum Bearbeiten (SVG, Maße in Metern)' if repeat.item.endswith('.svg') else ' – Bild')
+                     ~ ' · ' ~ now().strftime('%d.%m.%Y %H:%M') }}
+      - variables:
+          ok:
+            ok: true
+      - stop: fertig
+        response_variable: ok
+
   grundriss_speichern:
     alias: Grundriss speichern
     mode: queued
