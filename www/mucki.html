@@ -138,7 +138,7 @@
     <div class="rechnung" id="rechnung"></div>
     <div class="satz" id="satz"></div>
     <div class="felder" id="felder"></div>
-    <div class="unten"><span style="font-size:0.85vw;color:#8E8E93">Falsch getippt? Auf das <svg class="ic" viewBox="0 0 24 24"><path fill="#FF3B30" d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"/></svg> tippen.</span><button class="knopf rot" id="b-woche">Neue Woche</button></div>
+    <div class="unten"><span style="font-size:0.85vw;color:#8E8E93">Falsch getippt? Auf das <svg class="ic" viewBox="0 0 24 24"><path fill="#FF3B30" d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"/></svg> tippen.</span><span><button class="knopf blau" id="b-ansage">Fertig – Ansage</button> <button class="knopf rot" id="b-woche">Neue Woche</button></span></div>
     <div class="vorrat-titel">Aufgaben – antippen, wenn erledigt</div>
     <div class="vorrat" id="vorrat"></div>
   </div>
@@ -148,7 +148,7 @@
 
 <script>
 // Bei jeder Änderung an dieser Datei hochzählen – offene Monitore laden sich dann selbst neu
-const SEITEN_VERSION = 13;
+const SEITEN_VERSION = 14;
 const DATEN_URL = "/local/mucki_daten.json";
 const FELDER = "input_text.mucki_felder";
 const ANZAHL_FELDER = 6;
@@ -608,6 +608,20 @@ tippen($("b-woche"), () => {
   Promise.resolve(h.callService("script", "mucki_woche_abschliessen", {}))
     .then(() => { meldung("Woche gespeichert – viel Erfolg in der neuen!", "haken", "#34C759"); setTimeout(async () => { await verlaufLaden(); zeichneTafel(); }, 1500); })
     .catch(e => meldung("Hat nicht geklappt: " + (e && e.message || e), "warn", "#FF9500"));
+});
+// Fertig: Ansage über die Lautsprecher, was Mucki diese Woche geschafft hat (script.mucki_ansage)
+let ansageLaeuft = false;
+tippen($("b-ansage"), async () => {
+  const h = hass(); if (!h || ansageLaeuft) return;
+  ansageLaeuft = true; $("b-ansage").textContent = "Ansage läuft …";
+  meldung("Jarvis sagt an, was Mucki geschafft hat …", "haken", "#007AFF");
+  try {
+    const r = await h.callWS({ type: "call_service", domain: "script", service: "mucki_ansage", service_data: {}, return_response: true });
+    const a = (r && r.response) || {};
+    if (a.ok === true || a.ok === "True") meldung("Ansage gemacht!", "haken", "#34C759");
+    else meldung("Lautsprecher haben nicht geantwortet – die Nachricht kam per Telegram", "warn", "#FF9500");
+  } catch (e) { meldung("Hat nicht geklappt: " + (e && e.message || e), "warn", "#FF9500"); }
+  ansageLaeuft = false; $("b-ansage").textContent = "Fertig – Ansage";
 });
 tippen($("rechnung"), () => { if (bearbeiten) postenBearbeiten(); });
 // Abgedunkelter Hintergrund schließt bewusst NICHT – nur der Schließen/Abbrechen-Knopf
