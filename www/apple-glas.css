@@ -1,0 +1,61 @@
+/* Gemeinsames "Liquid Glass"-Aussehen der eigenen Seiten (Garten, Wartung, Eingang, Mucki) – passend zu themes/apple.yaml.
+   Wird NACH dem Seiten-Stil geladen und überschreibt nur Hintergrund, Karten und Knöpfe. Kein backdrop-filter (Kiosk ohne GPU).
+   Dunkel: Seiten, die das unterstützen, setzen <html class="dunkel"> aus dem Home-Assistant-Design. */
+:root {
+  --glas-grund: radial-gradient(ellipse at 8% 0%, #D4E4FF 0%, rgba(212,228,255,0) 55%), radial-gradient(ellipse at 95% 10%, #F3DDF3 0%, rgba(243,221,243,0) 50%), radial-gradient(ellipse at 75% 100%, #FFE7CC 0%, rgba(255,231,204,0) 55%), linear-gradient(165deg, #EDF2FA 0%, #F5F2F8 100%);
+  --glas: rgba(255,255,255,0.62);
+  --glas-dicht: rgba(255,255,255,0.86);
+  --glas-rand: rgba(255,255,255,0.9);
+  --glas-schatten: 0 10px 30px rgba(40,52,90,0.10), inset 0 1px 0 rgba(255,255,255,0.95);
+  --fuellung: rgba(118,118,128,0.12);
+  --fuellung-an: #FFFFFF;
+  --umkehr: #FFFFFF;
+}
+:root.dunkel {
+  --glas-grund: radial-gradient(ellipse at 8% 0%, #1D2B52 0%, rgba(29,43,82,0) 55%), radial-gradient(ellipse at 95% 10%, #3B1F4A 0%, rgba(59,31,74,0) 50%), radial-gradient(ellipse at 70% 100%, #0F3640 0%, rgba(15,54,64,0) 55%), linear-gradient(165deg, #0D0F15 0%, #16141C 100%);
+  --glas: rgba(58,58,68,0.48);
+  --glas-dicht: rgba(44,44,50,0.94);
+  --glas-rand: rgba(255,255,255,0.12);
+  --glas-schatten: 0 10px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.10);
+  --fuellung: rgba(118,118,128,0.26);
+  --fuellung-an: #636366;
+  --umkehr: #1C1C1E;
+  --text: #F5F5F7; --grau: #A1A1A6; --linie: rgba(255,255,255,0.12);
+  --gruen: #30D158; --rot: #FF453A; --orange: #FF9F0A; --blau: #0A84FF;
+  color-scheme: dark;
+}
+:root { --bg: var(--fuellung); --karte: var(--glas); }
+html { background: var(--glas-grund) !important; min-height: 100%; }
+html.durchsichtig { background: transparent !important; }  /* Mucki: Dashboard-Hintergrund scheint durch */
+body { background: transparent !important; }
+h1 { font-weight: 800; letter-spacing: -0.5px; }
+
+/* Glas-Karten */
+.karte, .aufgabe, .eintrag, .zahlen > div {
+  background: var(--glas) !important; border: 1px solid var(--glas-rand);
+  box-shadow: var(--glas-schatten) !important; border-radius: 24px !important;
+}
+.schild { background: var(--glas-dicht); border: 1px solid var(--glas-rand); box-shadow: var(--glas-schatten); border-radius: 18px; }
+
+/* Knöpfe als Pillen */
+.knopf { border-radius: 999px !important; }
+.knopf:not(.gruen):not(.voll):not(.blau):not(.scharf):not(.rot) { background: var(--fuellung); box-shadow: none; }
+.filter button, .beispiele button { border-radius: 999px; background: var(--fuellung); }
+.filter button.an { background: var(--text); color: var(--umkehr); }
+
+/* Segment-Schalter wie in iOS */
+.reiter, .segment { background: var(--fuellung) !important; border-radius: 999px !important; }
+.reiter button, .segment button { border-radius: 999px !important; }
+.reiter button.an, .segment button.an { background: var(--fuellung-an) !important; box-shadow: 0 3px 10px rgba(0,0,0,.12) !important; }
+
+/* Eingaben, Blätter, Meldungen */
+textarea, input[type=text], input[type=number], select { border-radius: 16px !important; border-color: var(--linie) !important; }
+.blatt { background: var(--glas-dicht) !important; border-radius: 28px 28px 0 0 !important; }
+.toast, #meldung { border-radius: 999px !important; }
+.meldung { border-radius: 16px !important; }
+:root.dunkel input, :root.dunkel textarea, :root.dunkel select { background: var(--fuellung) !important; color: var(--text); border-color: var(--linie) !important; }
+:root.dunkel .meldung { background: rgba(255,159,10,.16); color: #FFB340; }
+:root.dunkel .warten { border-color: rgba(255,255,255,.2); border-top-color: var(--blau); }
+:root.dunkel .fragen { background: rgba(255,159,10,.16); color: #FFB340; }
+:root.dunkel .marke { background: rgba(10,132,255,.18); }
+:root.dunkel .bild { background: #2C2C2E; }

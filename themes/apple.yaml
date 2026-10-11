@@ -1,37 +1,42 @@
-# Apple-Stil: Farben und Formen wie in der Home-App von iOS.
-# Bewusst ohne Transparenz, Schatten und Verläufe (Kiosk-Browser ohne Grafikbeschleunigung).
+# Apple-Stil im Look von iOS 26 ("Liquid Glass"): Hintergrund mit sanftem Farbverlauf, Karten aus
+# halbdurchsichtigem "Glas" mit hellem Rand und weichem Schatten, Pillen-Form für Plaketten und Knöpfe.
+# Bewusst OHNE Weichzeichner (backdrop-filter) – der Kiosk-Browser am Monitor hat keine Grafikbeschleunigung,
+# Verläufe, Transparenz und Schatten schafft er aber flüssig.
 # "Apple" ist die helle Variante (falls die Kiosk-App das Theme "Apple" fest vorgibt, bleibt es hell),
-# "Apple Dunkel" die dunkle. Umschalten: packages/design.yaml (Hell/Dunkel/Automatisch).
+# "Apple Dunkel" die dunkle, "Apple Hell" = wie "Apple". Umschalten: packages/design.yaml (Hell/Dunkel/Automatisch).
+# Dialoge und Menüs bleiben deckend (card-background-color), damit sie ohne Weichzeichner lesbar sind.
 Apple:
   primary-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", Roboto, "Helvetica Neue", sans-serif
   paper-font-common-base_-_font-family: var(--primary-font-family)
   ha-font-family-body: var(--primary-font-family)
   ha-font-family-heading: var(--primary-font-family)
-  ha-card-border-radius: 22px
-  ha-card-border-width: 0px
-  ha-tile-border-radius: 22px
-  ha-badge-border-radius: 18px
-  ha-dialog-border-radius: 28px
-  mdc-shape-medium: 22px
-  mdc-shape-small: 14px
-  ha-section-title-font-size: 22px
+  ha-card-border-radius: 28px
+  ha-card-border-width: 1px
+  ha-tile-border-radius: 24px
+  ha-badge-border-radius: 999px
+  ha-dialog-border-radius: 32px
+  mdc-shape-medium: 24px
+  mdc-shape-small: 999px
+  ha-section-title-font-size: 24px
+  ha-heading-card-title-font-size: 20px
   state-light-active-color: '#FFCC00'
   state-switch-active-color: '#34C759'
-  state-script-active-color: '#0A84FF'
-  state-icon-active-color: '#FFD60A'
+  state-script-active-color: '#007AFF'
+  state-icon-active-color: '#FF9F0A'
   primary-color: '#007AFF'
   accent-color: '#007AFF'
   primary-background-color: '#F2F2F7'
   secondary-background-color: '#FFFFFF'
-  lovelace-background: '#F2F2F7'
+  lovelace-background: radial-gradient(ellipse at 8% 0%, #D4E4FF 0%, rgba(212,228,255,0) 55%), radial-gradient(ellipse at 95% 10%, #F3DDF3 0%, rgba(243,221,243,0) 50%), radial-gradient(ellipse at 75% 100%, #FFE7CC 0%, rgba(255,231,204,0) 55%), linear-gradient(165deg, #EDF2FA 0%, #F5F2F8 100%)
   card-background-color: '#FFFFFF'
-  ha-card-background: '#FFFFFF'
-  ha-card-box-shadow: none
+  ha-card-background: rgba(255, 255, 255, 0.62)
+  ha-card-border-color: rgba(255, 255, 255, 0.9)
+  ha-card-box-shadow: 0 10px 30px rgba(40, 52, 90, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.95)
   primary-text-color: '#1C1C1E'
-  secondary-text-color: '#8E8E93'
+  secondary-text-color: '#6E6E73'
   disabled-text-color: '#C7C7CC'
-  divider-color: rgba(60, 60, 67, 0.12)
-  app-header-background-color: '#F2F2F7'
+  divider-color: rgba(60, 60, 67, 0.10)
+  app-header-background-color: rgba(244, 245, 250, 0.82)
   app-header-text-color: '#1C1C1E'
   sidebar-background-color: '#F2F2F7'
   sidebar-selected-icon-color: '#007AFF'
@@ -47,33 +52,35 @@ Apple Dunkel:
   paper-font-common-base_-_font-family: var(--primary-font-family)
   ha-font-family-body: var(--primary-font-family)
   ha-font-family-heading: var(--primary-font-family)
-  ha-card-border-radius: 22px
-  ha-card-border-width: 0px
-  ha-tile-border-radius: 22px
-  ha-badge-border-radius: 18px
-  ha-dialog-border-radius: 28px
-  mdc-shape-medium: 22px
-  mdc-shape-small: 14px
-  ha-section-title-font-size: 22px
+  ha-card-border-radius: 28px
+  ha-card-border-width: 1px
+  ha-tile-border-radius: 24px
+  ha-badge-border-radius: 999px
+  ha-dialog-border-radius: 32px
+  mdc-shape-medium: 24px
+  mdc-shape-small: 999px
+  ha-section-title-font-size: 24px
+  ha-heading-card-title-font-size: 20px
   state-light-active-color: '#FFD60A'
   state-switch-active-color: '#30D158'
   state-script-active-color: '#0A84FF'
   state-icon-active-color: '#FFD60A'
   primary-color: '#0A84FF'
   accent-color: '#0A84FF'
-  primary-background-color: '#2C2C2E'
-  secondary-background-color: '#3A3A3C'
-  lovelace-background: '#2C2C2E'
-  card-background-color: '#3A3A3C'
-  ha-card-background: '#3A3A3C'
-  ha-card-box-shadow: none
-  primary-text-color: '#FFFFFF'
-  secondary-text-color: '#AEAEB2'
+  primary-background-color: '#1C1C1E'
+  secondary-background-color: '#2C2C2E'
+  lovelace-background: radial-gradient(ellipse at 8% 0%, #1D2B52 0%, rgba(29,43,82,0) 55%), radial-gradient(ellipse at 95% 10%, #3B1F4A 0%, rgba(59,31,74,0) 50%), radial-gradient(ellipse at 70% 100%, #0F3640 0%, rgba(15,54,64,0) 55%), linear-gradient(165deg, #0D0F15 0%, #16141C 100%)
+  card-background-color: '#2C2C2E'
+  ha-card-background: rgba(58, 58, 68, 0.48)
+  ha-card-border-color: rgba(255, 255, 255, 0.12)
+  ha-card-box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.10)
+  primary-text-color: '#F5F5F7'
+  secondary-text-color: '#A1A1A6'
   disabled-text-color: '#48484A'
-  divider-color: rgba(84, 84, 88, 0.45)
-  app-header-background-color: '#2C2C2E'
-  app-header-text-color: '#FFFFFF'
-  sidebar-background-color: '#2C2C2E'
+  divider-color: rgba(255, 255, 255, 0.10)
+  app-header-background-color: rgba(20, 20, 26, 0.82)
+  app-header-text-color: '#F5F5F7'
+  sidebar-background-color: '#1C1C1E'
   sidebar-selected-icon-color: '#0A84FF'
   sidebar-selected-text-color: '#0A84FF'
   switch-checked-color: '#30D158'
@@ -87,31 +94,33 @@ Apple Hell:
   paper-font-common-base_-_font-family: var(--primary-font-family)
   ha-font-family-body: var(--primary-font-family)
   ha-font-family-heading: var(--primary-font-family)
-  ha-card-border-radius: 22px
-  ha-card-border-width: 0px
-  ha-tile-border-radius: 22px
-  ha-badge-border-radius: 18px
-  ha-dialog-border-radius: 28px
-  mdc-shape-medium: 22px
-  mdc-shape-small: 14px
-  ha-section-title-font-size: 22px
+  ha-card-border-radius: 28px
+  ha-card-border-width: 1px
+  ha-tile-border-radius: 24px
+  ha-badge-border-radius: 999px
+  ha-dialog-border-radius: 32px
+  mdc-shape-medium: 24px
+  mdc-shape-small: 999px
+  ha-section-title-font-size: 24px
+  ha-heading-card-title-font-size: 20px
   state-light-active-color: '#FFCC00'
   state-switch-active-color: '#34C759'
-  state-script-active-color: '#0A84FF'
-  state-icon-active-color: '#FFD60A'
+  state-script-active-color: '#007AFF'
+  state-icon-active-color: '#FF9F0A'
   primary-color: '#007AFF'
   accent-color: '#007AFF'
   primary-background-color: '#F2F2F7'
   secondary-background-color: '#FFFFFF'
-  lovelace-background: '#F2F2F7'
+  lovelace-background: radial-gradient(ellipse at 8% 0%, #D4E4FF 0%, rgba(212,228,255,0) 55%), radial-gradient(ellipse at 95% 10%, #F3DDF3 0%, rgba(243,221,243,0) 50%), radial-gradient(ellipse at 75% 100%, #FFE7CC 0%, rgba(255,231,204,0) 55%), linear-gradient(165deg, #EDF2FA 0%, #F5F2F8 100%)
   card-background-color: '#FFFFFF'
-  ha-card-background: '#FFFFFF'
-  ha-card-box-shadow: none
+  ha-card-background: rgba(255, 255, 255, 0.62)
+  ha-card-border-color: rgba(255, 255, 255, 0.9)
+  ha-card-box-shadow: 0 10px 30px rgba(40, 52, 90, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.95)
   primary-text-color: '#1C1C1E'
-  secondary-text-color: '#8E8E93'
+  secondary-text-color: '#6E6E73'
   disabled-text-color: '#C7C7CC'
-  divider-color: rgba(60, 60, 67, 0.12)
-  app-header-background-color: '#F2F2F7'
+  divider-color: rgba(60, 60, 67, 0.10)
+  app-header-background-color: rgba(244, 245, 250, 0.82)
   app-header-text-color: '#1C1C1E'
   sidebar-background-color: '#F2F2F7'
   sidebar-selected-icon-color: '#007AFF'

@@ -752,7 +752,7 @@ views:
   type: panel
   cards:
   - type: iframe
-    url: /local/mucki.html?v=14
+    url: /local/mucki.html?v=15
     aspect_ratio: 53.3%
 - title: Musik
   path: musik
@@ -1539,7 +1539,7 @@ views:
   type: panel
   cards:
   - type: iframe
-    url: /local/garten.html?v=14
+    url: /local/garten.html?v=15
     aspect_ratio: 53.3%
 - title: Wartung
   path: wartung
@@ -1547,7 +1547,7 @@ views:
   type: panel
   cards:
   - type: iframe
-    url: /local/wartung.html?v=2
+    url: /local/wartung.html?v=3
     aspect_ratio: 53.3%
 - title: Eingang
   path: eingang
@@ -1555,7 +1555,7 @@ views:
   type: panel
   cards:
   - type: iframe
-    url: /local/eingang.html?v=1
+    url: /local/eingang.html?v=2
     aspect_ratio: 53.3%
 - title: Infos
   path: infos

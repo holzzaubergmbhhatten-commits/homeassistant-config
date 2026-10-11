@@ -139,6 +139,7 @@
   .warten { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.5); border-top-color: #fff; border-radius: 50%; animation: dreh 0.8s linear infinite; vertical-align: -3px; }
   @keyframes dreh { to { transform: rotate(360deg); } }
 </style>
+<link rel="stylesheet" href="apple-glas.css?v=1">
 </head>
 <body>
 <div class="kopf">
@@ -159,7 +160,7 @@
 <div class="meldung" id="meldung"></div>
 
 <script>
-const SEITEN_VERSION = 14;
+const SEITEN_VERSION = 15;
 const DATEN_URL = "/local/garten_daten.json";
 const WETTER = "weather.touchmonitor_home";
 const $ = id => document.getElementById(id);

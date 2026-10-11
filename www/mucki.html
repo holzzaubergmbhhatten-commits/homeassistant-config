@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" class="durchsichtig">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -120,6 +120,7 @@
   #meldung { position: fixed; left: 50%; bottom: 2vw; transform: translateX(-50%); background: rgba(28,28,30,.9); color: #fff;
     padding: 0.7vw 1.3vw; border-radius: 2vw; font-size: 1.05vw; z-index: 20; display: none; }
 </style>
+<link rel="stylesheet" href="apple-glas.css?v=1">
 </head>
 <body>
   <div class="karte" id="plan">
@@ -148,7 +149,7 @@
 
 <script>
 // Bei jeder Änderung an dieser Datei hochzählen – offene Monitore laden sich dann selbst neu
-const SEITEN_VERSION = 14;
+const SEITEN_VERSION = 15;
 const DATEN_URL = "/local/mucki_daten.json";
 const FELDER = "input_text.mucki_felder";
 const ANZAHL_FELDER = 6;
