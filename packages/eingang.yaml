@@ -1,0 +1,116 @@
+# Fotos per Telegram (z. B. von Marcos Frau, ganz ohne Claude Code): Claude erkennt, was drauf ist.
+# - Pflanze/Beet → Garten-Fotocheck wie bisher (Antwort mit Pflegetipps, auch auf der Garten-Seite)
+# - alles andere (Typenschild, Sicherungskasten, Gerät, Maschine, Zähler, Anleitung …) → Infos herauslesen,
+#   Zuordnung vorschlagen ("Geräte → Trockner") und im Eingang ablegen (Reiter "Eingang", www/eingang.html).
+#   Der Text zum Foto hilft beim Zuordnen ("Das ist der Wasserfilter im HWR").
+# Fotos liegen in /media/eingang (nur mit Home-Assistant-Anmeldung sichtbar), die Liste in /config/eingang.json.
+shell_command:
+  eingang_befehl: python3 /config/claude_tools/foto_eingang.py {{ aktion }} {{ wert }}
+
+script:
+  eingang_aktion:
+    alias: "Eingang: Liste / erledigt / löschen"
+    mode: queued
+    fields:
+      aktion:
+        description: liste, erledigt, offen oder loeschen
+      id:
+        description: Kennung des Eintrags
+    sequence:
+      - action: shell_command.eingang_befehl
+        data:
+          aktion: "{{ aktion if aktion in ['liste', 'erledigt', 'offen', 'loeschen'] else 'liste' }}"
+          wert: "{{ id | default('-', true) }}"
+        response_variable: ergebnis
+      - variables:
+          antwort:
+            stdout: "{{ ergebnis.stdout | default('') if ergebnis is defined and ergebnis is mapping else '' }}"
+      - stop: fertig
+        response_variable: antwort
+
+automation:
+  - id: telegram_foto_eingang
+    alias: "Telegram-Foto: Pflanze → Garten-Fotocheck, sonst Eingang fürs Haus-Handbuch"
+    mode: queued
+    max: 10
+    triggers:
+      - trigger: event
+        event_type: telegram_attachment
+    conditions:
+      - condition: template
+        value_template: "{{ (trigger.event.data.file_mime_type | default('')).startswith('image/') }}"
+    actions:
+      - variables:
+          chat: "{{ trigger.event.data.chat_id }}"
+          text: "{{ trigger.event.data.text | default('', true) }}"
+          von: "{{ trigger.event.data.from_first | default('', true) }}"
+          datei: "/media/eingang/foto_{{ now().strftime('%Y%m%d_%H%M%S') }}_{{ range(100, 999) | random }}.jpg"
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ chat }}"
+          message: "📷 Danke! Ich schaue mir das Foto an – einen Moment …"
+      - action: telegram_bot.download_file
+        continue_on_error: true
+        data:
+          file_id: "{{ trigger.event.data.file_id }}"
+          directory_path: /media/eingang
+          file_name: "{{ datei.split('/')[-1] }}"
+      - action: weather.get_forecasts
+        continue_on_error: true
+        target:
+          entity_id: weather.touchmonitor_home
+        data:
+          type: daily
+        response_variable: vorhersage
+      - variables:
+          wetter: >-
+            {% set w = states.weather.touchmonitor_home %}
+            {% set fc = (vorhersage['weather.touchmonitor_home'].forecast if vorhersage is defined and vorhersage is mapping
+                         and 'weather.touchmonitor_home' in vorhersage else [])[:3] %}
+            {{ ('jetzt ' ~ w.attributes.temperature ~ ' °C, ' ~ w.state) if w else '' }}{% for d in fc %};
+            {{ as_timestamp(d.datetime) | timestamp_custom('%d.%m.') }} {{ d.templow | default('?') }}–{{ d.temperature }} °C, {{ d.precipitation | default(0) }} mm{% endfor %}
+      # 1. Was ist auf dem Foto? (Haus-Sachen werden dabei gleich im Eingang abgelegt)
+      - action: shell_command.eingang_befehl
+        continue_on_error: true
+        data:
+          aktion: neu
+          wert: "{{ {'datei': datei, 'text': text, 'von': von, 'wetter': wetter | trim} | to_json | base64_encode }}"
+        response_variable: erkannt
+      - variables:
+          e: >-
+            {% set a = erkannt.stdout | default('') if erkannt is defined and erkannt is mapping else '' %}
+            {{ a if a is mapping else (a | from_json if (a | string).startswith('{') else {}) }}
+      # 2. Pflanze → der bekannte Garten-Fotocheck
+      - if: "{{ e.art | default('') == 'garten' }}"
+        then:
+          - action: shell_command.garten_ki_befehl
+            continue_on_error: true
+            data:
+              auftrag: >-
+                {{ {'art': 'foto', 'frage': text, 'datei': datei, 'wetter': wetter | trim, 'plan_laden': true, 'merken': true,
+                    'datum': now().strftime('%d.%m.%Y')} | to_json | base64_encode }}
+              bild: ""
+            response_variable: garten
+          - variables:
+              g: >-
+                {% set a = garten.stdout | default('') if garten is defined and garten is mapping else '' %}
+                {{ a if a is mapping else (a | from_json if (a | string).startswith('{') else {}) }}
+              antwort: >-
+                🌱 {{ g.text if g.ok | default(false) else 'Das hat leider nicht geklappt' ~ (': ' ~ g.fehler if g.fehler is defined else ' – bitte nochmal schicken.') }}
+          - action: telegram_bot.send_message
+            data:
+              chat_id: "{{ chat }}"
+              parse_mode: html
+              message: >-
+                {{ antwort | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}
+        else:
+          - variables:
+              antwort: >-
+                {{ e.text if e.ok | default(false) else '⚠️ Das hat leider nicht geklappt' ~ (': ' ~ e.fehler if e.fehler is defined else ' (keine Antwort – bitte nochmal schicken).') }}
+          - action: telegram_bot.send_message
+            data:
+              chat_id: "{{ chat }}"
+              parse_mode: html
+              message: >-
+                {{ antwort | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}

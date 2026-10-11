@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Eingang</title>
+<!--
+  Eingang (Reiter "Eingang" im Flur-Dashboard): Fotos, die per Telegram geschickt wurden (Typenschilder, Sicherungskästen,
+  Geräte …), mit dem, was Claude darauf erkannt hat, und dem Vorschlag, wohin es im Haus-Handbuch gehört.
+  Liste über script.eingang_aktion (packages/eingang.yaml), Fotos aus /media/eingang (nur mit Anmeldung).
+-->
+<style>
+  :root { --bg: #F2F2F7; --karte: #fff; --text: #1C1C1E; --grau: #8E8E93; --gruen: #34C759; --rot: #FF3B30; --orange: #FF9500; --blau: #007AFF; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "SF Pro Text", Roboto, "Helvetica Neue", system-ui, sans-serif; }
+  body { overflow: auto; touch-action: manipulation; }
+  button { font: inherit; border: 0; background: none; color: inherit; cursor: pointer; padding: 0; }
+  .ic { width: 18px; height: 18px; fill: currentColor; vertical-align: -3px; flex: none; }
+  main { max-width: 1100px; margin: 0 auto; padding: 14px 16px 60px; }
+  .kopf { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .kopf h1 { margin: 0; font-size: 26px; }
+  .klein { font-size: 13px; color: var(--grau); line-height: 1.4; }
+  .kopf .klein { flex: 1; min-width: 220px; }
+  .filter { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 12px; }
+  .filter button { padding: 7px 12px; border-radius: 16px; background: #E3E3E8; font-size: 14px; font-weight: 600; }
+  .filter button.an { background: var(--text); color: #fff; }
+  .liste { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 10px; }
+  .eintrag { background: var(--karte); border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.06); display: flex; flex-direction: column; }
+  .eintrag.erledigt { opacity: .6; }
+  .bild { width: 100%; height: 190px; object-fit: cover; background: #E5E5EA; display: block; }
+  .inhalt { padding: 10px 14px 12px; }
+  .inhalt b { font-size: 16px; }
+  .marke { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 8px; padding: 2px 8px; background: #007AFF1A; color: var(--blau); margin: 4px 0; }
+  .erkannt { white-space: pre-wrap; font-size: 13px; line-height: 1.45; margin-top: 6px; }
+  .fragen { font-size: 13px; color: #A05A00; background: #FFF4E5; border-radius: 10px; padding: 6px 9px; margin-top: 6px; }
+  .zitat { font-size: 13px; font-style: italic; margin-top: 6px; }
+  .aktionen { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .knopf { padding: 7px 11px; border-radius: 11px; background: var(--bg); font-weight: 600; font-size: 13px; display: inline-flex; gap: 5px; align-items: center; }
+  .knopf.gruen { background: var(--gruen); color: #fff; }
+  .knopf.rot { color: var(--rot); }
+  .knopf.scharf { background: var(--rot); color: #fff; }
+  .leer { text-align: center; padding: 50px 10px; color: var(--grau); line-height: 1.6; }
+  .gross { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: none; align-items: center; justify-content: center; z-index: 20; }
+  .gross.offen { display: flex; }
+  .gross img { max-width: 96%; max-height: 92%; border-radius: 8px; }
+  .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: rgba(28,28,30,.92); color: #fff; padding: 9px 16px; border-radius: 12px; font-size: 14px; display: none; z-index: 30; }
+</style>
+</head>
+<body>
+<main id="inhalt"><div class="leer">Eingang wird geladen …</div></main>
+<div class="gross" id="gross"><img id="gross-bild" alt=""></div>
+<div class="toast" id="toast"></div>
+<script>
+const SEITEN_VERSION = 1;
+const $ = id => document.getElementById(id);
+const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const ICON = {
+  haken: "M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z",
+  zurueck: "M12.5,8C9.85,8 7.45,9 5.6,10.6L2,7V16H11L7.38,12.38C8.77,11.22 10.54,10.5 12.5,10.5C16.04,10.5 19.05,12.81 20.1,16L22.47,15.22C21.08,11.03 17.15,8 12.5,8Z",
+  muell: "M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z",
+};
+const ic = n => `<svg class="ic" viewBox="0 0 24 24"><path d="${ICON[n]}"/></svg>`;
+function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
+function toast(t) { const m = $("toast"); m.textContent = t; m.style.display = "block"; clearTimeout(toast.t); toast.t = setTimeout(() => m.style.display = "none", 3000); }
+
+let eintraege = [], filter = "neu", bilder = {}, letzter = "";
+async function aktion(aktion, id) {
+  const h = hass(); if (!h) return null;
+  const r = await h.callWS({ type: "call_service", domain: "script", service: "eingang_aktion", service_data: { aktion, id: id || "-" }, return_response: true });
+  let a = (r && r.response && r.response.stdout) || "";
+  if (typeof a === "string") { try { a = JSON.parse(a); } catch (e) { a = {}; } }
+  if (a && Array.isArray(a.eintraege)) eintraege = a.eintraege;
+  return a;
+}
+// Foto über Home Assistant holen (signierte Adresse, nur mit Anmeldung)
+async function bildUrl(datei) {
+  if (bilder[datei]) return bilder[datei];
+  try {
+    const r = await hass().callWS({ type: "media_source/resolve_media", media_content_id: "media-source://media_source/local/eingang/" + datei, expires: 3600 });
+    bilder[datei] = r.url; return r.url;
+  } catch (e) { return ""; }
+}
+function zeichnen() {
+  const zahl = s => eintraege.filter(e => e.status === s).length;
+  const sicht = eintraege.filter(e => filter === "alle" || e.status === filter);
+  $("inhalt").innerHTML = `
+    <div class="kopf"><h1>Eingang</h1><span class="klein">Fotos per Telegram an den Bot schicken, gern mit einem Satz dazu („Das ist der Wasserfilter im HWR“). Claude liest die Infos heraus und schlägt vor, wohin sie im Haus-Handbuch gehören. Pflanzenfotos gehen wie bisher in den Garten-Fotocheck.</span></div>
+    <div class="filter">${[["neu", `Neu (${zahl("neu")})`], ["erledigt", `Übernommen (${zahl("erledigt")})`], ["alle", "Alle"]].map(([w, t]) => `<button data-a="filter" data-w="${w}" class="${w === filter ? "an" : ""}">${t}</button>`).join("")}</div>
+    ${sicht.length ? `<div class="liste">${sicht.map(e => `
+      <div class="eintrag ${e.status === "erledigt" ? "erledigt" : ""}">
+        <img class="bild" data-a="gross" data-w="${esc(e.datei)}" data-bild="${esc(e.datei)}" alt="">
+        <div class="inhalt">
+          <b>${esc(e.titel)}</b><br><span class="marke">${esc(e.zuordnung || e.bereich)}</span>
+          <div class="klein">${esc(e.datum)}${e.von ? " · von " + esc(e.von) : ""}</div>
+          ${e.text ? `<div class="zitat">„${esc(e.text)}“</div>` : ""}
+          ${e.erkannt ? `<div class="erkannt">${esc(e.erkannt)}</div>` : ""}
+          ${e.fragen ? `<div class="fragen">Offen: ${esc(e.fragen)}</div>` : ""}
+          <div class="aktionen">
+            ${e.status === "erledigt" ? `<button class="knopf" data-a="offen" data-w="${esc(e.id)}">${ic("zurueck")} Wieder offen</button>`
+              : `<button class="knopf gruen" data-a="erledigt" data-w="${esc(e.id)}">${ic("haken")} Übernommen</button>`}
+            <button class="knopf rot" data-a="loeschen" data-w="${esc(e.id)}">${ic("muell")} Löschen</button>
+          </div></div></div>`).join("")}</div>`
+      : `<div class="leer">${filter === "neu" ? "Nichts Neues im Eingang." : "Noch nichts da."}<br>Einfach ein Foto an den Telegram-Bot schicken.</div>`}`;
+  document.querySelectorAll("[data-bild]").forEach(async img => { const u = await bildUrl(img.dataset.bild); if (u) img.src = u; });
+}
+// Kiosk-Touchscreen: Geister-Klicks und Wischen nicht als Tippen werten
+let letzterTipp = 0, tippStart = null;
+document.addEventListener("pointerdown", ev => { tippStart = { x: ev.clientX, y: ev.clientY }; }, true);
+document.addEventListener("click", async ev => {
+  if (ev.target.closest("#gross")) { $("gross").classList.remove("offen"); return; }
+  const el = ev.target.closest("[data-a]"); if (!el) return;
+  if (tippStart && Math.hypot(ev.clientX - tippStart.x, ev.clientY - tippStart.y) > 12) return;
+  if (Date.now() - letzterTipp < 450) return; letzterTipp = Date.now();
+  const w = el.dataset.w;
+  switch (el.dataset.a) {
+    case "filter": filter = w; zeichnen(); break;
+    case "gross": { const u = await bildUrl(w); if (u) { $("gross-bild").src = u; $("gross").classList.add("offen"); } break; }
+    case "erledigt": await aktion("erledigt", w); toast("Als übernommen markiert"); zeichnen(); break;
+    case "offen": await aktion("offen", w); zeichnen(); break;
+    case "loeschen":
+      if (el.dataset.scharf !== "1") { el.dataset.scharf = "1"; el.classList.add("scharf"); el.textContent = "Wirklich löschen?"; return; }
+      await aktion("loeschen", w); toast("Gelöscht"); zeichnen(); break;
+  }
+});
+async function neuLaden() {
+  const a = await aktion("liste");
+  const sig = JSON.stringify(eintraege);
+  if (a && sig !== letzter) { letzter = sig; zeichnen(); }
+}
+function start() { if (!hass()) { setTimeout(start, 400); return; } neuLaden(); setInterval(neuLaden, 30000); }
+start();
+setInterval(async () => {
+  try {
+    const r = await fetch(location.pathname + "?t=" + Date.now(), { cache: "no-store" });
+    const m = (await r.text()).match(/SEITEN_VERSION = (\d+)/);
+    if (m && Number(m[1]) > SEITEN_VERSION) location.replace(location.pathname + "?v=" + m[1] + "&t=" + Date.now());
+  } catch (e) { /* später nochmal */ }
+}, 300000);
+</script>
+</body>
+</html>

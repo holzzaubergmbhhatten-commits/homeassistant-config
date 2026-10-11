@@ -190,7 +190,7 @@ def plan_aus_datei():
 
 def foto_laden(pfad):
     """Foto lesen, zu große Bilder verkleinern (Pillow ist in Home Assistant vorhanden)."""
-    if not os.path.realpath(pfad).startswith("/config/garten_fotos/"):
+    if not os.path.realpath(pfad).startswith(("/config/garten_fotos/", "/media/eingang/")):
         raise ValueError("Foto-Pfad nicht erlaubt")
     with open(pfad, "rb") as f:
         roh = f.read()
