@@ -1,6 +1,6 @@
 # Mail-Abruf für das Sprachnotiz-Tool (Werkstatt-App auf Vercel): Home Assistant stößt den Abruf an,
 # statt eines Zeitplans auf GitHub (der hat die Gratis-Minuten von GitHub Actions aufgebraucht).
-# Mo–Sa 6–22 Uhr alle 20 Minuten. Die Adresse gibt keine Daten heraus und ist auf der Gegenseite gedrosselt.
+# Mo–Fr 5–17 Uhr jede volle Stunde (Wunsch Marco). Die Adresse gibt keine Daten heraus und ist auf der Gegenseite gedrosselt.
 # Solange noch Verlauf zu lesen ist ("mehr": true), wird nach gut einer Minute erneut abgerufen (höchstens 8-mal).
 rest_command:
   sprachnotiz_mails_abrufen:
@@ -14,12 +14,12 @@ automation:
     mode: single
     triggers:
       - trigger: time_pattern
-        minutes: "/20"
+        minutes: 0
     conditions:
       - condition: time
-        after: "06:00:00"
-        before: "22:00:00"
-        weekday: [mon, tue, wed, thu, fri, sat]
+        after: "04:59:00"
+        before: "17:01:00"
+        weekday: [mon, tue, wed, thu, fri]
     actions:
       # vorher anlegen, damit "until" den Wert aus der Schleife sieht
       - variables:
