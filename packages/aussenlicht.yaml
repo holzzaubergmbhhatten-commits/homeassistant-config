@@ -153,8 +153,13 @@ automation:
                | selectattr('attributes.entity_id', 'defined') | map(attribute='entity_id') | list %}
             {% set ns = namespace(l=einzeln) %}
             {% for g in gruppen %}{% set ns.l = ns.l + (expand(g) | map(attribute='entity_id') | list) %}{% endfor %}
-            {# Terrassenlicht nie mitschalten (war über die Gruppe dabei und ging abends ungewollt an) #}
-            {% set ohne = states.light | selectattr('name', 'search', '(?i)terrasse') | map(attribute='entity_id') | list %}
+            {# Terrassenlicht nie mitschalten (war über die Gruppe dabei und ging abends ungewollt an) – erkannt an Name, Entität oder Gerätename #}
+            {% set ns2 = namespace(o=[]) %}
+            {% for l in states.light %}
+              {% set namen = [l.name, l.entity_id, device_attr(l.entity_id, 'name') or '', device_attr(l.entity_id, 'name_by_user') or ''] | join(' ') %}
+              {% if namen is search('(?i)terrasse') %}{% set ns2.o = ns2.o + [l.entity_id] %}{% endif %}
+            {% endfor %}
+            {% set ohne = ns2.o %}
             {{ ns.l | unique | reject('in', ohne) | list }}
           bewegung: >-
             {{ states.binary_sensor | selectattr('attributes.device_class', 'defined')
