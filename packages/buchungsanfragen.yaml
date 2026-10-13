@@ -1,5 +1,5 @@
 # Neue Buchungsanfrage über urlaub-wie-zuhause.eu → Telegram an alle Empfänger (input_text.telegram_empfaenger),
-# Ansage in der Küche (tagsüber) und Nachricht auf dem Flur-Monitor. Unabhängig vom Mailversand der Website.
+# Ansage in Küche, Schlafzimmer und Muckis Zimmer (8–21 Uhr; weitere Lautsprecher später hier ergänzen) und Nachricht auf dem Flur-Monitor. Unabhängig vom Mailversand der Website.
 # Die Website liefert über anfrage-status.php nur Anzahl, Unterkunft, Reisedaten und Personenzahl –
 # keine Namen, E-Mails oder Telefonnummern. Außerdem, ob die Benachrichtigungs-Mail geklappt hat.
 rest:
@@ -72,10 +72,10 @@ automation:
       - if:
           - condition: time
             after: "08:00:00"
-            before: "21:30:00"
+            before: "21:00:00"
         then:
           - action: script.jarvis_durchsage
             continue_on_error: true
             data:
-              raeume: Küche
+              raeume: Küche, Schlafzimmer, Muckis Zimmer
               text: "Achtung: {{ text }} Bitte ins Portal schauen."
