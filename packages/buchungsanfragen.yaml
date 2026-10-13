@@ -16,25 +16,21 @@ rest:
           - neueste
           - mail
 
-automation:
-  - id: buchungsanfrage_benachrichtigung
-    alias: "Buchungsanfrage: Telegram, Ansage und Monitor"
+script:
+  # Meldet eine Buchungsanfrage (Telegram, Monitor, Ansage). Wird von der Automation unten aufgerufen;
+  # "Buchungsanfrage: Test" ruft es mit der neuesten vorhandenen Anfrage auf.
+  buchungsanfrage_melden:
+    alias: "Buchungsanfrage melden"
     mode: queued
-    triggers:
-      - trigger: state
-        entity_id: sensor.buchungsanfragen
-        attribute: neueste
-    conditions:
-      # nur wenn wirklich eine neuere Anfrage dazugekommen ist (nicht nach Neustart oder beim Löschen)
-      - condition: template
-        value_template: >-
-          {% set alt = trigger.from_state.attributes.neueste if trigger.from_state is not none else none %}
-          {% set neu = trigger.to_state.attributes.neueste if trigger.to_state is not none else none %}
-          {{ alt is mapping and neu is mapping and (neu.zeit | default('')) > (alt.zeit | default('')) }}
-    actions:
+    fields:
+      n:
+        description: Neueste Anfrage (Attribut neueste von sensor.buchungsanfragen)
+      mail:
+        description: Letztes Mail-Ergebnis (Attribut mail)
+      test:
+        description: true = als Test kennzeichnen
+    sequence:
       - variables:
-          n: "{{ trigger.to_state.attributes.neueste }}"
-          mail: "{{ trigger.to_state.attributes.mail | default({}, true) }}"
           monate: [Januar, Februar, März, April, Mai, Juni, Juli, August, September, Oktober, November, Dezember]
           zeitraum: >-
             {% set a, b = n.anreise | default(''), n.abreise | default('') %}
@@ -45,7 +41,7 @@ automation:
             {{ 'einen Stellplatz' if u | lower is search('stellpl') else ('die ' ~ u if u else 'eine Unterkunft') }}
           personen: "{{ n.personen | default('', true) }}"
           text: >-
-            Neue Buchungsanfrage für {{ unterkunft }}{{ ' ' ~ zeitraum if zeitraum | trim else '' }}{{ ', ' ~ personen ~ ' Personen' if personen else '' }}.
+            {{ 'Test: ' if test | default(false) else '' }}Neue Buchungsanfrage für {{ unterkunft }}{{ ' ' ~ zeitraum if zeitraum | trim else '' }}{{ ', ' ~ personen ~ ' Personen' if personen else '' }}.
           mail_fehler: >-
             {{ mail is mapping and mail.art | default('') == 'anfrage' and not (mail.ok | default(false))
                and (mail.zeit | default(''))[:16] == (n.zeit | default(''))[:16] }}
@@ -68,14 +64,46 @@ automation:
         continue_on_error: true
         data:
           text: "{{ text }}"
-          minuten: 240
+          minuten: "{{ 5 if test | default(false) else 240 }}"
+      # Ansage nur 8–21 Uhr (der Test wird immer angesagt)
       - if:
-          - condition: time
-            after: "08:00:00"
-            before: "21:00:00"
+          - condition: template
+            value_template: "{{ test | default(false) or (8 <= now().hour < 21) }}"
         then:
           - action: script.jarvis_durchsage
             continue_on_error: true
             data:
               raeume: Küche, Schlafzimmer, Muckis Zimmer
               text: "Achtung: {{ text }} Bitte ins Portal schauen."
+
+  buchungsanfrage_test:
+    alias: "Buchungsanfrage: Test"
+    description: Spielt die Benachrichtigung (Telegram, Monitor, Ansage) mit der neuesten vorhandenen Buchungsanfrage einmal ab.
+    icon: mdi:email-alert-outline
+    sequence:
+      - action: script.buchungsanfrage_melden
+        data:
+          n: "{{ state_attr('sensor.buchungsanfragen', 'neueste') or {} }}"
+          mail: "{{ state_attr('sensor.buchungsanfragen', 'mail') or {} }}"
+          test: true
+
+automation:
+  - id: buchungsanfrage_benachrichtigung
+    alias: "Buchungsanfrage: Telegram, Ansage und Monitor"
+    mode: queued
+    triggers:
+      - trigger: state
+        entity_id: sensor.buchungsanfragen
+        attribute: neueste
+    conditions:
+      # nur wenn wirklich eine neuere Anfrage dazugekommen ist (nicht nach Neustart oder beim Löschen)
+      - condition: template
+        value_template: >-
+          {% set alt = trigger.from_state.attributes.neueste if trigger.from_state is not none else none %}
+          {% set neu = trigger.to_state.attributes.neueste if trigger.to_state is not none else none %}
+          {{ alt is mapping and neu is mapping and (neu.zeit | default('')) > (alt.zeit | default('')) }}
+    actions:
+      - action: script.buchungsanfrage_melden
+        data:
+          n: "{{ trigger.to_state.attributes.neueste }}"
+          mail: "{{ trigger.to_state.attributes.mail | default({}, true) }}"
