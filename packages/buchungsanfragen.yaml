@@ -1,0 +1,81 @@
+# Neue Buchungsanfrage über urlaub-wie-zuhause.eu → Telegram an alle Empfänger (input_text.telegram_empfaenger),
+# Ansage in der Küche (tagsüber) und Nachricht auf dem Flur-Monitor. Unabhängig vom Mailversand der Website.
+# Die Website liefert über anfrage-status.php nur Anzahl, Unterkunft, Reisedaten und Personenzahl –
+# keine Namen, E-Mails oder Telefonnummern. Außerdem, ob die Benachrichtigungs-Mail geklappt hat.
+rest:
+  - resource: https://urlaub-wie-zuhause.eu/anfrage-status.php
+    scan_interval: 300
+    timeout: 20
+    sensor:
+      - name: Buchungsanfragen
+        unique_id: buchungsanfragen_anzahl
+        icon: mdi:email-alert-outline
+        value_template: "{{ value_json.anzahl }}"
+        json_attributes:
+          - ungelesen
+          - neueste
+          - mail
+
+automation:
+  - id: buchungsanfrage_benachrichtigung
+    alias: "Buchungsanfrage: Telegram, Ansage und Monitor"
+    mode: queued
+    triggers:
+      - trigger: state
+        entity_id: sensor.buchungsanfragen
+        attribute: neueste
+    conditions:
+      # nur wenn wirklich eine neuere Anfrage dazugekommen ist (nicht nach Neustart oder beim Löschen)
+      - condition: template
+        value_template: >-
+          {% set alt = trigger.from_state.attributes.neueste if trigger.from_state is not none else none %}
+          {% set neu = trigger.to_state.attributes.neueste if trigger.to_state is not none else none %}
+          {{ alt is mapping and neu is mapping and (neu.zeit | default('')) > (alt.zeit | default('')) }}
+    actions:
+      - variables:
+          n: "{{ trigger.to_state.attributes.neueste }}"
+          mail: "{{ trigger.to_state.attributes.mail | default({}, true) }}"
+          monate: [Januar, Februar, März, April, Mai, Juni, Juli, August, September, Oktober, November, Dezember]
+          zeitraum: >-
+            {% set a, b = n.anreise | default(''), n.abreise | default('') %}
+            {% macro tag(d) %}{% if d | length >= 10 and d[4] == '-' %}{{ d[8:10] | int }}. {{ monate[(d[5:7] | int) - 1] }}{% else %}{{ d }}{% endif %}{% endmacro %}
+            {% if a and b %}vom {{ tag(a) }} bis {{ tag(b) }}{% elif a %}ab {{ tag(a) }}{% else %}{% endif %}
+          unterkunft: >-
+            {% set u = n.unterkunft | default('', true) %}
+            {{ 'einen Stellplatz' if u | lower is search('stellpl') else ('die ' ~ u if u else 'eine Unterkunft') }}
+          personen: "{{ n.personen | default('', true) }}"
+          text: >-
+            Neue Buchungsanfrage für {{ unterkunft }}{{ ' ' ~ zeitraum if zeitraum | trim else '' }}{{ ', ' ~ personen ~ ' Personen' if personen else '' }}.
+          mail_fehler: >-
+            {{ mail is mapping and mail.art | default('') == 'anfrage' and not (mail.ok | default(false))
+               and (mail.zeit | default(''))[:16] == (n.zeit | default(''))[:16] }}
+          empfaenger: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim')
+               | reject('in', ['', 'unknown', 'unavailable']) | list }}
+      - repeat:
+          for_each: "{{ empfaenger }}"
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                chat_id: "{{ repeat.item | int }}"
+                message: >-
+                  📬 {{ text }} Bitte in der Verwaltung nachsehen und antworten: https://urlaub-wie-zuhause.eu/verwaltung.html
+                  {%- if mail_fehler %}
+
+                  (Die Mail an kontakt@urlaub-wie-zuhause.eu hat nicht geklappt: {{ mail.meldung | default('') }}){% endif %}
+      - action: script.jarvis_monitor_nachricht
+        continue_on_error: true
+        data:
+          text: "{{ text }}"
+          minuten: 240
+      - if:
+          - condition: time
+            after: "08:00:00"
+            before: "21:30:00"
+        then:
+          - action: script.jarvis_durchsage
+            continue_on_error: true
+            data:
+              raeume: Küche
+              text: "Achtung: {{ text }} Bitte ins Portal schauen."
