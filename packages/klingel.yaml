@@ -3,10 +3,20 @@
 # und nach 3 Minuten wieder das Dashboard. Zusätzlich Telegram-Nachricht mit Foto.
 # Die Klingel-Entität wird am Namen erkannt (event.hoftor_klingel_ding / _klingeln),
 # Auf dem Monitor: Ring "Letzte Aufnahme" (camera.hoftor_letzte_aufnahme) + Tapo Hof-Tor.
+#
+# Foto: Vorher wird das alte Foto gelöscht und nach dem Schnappschuss geprüft, ob ein NEUES Foto da ist –
+# sonst wurde früher still das letzte alte Foto verschickt (z. B. vom 4.10.). Klappt die Tapo-Kamera nicht,
+# wird die Ring-Kamera versucht; gibt es gar kein neues Foto, kommt die Nachricht ohne Bild.
+# mode single: Die Klingel meldet ein Klingeln oft über mehrere Entitäten → nur EINE Nachricht pro Klingeln.
+shell_command:
+  klingel_foto_loeschen: rm -f /media/klingel.jpg
+  klingel_foto_pruefen: sh -c 'test -s /media/klingel.jpg && echo ok || echo fehlt'
+
 automation:
   - id: ring_klingel_hoftor
     alias: "Klingel: Hoftor – Kamera auf dem Monitor zeigen"
-    mode: restart
+    mode: single
+    max_exceeded: silent
     triggers:
       - trigger: event
         event_type: state_changed
@@ -21,9 +31,11 @@ automation:
     actions:
       - variables:
           # Foto von der Tapo-Kamera am Hof-Tor (Dauerstrom, sofort aktuell), sonst Ring
-          kamera: >-
-            {{ 'camera.draussen_hot_tor_kamera' if states('camera.draussen_hot_tor_kamera') not in ['unknown', 'unavailable']
-               else (states.camera | map(attribute='entity_id') | select('search', 'hoftor') | first | default('', true)) }}
+          kameras: >-
+            {% set tapo = ['camera.draussen_hot_tor_kamera'] if states('camera.draussen_hot_tor_kamera') not in ['unknown', 'unavailable'] else [] %}
+            {{ tapo + (states.camera | rejectattr('state', 'in', ['unknown', 'unavailable'])
+                       | map(attribute='entity_id') | select('search', 'hoftor') | list) }}
+          uhrzeit: "{{ now().strftime('%H:%M') }}"
       # Bildschirm wecken (nachts bleibt die 1-Minuten-Abschaltung, aber erst nach 3 Minuten)
       - action: script.monitor_an
         continue_on_error: true
@@ -33,24 +45,39 @@ automation:
         continue_on_error: true
         data:
           url: http://localhost:8123/flur-display/klingel
-      - if: "{{ kamera != '' }}"
+      # altes Foto weg, dann der Reihe nach Tapo und Ring versuchen, bis ein neues Foto da ist
+      - action: shell_command.klingel_foto_loeschen
+        continue_on_error: true
+      - variables:
+          foto_ok: false
+      - repeat:
+          for_each: "{{ kameras }}"
+          sequence:
+            - if: "{{ not foto_ok }}"
+              then:
+                - action: camera.snapshot
+                  continue_on_error: true
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    filename: /media/klingel.jpg
+                - action: shell_command.klingel_foto_pruefen
+                  continue_on_error: true
+                  response_variable: pruefung
+                - variables:
+                    foto_ok: "{{ pruefung is defined and (pruefung.stdout | default('') | trim) == 'ok' }}"
+      - if: "{{ foto_ok }}"
         then:
-          - action: camera.snapshot
-            continue_on_error: true
-            target:
-              entity_id: "{{ kamera }}"
-            data:
-              filename: /media/klingel.jpg
           - action: telegram_bot.send_photo
             continue_on_error: true
             data:
               file: /media/klingel.jpg
-              caption: "🔔 Es klingelt am Hoftor ({{ now().strftime('%H:%M') }} Uhr)"
+              caption: "🔔 Es klingelt am Hoftor ({{ uhrzeit }} Uhr)"
         else:
           - action: telegram_bot.send_message
             continue_on_error: true
             data:
-              message: "🔔 Es klingelt am Hoftor ({{ now().strftime('%H:%M') }} Uhr)"
+              message: "🔔 Es klingelt am Hoftor ({{ uhrzeit }} Uhr) – kein aktuelles Kamerabild verfügbar."
       - delay: "00:03:00"
       - action: rest_command.kiosk_dashboard
       - action: script.monitor_an
