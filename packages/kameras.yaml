@@ -9,6 +9,8 @@ shell_command:
   go2rtc_passwort: python3 /config/claude_tools/go2rtc_einrichten.py --passwort
   kamera_check: python3 /config/claude_tools/kamera_check.py
   kamera_drehen_befehl: python3 /config/claude_tools/kamera_drehen.py {{ kamera }} {{ richtung }}
+  # aktuelles Einzelbild über go2rtc (zuverlässiger als camera.snapshot der Generic-Kameras, die alte Bilder liefern können)
+  kamera_foto: python3 /config/claude_tools/kamera_foto.py {{ stream }} {{ datei }}
 
 # Pfeil-Knöpfe in der Großansicht: Tapo-Kamera schwenken/neigen (ONVIF, siehe claude_tools/kamera_drehen.py)
 script:
@@ -62,16 +64,19 @@ automation:
             data:
               app: a889bffc_go2rtc
 
-  # Selbsttest nach dem Start: nur bei Problemen Bericht (ohne Passwörter) per Telegram an den
-  # ersten Empfänger und als Benachrichtigung in Home Assistant
+  # Selbsttest nach dem Start und jeden Morgen: alle Kameras einzeln prüfen; nur bei Problemen Bericht
+  # (ohne Passwörter) per Telegram an den ersten Empfänger und als Benachrichtigung in Home Assistant
   - id: kamera_selbsttest
     alias: "Kameras: Selbsttest melden"
     mode: single
     triggers:
       - trigger: homeassistant
         event: start
+        id: start
+      - trigger: time
+        at: "07:20:00"
     actions:
-      - delay: 90
+      - delay: "{{ 90 if trigger.id == 'start' else 0 }}"
       - action: shell_command.kamera_check
         continue_on_error: true
         response_variable: bericht

@@ -99,13 +99,23 @@ script:
           for_each: "{{ auswahl }}"
           sequence:
             - variables:
-                datei: "/media/jarvis_{{ repeat.item.split('.', 1)[1] }}.jpg"
-            - action: camera.snapshot
+                stream: "{{ repeat.item.split('.', 1)[1] }}"
+                datei: "/media/jarvis_{{ stream }}.jpg"
+            # aktuelles Bild über go2rtc (wie das Livebild); nur wenn das nicht klappt, Schnappschuss der Kamera
+            - action: shell_command.kamera_foto
               continue_on_error: true
-              target:
-                entity_id: "{{ repeat.item }}"
               data:
-                filename: "{{ datei }}"
+                stream: "{{ stream }}"
+                datei: "{{ datei }}"
+              response_variable: go2rtc
+            - if: "{{ go2rtc is not defined or (go2rtc.stdout | default('') | trim) != 'ok' }}"
+              then:
+                - action: camera.snapshot
+                  continue_on_error: true
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    filename: "{{ datei }}"
             - action: telegram_bot.send_photo
               continue_on_error: true
               data: >-

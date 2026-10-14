@@ -4,9 +4,9 @@
 # Die Klingel-Entität wird am Namen erkannt (event.hoftor_klingel_ding / _klingeln),
 # Auf dem Monitor: Ring "Letzte Aufnahme" (camera.hoftor_letzte_aufnahme) + Tapo Hof-Tor.
 #
-# Foto: Vorher wird das alte Foto gelöscht und nach dem Schnappschuss geprüft, ob ein NEUES Foto da ist –
-# sonst wurde früher still das letzte alte Foto verschickt (z. B. vom 4.10.). Klappt die Tapo-Kamera nicht,
-# wird die Ring-Kamera versucht; gibt es gar kein neues Foto, kommt die Nachricht ohne Bild.
+# Foto: Vorher wird das alte Foto gelöscht und danach geprüft, ob ein NEUES Foto da ist – sonst wurde früher
+# still das letzte alte Foto verschickt (z. B. vom 4.10.). Reihenfolge: go2rtc-Einzelbild Tapo → Ring,
+# dann camera.snapshot; gibt es gar kein neues Foto, kommt die Nachricht ohne Bild.
 # mode single: Die Klingel meldet ein Klingeln oft über mehrere Entitäten → nur EINE Nachricht pro Klingeln.
 shell_command:
   klingel_foto_loeschen: rm -f /media/klingel.jpg
@@ -50,8 +50,23 @@ automation:
         continue_on_error: true
       - variables:
           foto_ok: false
+      # 1. Wahl: aktuelles Einzelbild über go2rtc (dieselbe Quelle wie das Livebild auf dem Monitor)
       - repeat:
-          for_each: "{{ kameras }}"
+          for_each: ["draussen_hot_tor_kamera", "hoftor_klingel"]
+          sequence:
+            - if: "{{ not foto_ok }}"
+              then:
+                - action: shell_command.kamera_foto
+                  continue_on_error: true
+                  data:
+                    stream: "{{ repeat.item }}"
+                    datei: /media/klingel.jpg
+                  response_variable: go2rtc
+                - variables:
+                    foto_ok: "{{ go2rtc is defined and (go2rtc.stdout | default('') | trim) == 'ok' }}"
+      # 2. Wahl: Schnappschuss der Home-Assistant-Kamera
+      - repeat:
+          for_each: "{{ kameras if not foto_ok else [] }}"
           sequence:
             - if: "{{ not foto_ok }}"
               then:

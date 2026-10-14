@@ -36,8 +36,18 @@ except Exception as e:  # noqa: BLE001
     streams = {}
     zeilen.append(f"go2rtc nicht erreichbar: {e}")
 
+# jede Kamera: aktuelles Einzelbild (das braucht Telegram/Klingel) – Fehler deutlich mit FEHLER markieren
+for name in [n for n in streams if not n.endswith("_hd")]:
+    try:
+        with urllib.request.urlopen(f"{API}/api/frame.jpeg?src={name}", timeout=20) as r:
+            daten = r.read()
+        ok = len(daten) >= 5000 and daten.startswith(b"\xff\xd8")
+        zeilen.append(f"{name}: {'Bild OK' if ok else 'FEHLER kein Bild'} ({len(daten)} Bytes)")
+    except Exception as e:  # noqa: BLE001
+        zeilen.append(f"{name}: FEHLER {e}")
+
 for name in [n for n in streams if not n.endswith("_hd")][:1]:
-    for art in ("frame.jpeg", "stream.mjpeg"):
+    for art in ("stream.mjpeg",):
         try:
             with urllib.request.urlopen(f"{API}/api/{art}?src={name}", timeout=20) as r:
                 daten = r.read(200000 if art == "stream.mjpeg" else None)
