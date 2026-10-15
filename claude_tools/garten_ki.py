@@ -23,7 +23,7 @@ DATEN = "/config/www/garten_daten.json"
 ERLEDIGT = "/config/www/garten_erledigt.json"
 FRAGEN = "/config/www/garten_fragen.json"
 
-MODELL = "claude-opus-5-5"
+MODELL = "claude-sonnet-5-5"
 
 SYSTEM = """Du bist ein erfahrener Gemüsegärtner und berätst eine Familie in Norddeutschland (Niedersachsen, Klima ähnlich Bremen/Oldenburg).
 Sie haben einen selbstgebauten überdachten Gemüsegarten: Holzständer mit lichtdurchlässigem Folien-Dach und einem Lattenzaun
