@@ -23,8 +23,7 @@ DATEN = "/config/www/garten_daten.json"
 ERLEDIGT = "/config/www/garten_erledigt.json"
 FRAGEN = "/config/www/garten_fragen.json"
 
-MODELL = "claude-sonnet-5-5"        # Fotos: Sonnet erkennt Pflanzen und Bilder zuverlässiger
-MODELL_TEXT = "claude-haiku-5-5"    # reine Textfragen: Haiku reicht und ist viel günstiger
+MODELL = "claude-sonnet-5-5"
 
 SYSTEM = """Du bist ein erfahrener Gemüsegärtner und berätst eine Familie in Norddeutschland (Niedersachsen, Klima ähnlich Bremen/Oldenburg).
 Sie haben einen selbstgebauten überdachten Gemüsegarten: Holzständer mit lichtdurchlässigem Folien-Dach und einem Lattenzaun
@@ -301,20 +300,16 @@ def main():
         inhalt.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": bild}})
     inhalt.append({"type": "text", "text": text})
 
-    # schnelle, alltagstaugliche Antwort (Home Assistant wartet höchstens 60 Sekunden)
-    extra = {"extra_body": {"output_config": {"effort": "low"}}}
-    if bild:
-        # lehnt Sonnet ab, springt automatisch ein passendes anderes Modell ein (gibt es für Haiku nicht)
-        extra["extra_body"]["fallbacks"] = "default"
-        extra["extra_headers"] = {"anthropic-beta": "server-side-fallback-2026-07-01"}
-
     client = anthropic.Anthropic(api_key=api_schluessel(), timeout=55, max_retries=1)
     antwort = client.messages.create(
-        model=MODELL if bild else MODELL_TEXT,
+        model=MODELL,
         max_tokens=3000,
         system=HAUS if auftrag.get("art") == "wartung" else SYSTEM + (CHAT if auftrag.get("art") == "chat" else ""),
         messages=[{"role": "user", "content": inhalt}],
-        **extra,
+        # schnelle, alltagstaugliche Antwort (Home Assistant wartet höchstens 60 Sekunden);
+        # lehnt das Modell ab, springt automatisch ein passendes anderes Modell ein
+        extra_body={"output_config": {"effort": "low"}, "fallbacks": "default"},
+        extra_headers={"anthropic-beta": "server-side-fallback-2026-07-01"},
     )
     if antwort.stop_reason == "refusal":
         print(json.dumps({"ok": False, "fehler": "Claude hat die Anfrage abgelehnt"}))
