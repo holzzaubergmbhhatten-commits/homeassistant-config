@@ -1,0 +1,37 @@
+# Verbindungstest zu Claude (claude_tools/claude_test.py): probiert die benutzten Modelle mit dem
+# Schlüssel der Anthropic-Integration aus und schickt das Ergebnis an den Telegram-Bot.
+# Läuft einmalig nach dem nächsten Neustart; danach jederzeit über das Skript "Claude testen".
+shell_command:
+  claude_test: python3 /config/claude_tools/claude_test.py {{ modus }}
+
+script:
+  claude_testen:
+    alias: Claude testen
+    icon: mdi:robot-outline
+    fields:
+      modus:
+        description: '"einmal" = nur, wenn der Test noch nicht lief'
+    sequence:
+    - action: shell_command.claude_test
+      continue_on_error: true
+      data:
+        modus: '{{ modus | default('''') }}'
+      response_variable: ergebnis
+    - if: "{{ ergebnis is defined and (ergebnis.stdout | default('') | trim) != '' }}"
+      then:
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          message: '{{ ergebnis.stdout }}'
+
+automation:
+- id: claude_test_einmalig
+  alias: Claude-Verbindung einmalig testen
+  triggers:
+  - trigger: homeassistant
+    event: start
+  actions:
+  - delay: 00:01:30
+  - action: script.claude_testen
+    data:
+      modus: einmal
