@@ -65,9 +65,11 @@ JSON-Objekt:
             Abbuchung per Lastschrift angekündigt, Kontoauszug) oder "keine" (kein Zahlungsbeleg),
  "mahnung": true bei Mahnung/Zahlungserinnerung, sonst false,
  "bezug": "bei Mahnung, Erstattung, Gutschrift oder Storno: Nummer der ursprünglichen Rechnung, sonst leer",
- "ordner": "passender vorhandener Ordner (siehe unten); passt keiner, einen NEUEN kurzen Ordnernamen vorschlagen – nach Person
-            (z. B. „Mathilda“), Objekt (z. B. „Nadorster Str. 299 – Oberwohnung“) oder Thema (z. B. „Auto“); bei Unsicherheit
-            leer lassen und nachfragen",
+ "ordner": "Ordnerpfad „Hauptordner / Unterordner“. Hauptordner = Person (Marco, Mirka, Mathilda, Familie) oder Objekt
+            (z. B. „Nadorster Str. 299“, „Hof Fünfhauser Weg 7“, „Auto“). Unterordner = Thema (z. B. „Versicherungen“, „Rente“,
+            „Gesundheit“, „Bank & Verträge“, „Steuer“, „Oberwohnung“, „Ferienwohnung“, „Haus allgemein“). Persönliche Dokumente
+            (an eine Person gerichtet: Versicherung, Rente, Arzt, Gehalt) gehören zur Person, Dokumente zu Gebäude/Wohnung zum Objekt.
+            Vorhandene Ordner bevorzugen (siehe unten), sonst passend neu anlegen; bei echter Unsicherheit leer lassen und nachfragen",
  "fortsetzung": true, wenn dieses Bild nur eine weitere Seite des unten genannten vorherigen Dokuments ist (gleicher Absender,
                 "Seite 2 von …", kein eigener Briefkopf/Betreff), sonst false,
  "frage": "nur wenn du dir bei Ordner, Person, Zweck oder Steuer NICHT sicher bist: eine kurze Rückfrage an die Familie
@@ -250,8 +252,10 @@ def familien_kontext():
 
 
 def ordner_name(name):
-    """Vorhandenen Ordner finden (Groß-/Kleinschreibung egal) oder einen neuen übernehmen; leer = noch unsortiert."""
-    name = re.sub(r"\s+", " ", str(name or "")).strip()[:60]
+    """Vorhandenen Ordner finden (Groß-/Kleinschreibung egal) oder einen neuen übernehmen; leer = noch unsortiert.
+    Unterordner mit " / " getrennt (z. B. "Mirka / Versicherungen")."""
+    teile = [re.sub(r"\s+", " ", t).strip() for t in re.split(r"\s*/\s*|\s+»\s+|\s+>\s+", str(name or ""))]
+    name = " / ".join(t for t in teile if t)[:100]
     if not name:
         return ""
     return {n.lower(): n for n in alle_ordner()}.get(name.lower(), name)
@@ -419,7 +423,7 @@ def ablegen(auftrag):
             e = lesen([dokument_block(s_) for s_ in seiten])
 
     jahr = (e.get("datum") or "")[:4] if re.match(r"^\d{4}-\d\d-\d\d$", e.get("datum") or "") else str(date.today().year)
-    unterordner = os.path.join(sicherer_name(ordner_name(e.get("ordner")) or "Unsortiert", 50), jahr)
+    unterordner = os.path.join(ordner_pfad(ordner_name(e.get("ordner"))), jahr)
     os.makedirs(os.path.join(ABLAGE, unterordner), exist_ok=True)
     name = "_".join([e.get("datum") or date.today().isoformat(), sicherer_name(e.get("typ"), 25), sicherer_name(e.get("absender"))])
     if e.get("betrag"):
@@ -501,11 +505,16 @@ def felder_setzen(eintrag, e, jahr=None):
     })
 
 
+def ordner_pfad(ordner):
+    """Ordnerpfad → Unterverzeichnisse auf der Platte (jede Ebene für sich)."""
+    return os.path.join(*[sicherer_name(t, 50) for t in (ordner or "Unsortiert").split(" / ") if t.strip()] or ["Unsortiert"])
+
+
 def datei_einordnen(e):
     """PDF in den Ordner/Jahr-Unterordner legen, der zum Eintrag passt (nach Änderungen)."""
     alt = e.get("datei") or ""
     jahr = (e.get("datum") or "")[:4] if re.match(r"^\d{4}", e.get("datum") or "") else alt.split("/")[-2] if "/" in alt else str(date.today().year)
-    soll = os.path.join(sicherer_name(e.get("ordner") or "Unsortiert", 50), jahr)
+    soll = os.path.join(ordner_pfad(e.get("ordner")), jahr)
     if os.path.dirname(alt) == soll or not os.path.exists(os.path.join(ABLAGE, alt)):
         return
     os.makedirs(os.path.join(ABLAGE, soll), exist_ok=True)
@@ -649,7 +658,7 @@ def schreiben(auftrag):
         senden(chat, "⚠️ Das Schreiben konnte ich nicht aufsetzen – bitte den Auftrag etwas genauer beschreiben.")
         return
     ordner = (bezug or {}).get("ordner") or "Schreiben"
-    ziel_rel = os.path.join(sicherer_name(ordner, 50), str(date.today().year),
+    ziel_rel = os.path.join(ordner_pfad(ordner), str(date.today().year),
                             f"{date.today().isoformat()}_Schreiben_{sicherer_name(b.get('dateiname') or b.get('betreff'), 50)}.pdf")
     os.makedirs(os.path.dirname(os.path.join(ABLAGE, ziel_rel)), exist_ok=True)
     brief_pdf.brief(os.path.join(ABLAGE, ziel_rel), b.get("absender") or [], b.get("empfaenger") or [],
@@ -679,6 +688,21 @@ def schreiben(auftrag):
         # Mailtext extra, damit er sich mit einem Tipp kopieren lässt
         mailtext = b.get("mailtext") or "Sehr geehrte Damen und Herren,\n\nanbei mein Schreiben.\n\nMit freundlichen Grüßen"
         senden(chat, f"Betreff: {neu['titel']}\n\n{mailtext}")
+
+
+def einmalig_neu(auftrag):
+    marke = "/config/.akte_neusortierung_2"
+    if os.path.exists(marke) or not verzeichnis():
+        return
+    open(marke, "w").close()
+    for e in verzeichnis():
+        if not e.get("ordner_fest"):
+            try:
+                neu_lesen({"id": e.get("id")})
+            except Exception as fehler:  # noqa: BLE001
+                logbuch(f"Fehler bei {e.get('titel')}: {str(fehler)[:120]}", "fehler")
+    durchsicht(auftrag)
+    logbuch("Alle Belege in Ordner und Unterordner einsortiert")
 
 
 def durchsicht(auftrag):
@@ -990,8 +1014,9 @@ def seite(auftrag):
         alt, neu = auftrag.get("id") or "", ordner_name(auftrag.get("ordner"))
         if alt and neu and alt != neu:
             for x in liste:
-                if x.get("ordner") == alt:
-                    x["ordner"] = neu
+                o = x.get("ordner") or ""
+                if o == alt or o.startswith(alt + " / "):
+                    x["ordner"] = neu + o[len(alt):]
                     datei_einordnen(x)
             json_schreiben(VERZEICHNIS, liste)
             logbuch(f"Ordner „{alt}“ heißt jetzt „{neu}“")
@@ -1209,7 +1234,7 @@ def main():
         print(json.dumps(seite(auftrag), ensure_ascii=False))
         return
     funktion = {"neu": ablegen, "befehl": befehl, "erinnerung": erinnerung, "ankuendigen": ankuendigen,
-                "durchsicht": durchsicht}.get(aktion)
+                "durchsicht": durchsicht, "einmalig_neu": einmalig_neu}.get(aktion)
     if not funktion:
         print(json.dumps({"ok": False, "fehler": "unbekannte Aktion"}))
         return

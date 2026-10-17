@@ -133,6 +133,22 @@ automation:
             {{ {'chats': (states('input_text.telegram_empfaenger') | string).split(';') | map('trim')
                           | select('match', '^-?\d+$') | list} | to_json | base64_encode }}
 
+  # Einmalig nach dem Update auf Unterordner: alle (nicht von Hand zugeordneten) Belege neu einsortieren
+  - id: akte_einmalig_neu
+    alias: "Akte: einmalig neu einsortieren (Unterordner)"
+    mode: single
+    triggers:
+      - trigger: homeassistant
+        event: start
+    actions:
+      - delay: 00:03:00
+      - action: shell_command.akte
+        continue_on_error: true
+        data:
+          aktion: einmalig_neu
+          wert: >-
+            {{ {'chats': []} | to_json | base64_encode }}
+
   # Einmalig nach dem Update: allen Bot-Nutzern per Telegram erklären, was neu ist (danach nie wieder, Merker in /config)
   - id: akte_ankuendigung
     alias: "Akte: Neuigkeit einmalig per Telegram erklären"
