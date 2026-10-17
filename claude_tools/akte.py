@@ -105,7 +105,10 @@ Aktenzeichen, Datum des Schreibens) und die Hinweise der Familie (Namen, Anschri
 Fehlt etwas Wichtiges (z. B. die neue Adresse), schreibe "[bitte ergänzen: …]" an die Stelle. Absender ist die Person,
 an die das Dokument gerichtet ist, sonst Marco. Antworte NUR mit JSON:
 {"absender": ["Name", "Straße Nr", "PLZ Ort", "Telefon …"], "empfaenger": ["Firma/Behörde", "ggf. Abteilung", "Straße", "PLZ Ort"],
- "email": "E-Mail-Adresse des Empfängers, wenn im Dokument angegeben, sonst leer",
+ "email": "E-Mail-Adresse des Empfängers: zuerst aus dem Dokument; sonst nur eine offiziell bekannte allgemeine
+           Kontaktadresse dieser Stelle, wenn du dir sehr sicher bist; sonst leer",
+ "email_quelle": "Dokument" oder "allgemein bekannt – bitte prüfen" oder "",
+ "mailtext": "kurzer Begleittext für die Mail (2–3 Sätze, mit Anrede und Gruß), das PDF hängt an",
  "ort": "Ort des Absenders", "betreff": "Betreff mit Kunden-/Aktenzeichen", "text": "Anrede … Brieftext …",
  "name": "Name für die Unterschrift", "dateiname": "kurzer Dateiname ohne Endung"}"""
 
@@ -665,9 +668,17 @@ def schreiben(auftrag):
     logbuch(f"Schreiben aufgesetzt: {neu['titel']}")
     if chat:
         datei_senden(chat, os.path.join(ABLAGE, ziel_rel), f"✍️ {neu['titel']}")
-        senden(chat, "✍️ Schreiben ist fertig und liegt in der Akte (Ordner „" + ordner + "“). Bitte einmal lesen – "
-               "Stellen mit [bitte ergänzen] noch ausfüllen." + (f"\nE-Mail des Empfängers laut Dokument: {neu['email_empfaenger']}"
-                                                                 if neu["email_empfaenger"] else ""))
+        zeilen = ["✍️ Schreiben ist fertig und liegt in der Akte (Ordner „" + ordner + "“). Bitte einmal lesen – "
+                  "Stellen mit [bitte ergänzen] noch ausfüllen.",
+                  "", "📮 Anschrift:", *[z for z in (b.get("empfaenger") or []) if z]]
+        if neu["email_empfaenger"]:
+            zeilen += ["", f"✉️ Mail an: {neu['email_empfaenger']}" + (f" ({b.get('email_quelle')})" if b.get("email_quelle") else "")]
+        else:
+            zeilen += ["", "✉️ Eine Mail-Adresse habe ich im Dokument nicht gefunden – dann per Post oder über das Kontaktformular der Stelle."]
+        senden(chat, "\n".join(zeilen))
+        # Mailtext extra, damit er sich mit einem Tipp kopieren lässt
+        mailtext = b.get("mailtext") or "Sehr geehrte Damen und Herren,\n\nanbei mein Schreiben.\n\nMit freundlichen Grüßen"
+        senden(chat, f"Betreff: {neu['titel']}\n\n{mailtext}")
 
 
 def durchsicht(auftrag):
