@@ -38,6 +38,7 @@ ALT = "/media/akte/"                   # frühere Ablage, wird einmalig umgezoge
 VERZEICHNIS = "/config/akte.json"
 ZUSTAND = "/config/akte_zustand.json"   # letzte Liste je Chat (für "eingereicht 1 3")
 LOGBUCH = "/config/akte_log.json"       # letzte Aktivitäten (für die Monitor-Seite)
+WAPPEN = "/config/akte_wappen.jpg"          # Familienwappen für den Briefkopf (nur lokal)
 EINSTELLUNGEN = "/config/akte_einstellungen.json"   # Ordner und Hinweise der Familie (nur lokal, über die Akte-Seite)
 SPERRE = "/config/.akte.lock"           # immer nur eine Arbeit gleichzeitig (sonst überschreiben sich Einträge)
 STANDARD_ORDNER = []   # Ordner entstehen erst mit den Belegen (Claude schlägt sie vor, die Familie kann umbenennen)
@@ -116,7 +117,8 @@ Vertrags-, Versicherungs-, Kunden- oder Aktennummer aus dem Dokument. Antworte N
            Kontaktadresse dieser Stelle, wenn du dir sehr sicher bist; sonst leer",
  "email_quelle": "Dokument" oder "allgemein bekannt – bitte prüfen" oder "",
  "mailtext": "kurzer Begleittext für die Mail (2–3 Sätze, mit Anrede und Gruß), das PDF hängt an",
- "ort": "Ort des Absenders", "betreff": "Betreff mit Kunden-/Aktenzeichen", "text": "Anrede … Brieftext …",
+ "ort": "Ort des Absenders", "betreff": "Betreff mit Kunden-/Aktenzeichen",
+ "text": "Anrede und Brieftext – OHNE Grußformel und OHNE Namen am Ende (die setzt das Layout selbst)",
  "name": "Name für die Unterschrift", "dateiname": "kurzer Dateiname ohne Endung"}"""
 
 DURCHSICHT = """Du gehst die digitale Akte einer Familie durch (Liste unten, je Eintrag mit Nummer). Prüfe:
@@ -140,6 +142,7 @@ HILFE = """📁 Digitale Akte – so geht's
 • Steuer: „Steuer 2026“ – Übersicht mit Summen + ZIP mit allen Belegen
 • Arztrechnungen: „Einreichen“ – offene Belege als Dateien; danach „Eingereicht“ (alle) oder „Eingereicht 1 3“
 • Fristen: „Fristen“ – was in den nächsten Wochen fällig ist
+• Wappen für den Briefkopf: Bild mit dem Text „Wappen“ schicken
 • Schreiben: „Schreiben an die Agentur für Arbeit: bitte Adresse ändern auf …“ – ich setze den Brief als PDF auf
   (sucht sich das passende Dokument aus der Akte, z. B. für Kundennummer und Anschrift)
 • Infos dazu: „Akte Die Rechnung vom Fliesenleger ist bezahlt“ oder „Akte Heizungsrechnung gehört zur Ferienwohnung“ –
@@ -357,9 +360,29 @@ def seiten_zu_pdf(seiten, ziel):
 
 # ---------- neu ablegen ----------
 
+def wappen_speichern(quelle_oder_bytes):
+    """Bild als Familienwappen für den Briefkopf ablegen (weißer Hintergrund statt Transparenz, max. 800 px)."""
+    from PIL import Image
+    img = Image.open(io.BytesIO(quelle_oder_bytes) if isinstance(quelle_oder_bytes, bytes) else quelle_oder_bytes)
+    if img.mode in ("RGBA", "LA", "P"):
+        img = img.convert("RGBA")
+        grund = Image.new("RGB", img.size, "white")
+        grund.paste(img, mask=img.split()[-1])
+        img = grund
+    img = img.convert("RGB")
+    img.thumbnail((800, 800))
+    img.save(WAPPEN, "JPEG", quality=90)
+
+
 def ablegen(auftrag):
     chat = auftrag.get("chat")
     quelle = auftrag.get("datei", "")
+    if re.match(r"^\s*wappen\b", auftrag.get("text") or "", re.I) and not quelle.lower().endswith(".pdf") and os.path.exists(quelle):
+        wappen_speichern(quelle)
+        _weg(quelle)
+        logbuch("Familienwappen gespeichert")
+        senden(chat, "🛡 Danke! Das Wappen steht ab jetzt oben rechts in jedem Schreiben aus der Akte.")
+        return
     if not os.path.realpath(quelle).startswith((EINGANG, "/media/eingang/")) or not os.path.exists(quelle):
         senden(chat, "⚠️ Akte: Datei nicht gefunden – bitte nochmal schicken.")
         return
@@ -667,9 +690,13 @@ def schreiben(auftrag):
                             f"{date.today().isoformat()}_Schreiben_{sicherer_name(b.get('dateiname') or b.get('betreff'), 50)}.pdf")
     os.makedirs(os.path.dirname(os.path.join(ABLAGE, ziel_rel)), exist_ok=True)
     info = [(str(i.get("bezeichnung") or ""), str(i.get("wert") or "")) for i in (b.get("info") or []) if isinstance(i, dict)]
+    # Grußformel und Name am Ende entfernen, falls Claude sie doch mitgeschrieben hat (das Layout setzt sie selbst)
+    b["text"] = re.sub(r"\n\s*(mit freundlichen grüßen|freundliche grüße|viele grüße|beste grüße|mit besten grüßen)[\s\S]*$", "",
+                       (b.get("text") or "").rstrip(), flags=re.I).rstrip()
+    wappen = open(WAPPEN, "rb").read() if os.path.exists(WAPPEN) else None
     brief_pdf.brief(os.path.join(ABLAGE, ziel_rel), b.get("absender") or [], b.get("empfaenger") or [],
                     f"{b.get('ort') or 'Ovelgönne'}, {date.today().strftime('%d.%m.%Y')}", b.get("betreff") or "", b.get("text") or "",
-                    name=b.get("name") or "", info=info[:4], fuss=[str(z) for z in (b.get("fuss") or []) if z][:2] or None)
+                    name=b.get("name") or "", info=info[:4], fuss=[str(z) for z in (b.get("fuss") or []) if z][:2] or None, wappen=wappen)
     neu = {"id": datetime.now().strftime("%Y%m%d%H%M%S") + uuid.uuid4().hex[:4], "eingang": datetime.now().isoformat(timespec="seconds"),
            "chat": chat, "von": "Akte (Schreiben)", "datei": ziel_rel, "typ": "Eigenes Schreiben", "kategorie": (bezug or {}).get("kategorie", "Sonstiges"),
            "titel": b.get("betreff") or "Schreiben", "absender": (b.get("empfaenger") or [""])[0], "datum": date.today().isoformat(),
@@ -1003,6 +1030,13 @@ def seite(auftrag):
     if was == "alle_neu":
         im_hintergrund(alle_neu_lesen, {"chat": auftrag.get("chat")})
         return {"ok": True}
+    if was == "wappen":
+        try:
+            wappen_speichern(base64.b64decode(auftrag.get("text") or ""))
+            logbuch("Familienwappen gespeichert")
+            return {"ok": True}
+        except Exception as fehler:  # noqa: BLE001
+            return {"ok": False, "fehler": str(fehler)[:120]}
     if was == "teilen" and eintrag:
         im_hintergrund(teilen, auftrag)
         return {"ok": True}

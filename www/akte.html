@@ -107,13 +107,15 @@
     <p class="klein">Hinweise, die Claude beim Einordnen kennen soll (Personen, Adressen, Telefonnummern, Verträge …):</p>
     <textarea id="einst-hinweise" class="notiz-feld gross-feld"></textarea>
     <div class="aktionen"><button class="knopf gruen gross-knopf" data-a="einst-speichern">Speichern</button>
-      <button class="knopf gross-knopf" data-a="alle-neu">Alle Belege neu einordnen</button></div>
+      <button class="knopf gross-knopf" data-a="alle-neu">Alle Belege neu einordnen</button>
+      <button class="knopf gross-knopf" data-a="wappen">🛡 Wappen für Briefe hochladen</button></div>
+    <input type="file" id="wappen-datei" accept="image/*" hidden>
   </div></div>
 <div class="decke" id="decke" data-a="aufdecken"><b>📁 Akte</b><span class="klein">Zum Öffnen antippen</span></div>
 <div class="toast" id="toast"></div>
 <input type="file" id="datei" multiple accept=".pdf,application/pdf,image/jpeg,image/png" hidden>
 <script>
-const SEITEN_VERSION = 13;
+const SEITEN_VERSION = 14;
 const $ = id => document.getElementById(id);
 const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const euro = x => x == null || x === "" ? "" : Number(x).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
@@ -291,6 +293,7 @@ document.addEventListener("click", async ev => {
       $("einst-hinweise").value = e.hinweise || "";
       $("einst").classList.add("offen"); break;
     }
+    case "wappen": $("wappen-datei").click(); break;
     case "einst-zu": $("einst").classList.remove("offen"); break;
     case "einst-speichern": {
       const ordner = $("einst-ordner").value.split("\n").map(z => z.trim()).filter(Boolean).map(z => {
@@ -450,6 +453,21 @@ document.addEventListener("dblclick", ev => { if (ev.target.closest("#pdf-seiten
 function alsBase64(datei) {
   return new Promise((ok, fehler) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1] || ""); r.onerror = fehler; r.readAsDataURL(datei); });
 }
+// Wappen: im Browser auf 400 px verkleinern (weißer Hintergrund) und als JPEG schicken
+document.addEventListener("change", async ev => {
+  if (ev.target.id !== "wappen-datei" || !ev.target.files[0]) return;
+  const datei = ev.target.files[0]; ev.target.value = "";
+  try {
+    const url = URL.createObjectURL(datei), img = new Image();
+    await new Promise((ok, f) => { img.onload = ok; img.onerror = f; img.src = url; });
+    const mass = Math.min(1, 400 / Math.max(img.width, img.height)), c = document.createElement("canvas");
+    c.width = Math.round(img.width * mass); c.height = Math.round(img.height * mass);
+    const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+    const b64 = c.toDataURL("image/jpeg", 0.88).split(",")[1];
+    const a = await skript({ was: "wappen", text: b64 });
+    toast(a && a.ok ? "🛡 Wappen gespeichert – es steht ab jetzt in jedem Schreiben oben rechts" : "Wappen ging nicht: " + ((a && a.fehler) || "?"), 6000);
+  } catch (e) { toast("Das Bild konnte nicht gelesen werden", 5000); }
+});
 document.addEventListener("change", async ev => {
   if (ev.target.id !== "datei") return;
   const dateien = [...ev.target.files]; ev.target.value = "";
