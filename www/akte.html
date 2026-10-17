@@ -60,7 +60,8 @@
   .pdf { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: none; flex-direction: column; z-index: 20; }
   .pdf.offen { display: flex; }
   .pdf .leiste { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; color: #fff; gap: 10px; }
-  .pdf iframe { flex: 1; border: 0; background: #fff; margin: 0 10px 10px; border-radius: 8px; }
+  .pdf-seiten { flex: 1; overflow: auto; margin: 0 10px 10px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .pdf-seiten canvas { background: #fff; border-radius: 6px; max-width: 100%; box-shadow: 0 2px 10px rgba(0,0,0,.4); }
   .pdf .zu { background: #fff; color: #000; padding: 8px 16px; border-radius: 12px; font-weight: 700; }
   .decke { position: fixed; inset: 0; background: var(--bg); display: none; align-items: center; justify-content: center; flex-direction: column; gap: 10px; z-index: 30; }
   .decke.an { display: flex; }
@@ -73,7 +74,7 @@
 </head>
 <body>
 <main id="inhalt"><div class="leer">Akte wird geladen …</div></main>
-<div class="pdf" id="pdf"><div class="leiste"><span id="pdf-titel"></span><button class="zu" data-a="zu">Schließen</button></div><iframe id="pdf-rahmen" title="Beleg"></iframe></div>
+<div class="pdf" id="pdf"><div class="leiste"><span id="pdf-titel"></span><button class="zu" data-a="zu">Schließen</button></div><div id="pdf-seiten" class="pdf-seiten"></div></div>
 <div class="pdf" id="einst"><div class="leiste"><b>⚙️ Ordner und Hinweise</b><button class="zu" data-a="einst-zu">Schließen</button></div>
   <div class="einst-inhalt">
     <p class="klein">Ein Ordner pro Zeile: <b>Name – wofür</b>. Claude sortiert jeden Beleg in genau einen Ordner. Diese Angaben bleiben nur bei euch auf dem Home-Assistant-Rechner.</p>
@@ -87,7 +88,7 @@
 <div class="toast" id="toast"></div>
 <input type="file" id="datei" multiple accept=".pdf,application/pdf,image/jpeg,image/png" hidden>
 <script>
-const SEITEN_VERSION = 5;
+const SEITEN_VERSION = 6;
 const $ = id => document.getElementById(id);
 const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const euro = x => x == null || x === "" ? "" : Number(x).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
@@ -95,7 +96,7 @@ const datum = iso => /^\d{4}-\d\d-\d\d$/.test(iso || "") ? iso.slice(8, 10) + ".
 function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
 function toast(t) { const m = $("toast"); m.textContent = t; m.style.display = "block"; clearTimeout(toast.t); toast.t = setTimeout(() => m.style.display = "none", 3000); }
 
-let eintraege = [], filter = "alle", suche = "", letzter = "", pdfUrl = "", wartend = 0, log = [], notizOffen = "";
+let eintraege = [], filter = "alle", suche = "", letzter = "", wartend = 0, log = [], notizOffen = "";
 const JAHR = new Date().getFullYear();
 async function skript(daten) {
   const r = await hass().callWS({ type: "call_service", domain: "script", service: "akte_aktion", service_data: daten, return_response: true });
@@ -211,7 +212,7 @@ document.addEventListener("click", async ev => {
       toast("Alle Belege werden neu eingeordnet – das dauert je ca. 30 Sekunden"); setTimeout(neuLaden, 20000); break;
     case "aufdecken": $("decke").classList.remove("an"); break;
     case "filter": filter = w; zeichnen(); break;
-    case "zu": $("pdf").classList.remove("offen"); $("pdf-rahmen").src = "about:blank"; break;
+    case "zu": $("pdf").classList.remove("offen"); $("pdf-seiten").innerHTML = ""; break;
     case "ansehen": {
       toast("PDF wird geladen …");
       try {
@@ -224,11 +225,11 @@ document.addEventListener("click", async ev => {
           for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
           teile.push(bytes); ab += bytes.length; ende = a.ende || !bytes.length;
         }
-        if (pdfUrl) URL.revokeObjectURL(pdfUrl);
-        pdfUrl = URL.createObjectURL(new Blob(teile, { type: "application/pdf" }));
         const e = eintraege.find(x => x.id === w) || {};
         $("pdf-titel").textContent = [e.titel, e.absender, datum(e.datum)].filter(Boolean).join(" · ");
-        $("pdf-rahmen").src = pdfUrl; $("pdf").classList.add("offen"); $("toast").style.display = "none";
+        $("pdf-seiten").innerHTML = ""; $("pdf").classList.add("offen");
+        await pdfZeigen(new Blob(teile, { type: "application/pdf" }));
+        $("toast").style.display = "none";
       } catch (e) { toast("PDF konnte nicht geöffnet werden"); }
       break;
     }
@@ -252,6 +253,29 @@ document.addEventListener("click", async ev => {
       await aktion("loeschen", w); toast("Gelöscht"); zeichnen(); break;
   }
 });
+// PDF selbst zeichnen (PDF.js, liegt lokal in www/pdfjs) – Chrome erlaubt im Home-Assistant-Rahmen keinen PDF-Betrachter
+function pdfjsLaden() {
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  return new Promise((ok, fehler) => {
+    const sk = document.createElement("script"); sk.src = "pdfjs/pdf.min.js?v=3.11.174";
+    sk.onload = () => { pdfjsLib.GlobalWorkerOptions.workerSrc = "pdfjs/pdf.worker.min.js?v=3.11.174"; ok(pdfjsLib); };
+    sk.onerror = fehler; document.head.appendChild(sk);
+  });
+}
+async function pdfZeigen(blob) {
+  const lib = await pdfjsLaden();
+  const doc = await lib.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
+  const ziel = $("pdf-seiten"), breite = Math.min(ziel.clientWidth - 8, 1100);
+  for (let n = 1; n <= doc.numPages; n++) {
+    if (!$("pdf").classList.contains("offen")) return;   // inzwischen geschlossen
+    const seite = await doc.getPage(n);
+    const v1 = seite.getViewport({ scale: 1 }), mass = breite / v1.width, dpr = window.devicePixelRatio || 1;
+    const vp = seite.getViewport({ scale: mass * dpr });
+    const c = document.createElement("canvas"); c.width = vp.width; c.height = vp.height; c.style.width = (vp.width / dpr) + "px";
+    ziel.appendChild(c);
+    await seite.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+  }
+}
 // Hochladen: Datei als Base64 in Stücken an script.akte_hochladen; die Akte liest sie dann und meldet sich per Telegram
 function alsBase64(datei) {
   return new Promise((ok, fehler) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1] || ""); r.onerror = fehler; r.readAsDataURL(datei); });
@@ -285,7 +309,7 @@ let zuletzt = Date.now();
 function beruehrt() { zuletzt = Date.now(); }
 setInterval(() => {
   if (Date.now() - zuletzt > 180000 && !$("decke").classList.contains("an")) {
-    $("decke").classList.add("an"); $("pdf").classList.remove("offen"); $("einst").classList.remove("offen"); $("pdf-rahmen").src = "about:blank";
+    $("decke").classList.add("an"); $("pdf").classList.remove("offen"); $("einst").classList.remove("offen"); $("pdf-seiten").innerHTML = "";
     suche = ""; filter = "alle"; zeichnen();
   }
 }, 10000);
