@@ -1,0 +1,91 @@
+# Digitale Akte (claude_tools/akte.py): Belege, Arztrechnungen, Versicherungen, Verträge, Bescheide per Telegram ablegen.
+# - PDF an den Bot → Akte. Foto mit Text "Beleg"/"Akte" → Akte; "+"/"weiter"/"Seite 2" → weitere Seite zum letzten Beleg.
+#   Fotos ohne solchen Text erkennt packages/eingang.yaml (Rechnung & Co. → hierher, Pflanze → Garten, Haus → Eingang).
+# - Text: "Akte <Frage>", "Steuer 2026", "Einreichen", "Eingereicht [1 3]", "Fristen", "Akte Hilfe".
+# - Erinnerungen: Fristen eine Woche vorher (täglich geprüft), offene Arztrechnungen am Monatsanfang.
+# Ablage nur lokal: /media/akte (PDFs), /config/akte.json (Verzeichnis). Die Arbeit läuft im Hintergrund weiter und
+# antwortet selbst per Telegram (Home Assistant wartet nur 60 Sekunden auf einen Befehl).
+shell_command:
+  akte: python3 /config/claude_tools/akte.py {{ aktion }} {{ wert }}
+
+automation:
+  - id: telegram_akte_datei
+    alias: "Akte: PDF oder Beleg-Foto aus Telegram ablegen"
+    mode: queued
+    max: 20
+    triggers:
+      - trigger: event
+        event_type: telegram_attachment
+    conditions:
+      - condition: template
+        value_template: >-
+          {% set m = trigger.event.data.file_mime_type | default('') %}
+          {{ m == 'application/pdf' or (m.startswith('image/') and (trigger.event.data.text | default('', true))
+             is match('^\s*(\+|beleg|akte|weiter|seite|rückseite|rueckseite)', ignorecase=True)) }}
+    actions:
+      - variables:
+          chat: "{{ trigger.event.data.chat_id }}"
+          pdf: "{{ trigger.event.data.file_mime_type | default('') == 'application/pdf' }}"
+          name: "{{ now().strftime('%Y%m%d_%H%M%S') }}_{{ range(1000, 9999) | random }}.{{ 'pdf' if pdf else 'jpg' }}"
+      - action: telegram_bot.download_file
+        continue_on_error: true
+        data:
+          file_id: "{{ trigger.event.data.file_id }}"
+          directory_path: /media/akte/_eingang
+          file_name: "{{ name }}"
+      - action: shell_command.akte
+        continue_on_error: true
+        data:
+          aktion: neu
+          wert: >-
+            {{ {'datei': '/media/akte/_eingang/' ~ name, 'chat': chat, 'von': trigger.event.data.from_first | default('', true),
+                'text': trigger.event.data.text | default('', true)} | to_json | base64_encode }}
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ chat }}"
+          message: "📁 Kommt in die Akte – ich lese den Beleg, einen Moment …"
+
+  - id: telegram_akte_befehl
+    alias: "Akte: Fragen und Befehle per Telegram"
+    mode: queued
+    max: 10
+    triggers:
+      - trigger: event
+        event_type: telegram_text
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ (trigger.event.data.text | default('') | string)
+             is match('^\s*/?(akte|belege?|steuer\s*(20\d\d)?\s*$|einreichen|eingereicht|fristen)\b', ignorecase=True) }}
+    actions:
+      - action: shell_command.akte
+        continue_on_error: true
+        data:
+          aktion: befehl
+          wert: "{{ {'text': trigger.event.data.text, 'chat': trigger.event.data.chat_id} | to_json | base64_encode }}"
+
+  - id: akte_erinnerungen
+    alias: "Akte: Fristen und offene Arztrechnungen erinnern"
+    mode: single
+    triggers:
+      - trigger: time
+        at: "08:50:00"
+    actions:
+      - variables:
+          chats: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim')
+               | select('match', '^-?\d+$') | map('int') | list }}
+      - action: shell_command.akte
+        continue_on_error: true
+        data:
+          aktion: erinnerung
+          wert: "{{ {'chats': chats, 'art': 'fristen'} | to_json | base64_encode }}"
+      - if: "{{ now().day == 1 }}"
+        then:
+          - delay: 00:00:30
+          - action: shell_command.akte
+            continue_on_error: true
+            data:
+              aktion: erinnerung
+              wert: "{{ {'chats': chats, 'art': 'einreichen'} | to_json | base64_encode }}"

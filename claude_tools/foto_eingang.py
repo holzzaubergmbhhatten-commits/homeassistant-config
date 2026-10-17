@@ -4,6 +4,7 @@
 Aufruf aus der Automation "Telegram-Foto" (packages/eingang.yaml):
   foto_eingang.py neu <base64-JSON {datei, text, von, wetter}>
       Pflanze/Beet  → Antwort {"art": "garten"}; die Automation macht dann den Garten-Fotocheck (garten_ki.py)
+      Beleg/Brief   → Antwort {"art": "beleg"}; die Automation gibt das Foto an die digitale Akte (akte.py)
       Haus & Hof    → Infos herauslesen, Zuordnung vorschlagen (z. B. "Geräte → Trockner"), im Eingang ablegen
   foto_eingang.py liste -          alle Einträge (für die Eingang-Seite)
   foto_eingang.py erledigt <id>    als übernommen markieren
@@ -31,7 +32,9 @@ Bereiche im Handbuch: Haustechnik (Heizung, Wärmepumpe, Solar, Wasser, Abwasser
 Beschriftungen), Geräte (Haushaltsgeräte), Maschinen (Garten- und Werkstattmaschinen, Fahrzeuge wie die Ape, Betriebsstoffe),
 Netzwerk (Router, WLAN, Kameras), Wohnwagen, Wo ist was (Absperrhähne, Schalter, Standorte), Wartung, Sonstiges.
 Antworte NUR mit einem JSON-Objekt:
-{"art": "garten" (lebende Pflanze, Beet, Gemüse, Schädling) oder "haus" (alles andere),
+{"art": "garten" (lebende Pflanze, Beet, Gemüse, Schädling), "beleg" (Rechnung, Quittung, Kassenbon, Arztrechnung, Rezept,
+        Versicherungs- oder Behördenbrief, Bescheid, Vertrag, Kontoauszug, Lohnabrechnung, sonstiger Papierbrief – kommt in die
+        digitale Akte) oder "haus" (alles andere),
  "titel": "kurzer Titel, z. B. Typenschild Trockner",
  "bereich": "einer der Bereiche oben",
  "zuordnung": "wohin genau, z. B. Geräte → Trockner Haier",
@@ -83,6 +86,9 @@ def neu(auftrag):
     # Garten: dann macht die Automation den bekannten Fotocheck (eigener Aufruf, eigene Zeit)
     if e.get("art") == "garten":
         return {"ok": True, "art": "garten"}
+    # Beleg: die Automation gibt das Foto an die digitale Akte (akte.py) weiter
+    if e.get("art") == "beleg":
+        return {"ok": True, "art": "beleg"}
     liste = laden()
     eintrag = {"id": datetime.now().strftime("%Y%m%d%H%M%S"), "datei": os.path.basename(datei),
                "datum": datetime.now().strftime("%d.%m.%Y %H:%M"), "von": auftrag.get("von", ""), "text": auftrag.get("text", ""),

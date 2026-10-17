@@ -36,6 +36,11 @@ automation:
   - condition: template
     value_template: >-
       {{ not (trigger.event.data.text | default('') | string) is match('^\s*/?go2rtc\s*$', ignorecase=True) }}
+  # Akte-Befehle beantwortet packages/akte.yaml
+  - condition: template
+    value_template: >-
+      {{ not (trigger.event.data.text | default('') | string)
+         is match('^\s*/?(akte|belege?|steuer\s*(20\d\d)?\s*$|einreichen|eingereicht|fristen)\b', ignorecase=True) }}
   actions:
   - variables:
       text: '{{ trigger.event.data.text }}'

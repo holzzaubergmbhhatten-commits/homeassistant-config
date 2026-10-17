@@ -1,4 +1,5 @@
 # Fotos per Telegram (z. B. von Marcos Frau, ganz ohne Claude Code): Claude erkennt, was drauf ist.
+# - Rechnung, Arztrechnung, Versicherung, Bescheid … → digitale Akte (packages/akte.yaml)
 # - Pflanze/Beet → Garten-Fotocheck wie bisher (Antwort mit Pflegetipps, auch auf der Garten-Seite)
 # - alles andere (Typenschild, Sicherungskasten, Gerät, Maschine, Zähler, Anleitung …) → Infos herauslesen,
 #   Zuordnung vorschlagen ("Geräte → Trockner") und im Eingang ablegen (Reiter "Eingang", www/eingang.html).
@@ -38,7 +39,10 @@ automation:
         event_type: telegram_attachment
     conditions:
       - condition: template
-        value_template: "{{ (trigger.event.data.file_mime_type | default('')).startswith('image/') }}"
+        value_template: >-
+          {{ (trigger.event.data.file_mime_type | default('')).startswith('image/')
+             and not ((trigger.event.data.text | default('', true))
+                      is match('^\s*(\+|beleg|akte|weiter|seite|rückseite|rueckseite)', ignorecase=True)) }}
     actions:
       - variables:
           chat: "{{ trigger.event.data.chat_id }}"
@@ -81,7 +85,16 @@ automation:
           e: >-
             {% set a = erkannt.stdout | default('') if erkannt is defined and erkannt is mapping else '' %}
             {{ a if a is mapping else (a | from_json if (a | string).startswith('{') else {}) }}
-      # 2. Pflanze → der bekannte Garten-Fotocheck
+      # 2. Beleg (Rechnung, Arztrechnung, Versicherung, Bescheid …) → digitale Akte (packages/akte.yaml)
+      - if: "{{ e.art | default('') == 'beleg' }}"
+        then:
+          - action: shell_command.akte
+            continue_on_error: true
+            data:
+              aktion: neu
+              wert: "{{ {'datei': datei, 'chat': chat, 'von': von, 'text': text} | to_json | base64_encode }}"
+          - stop: an die Akte übergeben
+      # 3. Pflanze → der bekannte Garten-Fotocheck
       - if: "{{ e.art | default('') == 'garten' }}"
         then:
           - action: shell_command.garten_ki_befehl
