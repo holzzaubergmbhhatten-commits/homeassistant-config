@@ -103,10 +103,15 @@ werden sollen – nur wenn danach gefragt wird ("schick mir …") oder es klar h
 
 SCHREIBEN = """Du setzt für eine Familie in Deutschland einen kurzen, höflichen, sachlichen Brief auf (DIN 5008).
 Grundlage: der Auftrag der Familie, das angehängte Dokument (falls vorhanden; daraus Empfänger-Anschrift, Kunden-/
-Aktenzeichen, Datum des Schreibens) und die Hinweise der Familie (Namen, Anschrift, Telefonnummern). Erfinde nichts:
-Fehlt etwas Wichtiges (z. B. die neue Adresse), schreibe "[bitte ergänzen: …]" an die Stelle. Absender ist die Person,
-an die das Dokument gerichtet ist, sonst Marco. Antworte NUR mit JSON:
-{"absender": ["Name", "Straße Nr", "PLZ Ort", "Telefon …"], "empfaenger": ["Firma/Behörde", "ggf. Abteilung", "Straße", "PLZ Ort"],
+Aktenzeichen, Datum des Schreibens) und die Hinweise der Familie (Namen, Anschrift, Telefonnummern, E-Mail). Erfinde nichts:
+Fehlt etwas Wichtiges (z. B. die neue Adresse), schreibe "[bitte ergänzen: …]" an die Stelle.
+Absender ist die Person, an die das Dokument gerichtet ist bzw. um die es geht (z. B. Mirka bei Mirkas Versicherung),
+mit IHREM Namen, IHRER Telefonnummer und ggf. E-Mail aus den Hinweisen; sonst Marco. Der Betreff nennt immer die
+Vertrags-, Versicherungs-, Kunden- oder Aktennummer aus dem Dokument. Antworte NUR mit JSON:
+{"absender": ["Vorname Nachname", "Straße Nr", "PLZ Ort"], "empfaenger": ["Firma/Behörde", "ggf. Abteilung", "Straße", "PLZ Ort"],
+ "info": [{"bezeichnung": "Vertragsnummer" / "Versicherungsnummer" / "Kundennummer" / "Ihr Zeichen", "wert": "…"},
+          {"bezeichnung": "Ihr Schreiben vom", "wert": "TT.MM.JJJJ"}, {"bezeichnung": "Telefon", "wert": "Nummer des Absenders"}],
+ "fuss": ["Name · Straße Nr · PLZ Ort", "Telefon … · E-Mail … (nur was in den Hinweisen steht)"],
  "email": "E-Mail-Adresse des Empfängers: zuerst aus dem Dokument; sonst nur eine offiziell bekannte allgemeine
            Kontaktadresse dieser Stelle, wenn du dir sehr sicher bist; sonst leer",
  "email_quelle": "Dokument" oder "allgemein bekannt – bitte prüfen" oder "",
@@ -661,9 +666,10 @@ def schreiben(auftrag):
     ziel_rel = os.path.join(ordner_pfad(ordner), str(date.today().year),
                             f"{date.today().isoformat()}_Schreiben_{sicherer_name(b.get('dateiname') or b.get('betreff'), 50)}.pdf")
     os.makedirs(os.path.dirname(os.path.join(ABLAGE, ziel_rel)), exist_ok=True)
+    info = [(str(i.get("bezeichnung") or ""), str(i.get("wert") or "")) for i in (b.get("info") or []) if isinstance(i, dict)]
     brief_pdf.brief(os.path.join(ABLAGE, ziel_rel), b.get("absender") or [], b.get("empfaenger") or [],
                     f"{b.get('ort') or 'Ovelgönne'}, {date.today().strftime('%d.%m.%Y')}", b.get("betreff") or "", b.get("text") or "",
-                    name=b.get("name") or "")
+                    name=b.get("name") or "", info=info[:4], fuss=[str(z) for z in (b.get("fuss") or []) if z][:2] or None)
     neu = {"id": datetime.now().strftime("%Y%m%d%H%M%S") + uuid.uuid4().hex[:4], "eingang": datetime.now().isoformat(timespec="seconds"),
            "chat": chat, "von": "Akte (Schreiben)", "datei": ziel_rel, "typ": "Eigenes Schreiben", "kategorie": (bezug or {}).get("kategorie", "Sonstiges"),
            "titel": b.get("betreff") or "Schreiben", "absender": (b.get("empfaenger") or [""])[0], "datum": date.today().isoformat(),
