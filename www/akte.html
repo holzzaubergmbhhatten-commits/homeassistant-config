@@ -107,13 +107,13 @@
 <div class="toast" id="toast"></div>
 <input type="file" id="datei" multiple accept=".pdf,application/pdf,image/jpeg,image/png" hidden>
 <script>
-const SEITEN_VERSION = 10;
+const SEITEN_VERSION = 11;
 const $ = id => document.getElementById(id);
 const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const euro = x => x == null || x === "" ? "" : Number(x).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
 const datum = iso => /^\d{4}-\d\d-\d\d$/.test(iso || "") ? iso.slice(8, 10) + "." + iso.slice(5, 7) + "." + iso.slice(0, 4) : (iso || "");
 function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
-function toast(t) { const m = $("toast"); m.textContent = t; m.style.display = "block"; clearTimeout(toast.t); toast.t = setTimeout(() => m.style.display = "none", 3000); }
+function toast(t, dauer) { const m = $("toast"); m.textContent = t; m.style.display = "block"; clearTimeout(toast.t); toast.t = setTimeout(() => m.style.display = "none", dauer || 4000); }
 
 let ordnerWahl = "", ordnerListe = [], eintraege = [], filter = "eingang", suche = "", letzter = "", wartend = 0, log = [], notizOffen = "";
 const JAHR = new Date().getFullYear();
@@ -200,7 +200,7 @@ function zeichnen() {
   const summe = sicht.reduce((s, e) => s + (Number(e.betrag) || 0), 0);
   const fokus = document.activeElement && document.activeElement.id === "suche";
   $("inhalt").innerHTML = `
-    <div class="kopf"><h1>📁 Akte</h1><span class="klein">Belege als Foto oder PDF an den Telegram-Bot schicken (Text „Beleg“ dazu) oder hier hochladen. Fragen per Telegram: „Akte …“, „Steuer ${JAHR}“, „Einreichen“, „Fristen“.</span>
+    <div class="kopf"><h1 title="Version ${SEITEN_VERSION}">📁 Akte</h1><span class="klein">Belege als Foto oder PDF an den Telegram-Bot schicken (Text „Beleg“ dazu) oder hier hochladen. Fragen per Telegram: „Akte …“, „Steuer ${JAHR}“, „Einreichen“, „Fristen“.</span>
       <input class="suche" id="suche" type="search" placeholder="Suchen: Zahnarzt, Allianz, 2026 …" value="${esc(suche)}">
       <button class="knopf blau gross-knopf" data-a="hochladen">⬆️ Dateien hochladen</button>
       <button class="knopf gross-knopf" data-a="einstellungen">⚙️ Ordner</button></div>
@@ -396,8 +396,8 @@ document.addEventListener("change", async ev => {
           service_data: { kennung, teil: i, name, letzt: i === teile - 1, daten: b64.slice(i * STUECK, (i + 1) * STUECK) } });
         ergebnis = r && r.response && r.response.stdout;
       }
-      if (String(ergebnis).includes('"fertig": true')) geschafft++; else toast(d.name + ": " + (String(ergebnis).match(/"fehler": "([^"]+)"/) || [, "hat nicht geklappt"])[1]);
-    } catch (e) { toast(d.name + ": hat nicht geklappt"); }
+      if (String(ergebnis).includes('"fertig": true')) geschafft++; else toast(d.name + ": " + (String(ergebnis).match(/"fehler": "([^"]+)"/) || [, "hat nicht geklappt (" + String(ergebnis).slice(0, 100) + ")"])[1], 12000);
+    } catch (e) { toast(d.name + ": hat nicht geklappt (" + String((e && (e.message || e.code)) || e).slice(0, 120) + ")", 12000); }
   }
   if (geschafft) toast(`${geschafft} Datei${geschafft === 1 ? "" : "en"} hochgeladen – die Akte liest sie jetzt (dauert je ca. 30 Sek., Meldung per Telegram)`);
   setTimeout(neuLaden, 45000); setTimeout(neuLaden, 120000);
