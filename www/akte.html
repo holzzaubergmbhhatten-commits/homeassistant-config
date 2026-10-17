@@ -82,6 +82,8 @@
   .pdf-seiten { flex: 1; overflow: auto; margin: 0 10px 10px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
   .pdf-seiten canvas { background: #fff; border-radius: 6px; max-width: 100%; box-shadow: 0 2px 10px rgba(0,0,0,.4); }
   .pdf .zu { background: #fff; color: #000; padding: 8px 16px; border-radius: 12px; font-weight: 700; }
+  .pdf .zu.hell { background: rgba(255,255,255,.18); color: #fff; }
+  .pdf-knoepfe { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
   .decke { position: fixed; inset: 0; background: var(--bg); display: none; align-items: center; justify-content: center; flex-direction: column; gap: 10px; z-index: 30; }
   .decke.an { display: flex; }
   .decke b { font-size: 22px; }
@@ -93,7 +95,9 @@
 </head>
 <body>
 <main id="inhalt"><div class="leer">Akte wird geladen …</div></main>
-<div class="pdf" id="pdf"><div class="leiste"><span id="pdf-titel"></span><button class="zu" data-a="zu">Schließen</button></div><div id="pdf-seiten" class="pdf-seiten"></div></div>
+<div class="pdf" id="pdf"><div class="leiste"><span id="pdf-titel"></span><span class="pdf-knoepfe">
+  <button class="zu hell" data-a="pdf-teilen">📤 Teilen / Speichern</button><button class="zu hell" data-a="pdf-telegram">✈️ An mein Telegram</button>
+  <button class="zu" data-a="zu">Schließen</button></span></div><div id="pdf-seiten" class="pdf-seiten"></div></div>
 <div class="pdf" id="einst"><div class="leiste"><b>⚙️ Ordner und Hinweise</b><button class="zu" data-a="einst-zu">Schließen</button></div>
   <div class="einst-inhalt">
     <p class="klein">Ordner entstehen von selbst, sobald Belege einsortiert werden. Hier kannst du sie vorab anlegen oder beschreiben – ein Ordner pro Zeile: <b>Name – wofür</b>. Diese Angaben bleiben nur bei euch auf dem Home-Assistant-Rechner.</p>
@@ -107,7 +111,7 @@
 <div class="toast" id="toast"></div>
 <input type="file" id="datei" multiple accept=".pdf,application/pdf,image/jpeg,image/png" hidden>
 <script>
-const SEITEN_VERSION = 11;
+const SEITEN_VERSION = 12;
 const $ = id => document.getElementById(id);
 const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const euro = x => x == null || x === "" ? "" : Number(x).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
@@ -115,7 +119,7 @@ const datum = iso => /^\d{4}-\d\d-\d\d$/.test(iso || "") ? iso.slice(8, 10) + ".
 function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
 function toast(t, dauer) { const m = $("toast"); m.textContent = t; m.style.display = "block"; clearTimeout(toast.t); toast.t = setTimeout(() => m.style.display = "none", dauer || 4000); }
 
-let ordnerWahl = "", ordnerListe = [], eintraege = [], filter = "eingang", suche = "", letzter = "", wartend = 0, log = [], notizOffen = "";
+let pdfAktuell = null, schreibenOffen = "", ordnerWahl = "", ordnerListe = [], eintraege = [], filter = "eingang", suche = "", letzter = "", wartend = 0, log = [], notizOffen = "";
 const JAHR = new Date().getFullYear();
 async function skript(daten) {
   const r = await hass().callWS({ type: "call_service", domain: "script", service: "akte_aktion", service_data: daten, return_response: true });
@@ -230,12 +234,16 @@ function zeichnen() {
         ${ordnerWahl === e.id ? `<div class="frage"><b>📂 In welchen Ordner?</b>
           <div class="wahl">${ordnerNamen().map(o => `<button data-a="ordner-setzen" data-w="${esc(e.id)}" data-v="${esc(o)}">${esc(o)}</button>`).join("")}</div>
           <div class="zeile2"><input id="ordner-neu-${esc(e.id)}" placeholder="oder neuer Ordner, z. B. Mathilda"><button class="knopf gruen" data-a="ordner-setzen" data-w="${esc(e.id)}">OK</button></div></div>` : ""}
+        ${schreibenOffen === e.id ? `<div class="frage"><b>✍️ Was soll das Schreiben?</b>
+          <textarea class="notiz-feld" id="schreiben-${esc(e.id)}" placeholder="z. B. Bitte Adresse ändern auf Fünfhauser Weg 7, 26939 Ovelgönne · Widerspruch gegen den Bescheid, weil … · Kündigung zum nächstmöglichen Termin"></textarea>
+          <div class="aktionen"><button class="knopf gruen" data-a="schreiben-los" data-w="${esc(e.id)}">Schreiben aufsetzen</button></div></div>` : ""}
         ${notizOffen === e.id ? `<textarea class="notiz-feld" id="notiz-${esc(e.id)}" placeholder="z. B. ist schon bezahlt am 05.10. · gehört zur Ferienwohnung · Mahnung erledigt">${esc(e.notiz || "")}</textarea>`
           : e.notiz ? `<div class="notiz">📝 ${esc(e.notiz)}</div>` : ""}
         ${e.kurz ? `<div class="kurz">${esc(e.kurz)}</div>` : ""}
         <div class="aktionen">
           <button class="knopf blau" data-a="ansehen" data-w="${esc(e.id)}">PDF ansehen</button>
           <button class="knopf" data-a="ordner-wahl" data-w="${esc(e.id)}">📂 Ordner</button>
+          <button class="knopf" data-a="schreiben-oeffnen" data-w="${esc(e.id)}">✍️ Schreiben</button>
           ${notizOffen === e.id ? `<button class="knopf gruen" data-a="notiz-speichern" data-w="${esc(e.id)}">Notiz speichern</button>`
             : `<button class="knopf" data-a="notiz" data-w="${esc(e.id)}">📝 Notiz</button>`}
           ${e.zahlung === "offen" ? `<button class="knopf gruen" data-a="bezahlt" data-w="${esc(e.id)}">Bezahlt</button>`
@@ -279,6 +287,33 @@ document.addEventListener("click", async ev => {
       toast("Alle Belege werden neu eingeordnet – das dauert je ca. 30 Sekunden"); setTimeout(neuLaden, 20000); break;
     case "aufdecken": $("decke").classList.remove("an"); break;
     case "filter": filter = w; zeichnen(); break;
+    case "pdf-teilen": {
+      if (!pdfAktuell) break;
+      const datei = new File([pdfAktuell.blob], pdfAktuell.name, { type: "application/pdf" });
+      try {   // Handy: Teilen-Menü (Mail, WhatsApp, Dateien …)
+        if (navigator.canShare && navigator.canShare({ files: [datei] })) { await navigator.share({ files: [datei], title: pdfAktuell.name }); break; }
+      } catch (e) { if (e && e.name === "AbortError") break; }
+      try {   // Laptop: herunterladen
+        const a = document.createElement("a"); a.href = URL.createObjectURL(datei); a.download = pdfAktuell.name;
+        document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+        toast("Wird heruntergeladen – falls nichts passiert: „✈️ An mein Telegram“ nehmen", 7000);
+      } catch (e) { toast("Herunterladen ist hier gesperrt – „✈️ An mein Telegram“ nehmen", 7000); }
+      break;
+    }
+    case "pdf-telegram": {
+      if (!pdfAktuell) break;
+      await skript({ was: "teilen", id: pdfAktuell.id, wer: (hass().user && hass().user.name) || "" });
+      toast("Kommt gleich per Telegram – dort kannst du es speichern, teilen oder per Mail weiterschicken", 7000); break;
+    }
+    case "schreiben-oeffnen": schreibenOffen = schreibenOffen === w ? "" : w; zeichnen(); { const f = $("schreiben-" + w); if (f) f.focus(); } break;
+    case "schreiben-los": {
+      const f = $("schreiben-" + w), text = f ? f.value.trim() : "";
+      if (!text) { toast("Bitte kurz sagen, worum es im Schreiben gehen soll"); break; }
+      schreibenOffen = "";
+      await skript({ was: "schreiben", id: w, text, wer: (hass().user && hass().user.name) || "" });
+      toast("Ich setze das Schreiben auf – es kommt in ca. 1 Minute per Telegram und liegt dann im selben Ordner", 8000);
+      zeichnen(); setTimeout(neuLaden, 60000); break;
+    }
     case "zu": $("pdf").classList.remove("offen"); $("pdf-seiten").innerHTML = ""; break;
     case "ansehen": {
       toast("PDF wird geladen …");
@@ -295,7 +330,9 @@ document.addEventListener("click", async ev => {
         const e = eintraege.find(x => x.id === w) || {};
         $("pdf-titel").textContent = [e.titel, e.absender, datum(e.datum)].filter(Boolean).join(" · ");
         $("pdf-seiten").innerHTML = ""; $("pdf").classList.add("offen");
-        await pdfZeigen(new Blob(teile, { type: "application/pdf" }));
+        pdfAktuell = { blob: new Blob(teile, { type: "application/pdf" }), id: w,
+          name: ([e.datum, e.titel || e.typ, e.absender].filter(Boolean).join(" ").replace(/[^\wäöüÄÖÜß .,-]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || "Beleg") + ".pdf" };
+        await pdfZeigen(pdfAktuell.blob);
         $("toast").style.display = "none";
       } catch (e) { toast("PDF konnte nicht geöffnet werden"); }
       break;
@@ -412,7 +449,7 @@ setInterval(() => {
   }
 }, 10000);
 async function neuLaden() {
-  if (notizOffen || ordnerWahl || (document.activeElement && /^(suche|antwort-|ordner-neu-|umbenennen)/.test(document.activeElement.id || ""))) return;
+  if (notizOffen || ordnerWahl || schreibenOffen || (document.activeElement && /^(suche|antwort-|ordner-neu-|umbenennen)/.test(document.activeElement.id || ""))) return;
   if (!ordnerListe.length) { const r = await skript({ was: "einstellungen" }); ordnerListe = ((r && r.einstellungen && r.einstellungen.ordner) || []).map(o => o.name); }
   const a = await aktion("liste");
   clearTimeout(neuLaden.t); if (wartend) neuLaden.t = setTimeout(neuLaden, 15000);   // während gelesen wird öfter schauen

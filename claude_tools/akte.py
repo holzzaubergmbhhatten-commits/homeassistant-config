@@ -99,6 +99,16 @@ werden sollen – nur wenn danach gefragt wird ("schick mir …") oder es klar h
                  oder "das gehört zur Ferienwohnung": {"nr": Nummer, "notiz": "kurze Notiz", "zahlung": "bezahlt"|"offen",
                  "kategorie": "…", "steuer_art": "…", "eingereicht": true}] – nur die Felder, die sich ändern}"""
 
+SCHREIBEN = """Du setzt für eine Familie in Deutschland einen kurzen, höflichen, sachlichen Brief auf (DIN 5008).
+Grundlage: der Auftrag der Familie, das angehängte Dokument (falls vorhanden; daraus Empfänger-Anschrift, Kunden-/
+Aktenzeichen, Datum des Schreibens) und die Hinweise der Familie (Namen, Anschrift, Telefonnummern). Erfinde nichts:
+Fehlt etwas Wichtiges (z. B. die neue Adresse), schreibe "[bitte ergänzen: …]" an die Stelle. Absender ist die Person,
+an die das Dokument gerichtet ist, sonst Marco. Antworte NUR mit JSON:
+{"absender": ["Name", "Straße Nr", "PLZ Ort", "Telefon …"], "empfaenger": ["Firma/Behörde", "ggf. Abteilung", "Straße", "PLZ Ort"],
+ "email": "E-Mail-Adresse des Empfängers, wenn im Dokument angegeben, sonst leer",
+ "ort": "Ort des Absenders", "betreff": "Betreff mit Kunden-/Aktenzeichen", "text": "Anrede … Brieftext …",
+ "name": "Name für die Unterschrift", "dateiname": "kurzer Dateiname ohne Endung"}"""
+
 DURCHSICHT = """Du gehst die digitale Akte einer Familie durch (Liste unten, je Eintrag mit Nummer). Prüfe:
 - Mahnungen: gibt es die ursprüngliche Rechnung? Ist sie laut Notiz/Status bezahlt? Dann die Mahnung als bezahlt markieren.
 - Doppelte Einträge (gleicher Absender, Datum, Betrag), Aufmaße/Angebote ohne zugehörige Rechnung.
@@ -120,6 +130,8 @@ HILFE = """📁 Digitale Akte – so geht's
 • Steuer: „Steuer 2026“ – Übersicht mit Summen + ZIP mit allen Belegen
 • Arztrechnungen: „Einreichen“ – offene Belege als Dateien; danach „Eingereicht“ (alle) oder „Eingereicht 1 3“
 • Fristen: „Fristen“ – was in den nächsten Wochen fällig ist
+• Schreiben: „Schreiben an die Agentur für Arbeit: bitte Adresse ändern auf …“ – ich setze den Brief als PDF auf
+  (sucht sich das passende Dokument aus der Akte, z. B. für Kundennummer und Anschrift)
 • Infos dazu: „Akte Die Rechnung vom Fliesenleger ist bezahlt“ oder „Akte Heizungsrechnung gehört zur Ferienwohnung“ –
   wird beim Beleg vermerkt. Kommt eine Mahnung, sage ich, ob sie laut Akte schon bezahlt ist.
 • Jeden Sonntag gehe ich die Akte durch und melde, was auffällt (Mahnungen, offene Zahlungen, fehlende Rechnungen).
@@ -594,6 +606,70 @@ def alle_neu_lesen(auftrag):
     logbuch("Alle Belege neu eingeordnet")
 
 
+def chat_fuer(wer, chats):
+    """Telegram-Chat der Person, die auf der Seite angemeldet ist (Vorname im Chat), sonst der erste."""
+    chats = [c for c in chats or [] if str(c).lstrip("-").isdigit()]
+    if wer:
+        for c in chats:
+            try:
+                if (wer.split()[0].lower() in (telegram("getChat", {"chat_id": c})["result"].get("first_name") or "").lower()):
+                    return c
+            except Exception:  # noqa: BLE001
+                pass
+    return chats[0] if chats else None
+
+
+def teilen(auftrag):
+    """PDF eines Eintrags per Telegram schicken – von dort lässt es sich speichern, teilen oder per Mail weiterleiten."""
+    e = next((x for x in verzeichnis() if x.get("id") == auftrag.get("id")), None)
+    chat = auftrag.get("chat") or chat_fuer(auftrag.get("wer"), auftrag.get("chats"))
+    if e and chat:
+        datei_senden(chat, os.path.join(ABLAGE, e.get("datei", "")), zeile(1, e)[3:])
+
+
+def schreiben(auftrag):
+    """Brief zu einem Beleg (oder frei) aufsetzen, als PDF ablegen und per Telegram schicken."""
+    import brief_pdf
+    liste = verzeichnis()
+    chat = auftrag.get("chat") or chat_fuer(auftrag.get("wer"), auftrag.get("chats"))
+    bezug = next((x for x in liste if x.get("id") == auftrag.get("id")), None)
+    if bezug is None and auftrag.get("id") is None and liste:
+        treffer = suchen(liste, auftrag.get("text") or "", 1)
+        bezug = liste[treffer[0]] if treffer else None
+    inhalt = []
+    if bezug is not None:
+        inhalt.append(dokument_block(os.path.join(ABLAGE, bezug.get("datei", ""))))
+    inhalt.append({"type": "text", "text": f"Heute: {date.today().strftime('%d.%m.%Y')}\n{familien_kontext()}\n\n"
+                                           f"Auftrag der Familie: {auftrag.get('text') or ''}"})
+    b = claude(SCHREIBEN, inhalt, max_tokens=3000, effort="medium")
+    if not b.get("text"):
+        senden(chat, "⚠️ Das Schreiben konnte ich nicht aufsetzen – bitte den Auftrag etwas genauer beschreiben.")
+        return
+    ordner = (bezug or {}).get("ordner") or "Schreiben"
+    ziel_rel = os.path.join(sicherer_name(ordner, 50), str(date.today().year),
+                            f"{date.today().isoformat()}_Schreiben_{sicherer_name(b.get('dateiname') or b.get('betreff'), 50)}.pdf")
+    os.makedirs(os.path.dirname(os.path.join(ABLAGE, ziel_rel)), exist_ok=True)
+    brief_pdf.brief(os.path.join(ABLAGE, ziel_rel), b.get("absender") or [], b.get("empfaenger") or [],
+                    f"{b.get('ort') or 'Ovelgönne'}, {date.today().strftime('%d.%m.%Y')}", b.get("betreff") or "", b.get("text") or "",
+                    name=b.get("name") or "")
+    neu = {"id": datetime.now().strftime("%Y%m%d%H%M%S") + uuid.uuid4().hex[:4], "eingang": datetime.now().isoformat(timespec="seconds"),
+           "chat": chat, "von": "Akte (Schreiben)", "datei": ziel_rel, "typ": "Eigenes Schreiben", "kategorie": (bezug or {}).get("kategorie", "Sonstiges"),
+           "titel": b.get("betreff") or "Schreiben", "absender": (b.get("empfaenger") or [""])[0], "datum": date.today().isoformat(),
+           "betrag": None, "person": b.get("name") or "", "ordner": ordner, "ordner_fest": True, "zahlung": "keine",
+           "steuer": {"relevant": False, "art": "keine"}, "einreichen": {"noetig": False}, "fristen": [], "schlagworte": ["Schreiben"],
+           "inhalt": b.get("text", "")[:6000], "notiz": f"Aufgesetzt: {auftrag.get('text') or ''}"[:300],
+           "bezug_id": (bezug or {}).get("id", ""), "email_empfaenger": b.get("email") or ""}
+    liste = verzeichnis()
+    liste.append(neu)
+    json_schreiben(VERZEICHNIS, liste)
+    logbuch(f"Schreiben aufgesetzt: {neu['titel']}")
+    if chat:
+        datei_senden(chat, os.path.join(ABLAGE, ziel_rel), f"✍️ {neu['titel']}")
+        senden(chat, "✍️ Schreiben ist fertig und liegt in der Akte (Ordner „" + ordner + "“). Bitte einmal lesen – "
+               "Stellen mit [bitte ergänzen] noch ausfüllen." + (f"\nE-Mail des Empfängers laut Dokument: {neu['email_empfaenger']}"
+                                                                 if neu["email_empfaenger"] else ""))
+
+
 def durchsicht(auftrag):
     """Wöchentlich (und nach dem Hochladen mehrerer Dateien): alles prüfen, Sicheres korrigieren, Auffälliges melden."""
     liste = verzeichnis()
@@ -791,6 +867,8 @@ def befehl(auftrag):
         einreichen(chat, liste)
     elif re.match(r"^eingereicht", t):
         eingereicht(chat, t, liste)
+    elif re.match(r"^(schreiben|brief)\b", t):
+        schreiben({"chat": chat, "id": None, "text": re.sub(r"^/?(schreiben|brief)\s*[:,-]?\s*", "", text, flags=re.I)})
     elif re.match(r"^fristen", t):
         bald = fristen_text(liste)
         senden(chat, "⏰ Fristen in den nächsten 8 Wochen:\n" + "\n".join(
@@ -883,6 +961,12 @@ def seite(auftrag):
         return {"ok": True, "einstellungen": einstellungen()}
     if was == "alle_neu":
         im_hintergrund(alle_neu_lesen, {"chat": auftrag.get("chat")})
+        return {"ok": True}
+    if was == "teilen" and eintrag:
+        im_hintergrund(teilen, auftrag)
+        return {"ok": True}
+    if was == "schreiben":
+        im_hintergrund(schreiben, auftrag)
         return {"ok": True}
     if was == "ordner_setzen" and eintrag:
         eintrag["ordner"], eintrag["ordner_fest"] = ordner_name(auftrag.get("ordner")), True

@@ -40,7 +40,7 @@ automation:
   - condition: template
     value_template: >-
       {{ not (trigger.event.data.text | default('') | string)
-         is match('^\s*/?(akte|belege?|steuer\s*(20\d\d)?\s*$|einreichen|eingereicht|fristen)\b', ignorecase=True) }}
+         is match('^\s*/?(akte|belege?|steuer\s*(20\d\d)?\s*$|einreichen|eingereicht|fristen|schreiben|brief)\b', ignorecase=True) }}
   actions:
   - variables:
       text: '{{ trigger.event.data.text }}'
