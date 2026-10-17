@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Akte</title>
+<!--
+  Digitale Akte (Reiter "Akte" im Flur-Dashboard): alle Belege, die per Telegram abgelegt wurden (claude_tools/akte.py).
+  Liste über script.akte_aktion (packages/akte.yaml) – die Daten kommen nur über die Home-Assistant-Anmeldung, in dieser
+  Datei steht nichts davon. PDFs werden kurzzeitig nach /media/akte/_ansicht kopiert und über eine signierte Adresse gezeigt.
+  Datenschutz am Monitor: nach 3 Minuten ohne Berührung wird die Liste verdeckt.
+-->
+<style>
+  :root { --bg: #F2F2F7; --karte: #fff; --text: #1C1C1E; --grau: #8E8E93; --gruen: #34C759; --rot: #FF3B30; --orange: #FF9500; --blau: #007AFF; --lila: #AF52DE; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "SF Pro Text", Roboto, "Helvetica Neue", system-ui, sans-serif; }
+  body { overflow: auto; touch-action: manipulation; }
+  button { font: inherit; border: 0; background: none; color: inherit; cursor: pointer; padding: 0; }
+  main { max-width: 1200px; margin: 0 auto; padding: 14px 16px 60px; }
+  .kopf { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .kopf h1 { margin: 0; font-size: 26px; }
+  .klein { font-size: 13px; color: var(--grau); line-height: 1.4; }
+  .kopf .klein { flex: 1; min-width: 220px; }
+  .suche { width: 100%; max-width: 420px; padding: 10px 14px; border-radius: 12px; border: 0; background: #E3E3E8; font: inherit; font-size: 16px; color: inherit; }
+  .filter { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 12px; }
+  .filter button { padding: 8px 13px; border-radius: 16px; background: #E3E3E8; font-size: 14px; font-weight: 600; }
+  .filter button.an { background: var(--text); color: #fff; }
+  .summe { font-size: 14px; margin: 0 0 10px; font-variant-numeric: tabular-nums; }
+  .liste { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 10px; }
+  .eintrag { background: var(--karte); border-radius: 14px; padding: 12px 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .zeile { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+  .zeile b { font-size: 16px; min-width: 0; }
+  .betrag { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .marken { display: flex; gap: 5px; flex-wrap: wrap; }
+  .marke { font-size: 12px; font-weight: 700; border-radius: 8px; padding: 2px 8px; background: #007AFF1A; color: var(--blau); }
+  .marke.steuer { background: #34C7591F; color: #1E8E3E; }
+  .marke.offen { background: #FF95001F; color: #B25E00; }
+  .marke.ok { background: #8E8E931F; color: var(--grau); }
+  .marke.frist { background: #AF52DE1F; color: var(--lila); }
+  .kurz { font-size: 13px; line-height: 1.45; color: #3A3A3C; max-height: 3.9em; overflow: hidden; }
+  .aktionen { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .knopf { padding: 8px 12px; border-radius: 11px; background: var(--bg); font-weight: 600; font-size: 13px; }
+  .knopf.blau { background: var(--blau); color: #fff; }
+  .knopf.gruen { background: var(--gruen); color: #fff; }
+  .knopf.rot { color: var(--rot); }
+  .knopf.scharf { background: var(--rot); color: #fff; }
+  .leer { text-align: center; padding: 50px 10px; color: var(--grau); line-height: 1.6; }
+  .pdf { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: none; flex-direction: column; z-index: 20; }
+  .pdf.offen { display: flex; }
+  .pdf .leiste { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; color: #fff; gap: 10px; }
+  .pdf iframe { flex: 1; border: 0; background: #fff; margin: 0 10px 10px; border-radius: 8px; }
+  .pdf .zu { background: #fff; color: #000; padding: 8px 16px; border-radius: 12px; font-weight: 700; }
+  .decke { position: fixed; inset: 0; background: var(--bg); display: none; align-items: center; justify-content: center; flex-direction: column; gap: 10px; z-index: 30; }
+  .decke.an { display: flex; }
+  .decke b { font-size: 22px; }
+  .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: rgba(28,28,30,.92); color: #fff; padding: 9px 16px; border-radius: 12px; font-size: 14px; display: none; z-index: 40; }
+  :root.dunkel .suche, :root.dunkel .filter button { background: #3A3A3C; }
+  :root.dunkel .kurz { color: #C7C7CC; }
+</style>
+<link rel="stylesheet" href="apple-glas.css?v=1">
+</head>
+<body>
+<main id="inhalt"><div class="leer">Akte wird geladen …</div></main>
+<div class="pdf" id="pdf"><div class="leiste"><span id="pdf-titel"></span><button class="zu" data-a="zu">Schließen</button></div><iframe id="pdf-rahmen" title="Beleg"></iframe></div>
+<div class="decke" id="decke" data-a="aufdecken"><b>📁 Akte</b><span class="klein">Zum Öffnen antippen</span></div>
+<div class="toast" id="toast"></div>
+<script>
+const SEITEN_VERSION = 1;
+const $ = id => document.getElementById(id);
+const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const euro = x => x == null || x === "" ? "" : Number(x).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
+const datum = iso => /^\d{4}-\d\d-\d\d$/.test(iso || "") ? iso.slice(8, 10) + "." + iso.slice(5, 7) + "." + iso.slice(0, 4) : (iso || "");
+function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
+function toast(t) { const m = $("toast"); m.textContent = t; m.style.display = "block"; clearTimeout(toast.t); toast.t = setTimeout(() => m.style.display = "none", 3000); }
+
+let eintraege = [], filter = "alle", suche = "", letzter = "";
+const JAHR = new Date().getFullYear();
+async function aktion(was, id) {
+  const h = hass(); if (!h) return null;
+  const r = await h.callWS({ type: "call_service", domain: "script", service: "akte_aktion", service_data: { was, id: id || "" }, return_response: true });
+  let a = (r && r.response && r.response.stdout) || "";
+  if (typeof a === "string") { try { a = JSON.parse(a); } catch (e) { a = {}; } }
+  if (a && Array.isArray(a.eintraege)) eintraege = a.eintraege;
+  return a;
+}
+const offen = e => e.einreichen && e.einreichen.noetig && e.einreichen.status === "offen";
+const steuerJahr = e => e.steuer && e.steuer.relevant ? Number(e.steuer.jahr || (e.datum || "").slice(0, 4)) : null;
+function baldFristen(e) {
+  const heute = new Date().toISOString().slice(0, 10), grenze = new Date(Date.now() + 60 * 864e5).toISOString().slice(0, 10);
+  return (e.fristen || []).filter(f => f.datum >= heute && f.datum <= grenze);
+}
+const FILTER = [
+  ["alle", "Alle", () => true],
+  ["einreichen", "Noch einreichen", offen],
+  ["steuer" + JAHR, "Steuer " + JAHR, e => steuerJahr(e) === JAHR],
+  ["steuer" + (JAHR - 1), "Steuer " + (JAHR - 1), e => steuerJahr(e) === JAHR - 1],
+  ["fristen", "Fristen", e => baldFristen(e).length > 0],
+  ["Gesundheit", "Gesundheit", e => e.kategorie === "Gesundheit"],
+  ["Versicherung", "Versicherung", e => e.kategorie === "Versicherung" || /Versicherung/.test(e.typ || "")],
+  ["Haus", "Haus", e => e.kategorie === "Haus"],
+  ["Vermietung", "Vermietung", e => e.kategorie === "Vermietung"],
+];
+function passt(e) {
+  const f = FILTER.find(x => x[0] === filter); if (f && !f[2](e)) return false;
+  if (!suche) return true;
+  const text = [e.titel, e.typ, e.kategorie, e.absender, e.person, e.datum, datum(e.datum), e.kurz, e.notiz, (e.schlagworte || []).join(" ")].join(" ").toLowerCase();
+  return suche.toLowerCase().split(/\s+/).every(w => text.includes(w));
+}
+function zeichnen() {
+  const sicht = eintraege.filter(passt);
+  const summe = sicht.reduce((s, e) => s + (Number(e.betrag) || 0), 0);
+  const fokus = document.activeElement && document.activeElement.id === "suche";
+  $("inhalt").innerHTML = `
+    <div class="kopf"><h1>📁 Akte</h1><span class="klein">Belege als Foto oder PDF an den Telegram-Bot schicken (Text „Beleg“ dazu). Fragen per Telegram: „Akte …“, „Steuer ${JAHR}“, „Einreichen“, „Fristen“.</span>
+      <input class="suche" id="suche" type="search" placeholder="Suchen: Zahnarzt, Allianz, 2026 …" value="${esc(suche)}"></div>
+    <div class="filter">${FILTER.map(([w, t, fn]) => `<button data-a="filter" data-w="${esc(w)}" class="${w === filter ? "an" : ""}">${esc(t)}${w === "alle" ? "" : " (" + eintraege.filter(fn).length + ")"}</button>`).join("")}</div>
+    ${sicht.length ? `<p class="summe">${sicht.length} Dokument${sicht.length === 1 ? "" : "e"}${summe ? " · zusammen " + euro(summe) : ""}</p>
+    <div class="liste">${sicht.map(e => `
+      <div class="eintrag">
+        <div class="zeile"><b>${esc(e.titel || e.typ)}</b><span class="betrag">${euro(e.betrag)}</span></div>
+        <div class="klein">${[esc(e.absender), datum(e.datum), esc(e.person)].filter(Boolean).join(" · ")}</div>
+        <div class="marken">
+          <span class="marke">${esc(e.typ)}</span>
+          ${steuerJahr(e) ? `<span class="marke steuer">Steuer ${steuerJahr(e)}: ${esc(e.steuer.art)}</span>` : ""}
+          ${e.einreichen && e.einreichen.noetig ? (offen(e) ? `<span class="marke offen">noch einreichen</span>` : `<span class="marke ok">eingereicht ${datum(e.einreichen.am)}</span>`) : ""}
+          ${baldFristen(e).map(f => `<span class="marke frist">⏰ ${datum(f.datum)}: ${esc(f.was)}</span>`).join("")}
+        </div>
+        ${e.kurz ? `<div class="kurz">${esc(e.kurz)}</div>` : ""}
+        <div class="aktionen">
+          <button class="knopf blau" data-a="ansehen" data-w="${esc(e.id)}">PDF ansehen</button>
+          ${e.einreichen && e.einreichen.noetig ? (offen(e) ? `<button class="knopf gruen" data-a="eingereicht" data-w="${esc(e.id)}">Eingereicht</button>`
+            : `<button class="knopf" data-a="offen" data-w="${esc(e.id)}">Wieder offen</button>`) : ""}
+          <button class="knopf rot" data-a="loeschen" data-w="${esc(e.id)}">Löschen</button>
+        </div></div>`).join("")}</div>`
+      : `<div class="leer">${eintraege.length ? "Nichts gefunden." : "Die Akte ist noch leer.<br>Einfach ein Foto oder PDF an den Telegram-Bot schicken."}</div>`}`;
+  if (fokus) { const s = $("suche"); s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
+}
+document.addEventListener("input", ev => { if (ev.target.id === "suche") { suche = ev.target.value.trim(); clearTimeout(zeichnen.t); zeichnen.t = setTimeout(zeichnen, 250); } });
+// Kiosk-Touchscreen: Geister-Klicks und Wischen nicht als Tippen werten
+let letzterTipp = 0, tippStart = null;
+document.addEventListener("pointerdown", ev => { tippStart = { x: ev.clientX, y: ev.clientY }; beruehrt(); }, true);
+document.addEventListener("click", async ev => {
+  const el = ev.target.closest("[data-a]"); if (!el) return;
+  if (tippStart && Math.hypot(ev.clientX - tippStart.x, ev.clientY - tippStart.y) > 12) return;
+  if (Date.now() - letzterTipp < 450) return; letzterTipp = Date.now();
+  const w = el.dataset.w;
+  switch (el.dataset.a) {
+    case "aufdecken": $("decke").classList.remove("an"); break;
+    case "filter": filter = w; zeichnen(); break;
+    case "zu": $("pdf").classList.remove("offen"); $("pdf-rahmen").src = "about:blank"; break;
+    case "ansehen": {
+      toast("PDF wird geöffnet …");
+      const a = await aktion("ansehen", w);
+      if (!a || !a.datei) { toast("PDF nicht gefunden"); break; }
+      try {
+        const r = await hass().callWS({ type: "media_source/resolve_media", media_content_id: "media-source://media_source/local/" + a.datei, expires: 600 });
+        const e = eintraege.find(x => x.id === w) || {};
+        $("pdf-titel").textContent = [e.titel, e.absender, datum(e.datum)].filter(Boolean).join(" · ");
+        $("pdf-rahmen").src = r.url; $("pdf").classList.add("offen");
+      } catch (e) { toast("PDF konnte nicht geöffnet werden"); }
+      break;
+    }
+    case "eingereicht": await aktion("eingereicht", w); toast("Als eingereicht markiert"); zeichnen(); break;
+    case "offen": await aktion("offen", w); zeichnen(); break;
+    case "loeschen":
+      if (el.dataset.scharf !== "1") { el.dataset.scharf = "1"; el.classList.add("scharf"); el.textContent = "Wirklich löschen?"; return; }
+      await aktion("loeschen", w); toast("Gelöscht"); zeichnen(); break;
+  }
+});
+// Datenschutz: nach 3 Minuten ohne Berührung verdecken (Monitor im Flur)
+let zuletzt = Date.now();
+function beruehrt() { zuletzt = Date.now(); }
+setInterval(() => {
+  if (Date.now() - zuletzt > 180000 && !$("decke").classList.contains("an")) {
+    $("decke").classList.add("an"); $("pdf").classList.remove("offen"); $("pdf-rahmen").src = "about:blank";
+    suche = ""; filter = "alle"; zeichnen();
+  }
+}, 10000);
+async function neuLaden() {
+  if (document.activeElement && document.activeElement.id === "suche") return;
+  const a = await aktion("liste");
+  const sig = JSON.stringify(eintraege);
+  if (a && sig !== letzter) { letzter = sig; zeichnen(); }
+}
+// Hell/Dunkel wie das Home-Assistant-Design (apple-glas.css)
+function design() { const h = hass(); document.documentElement.classList.toggle("dunkel", !!(h && h.themes && h.themes.darkMode)); }
+design(); setInterval(design, 5000);
+function start() { if (!hass()) { setTimeout(start, 400); return; } neuLaden(); setInterval(neuLaden, 60000); }
+start();
+setInterval(async () => {
+  try {
+    const r = await fetch(location.pathname + "?t=" + Date.now(), { cache: "no-store" });
+    const m = (await r.text()).match(/SEITEN_VERSION = (\d+)/);
+    if (m && Number(m[1]) > SEITEN_VERSION) location.replace(location.pathname + "?v=" + m[1] + "&t=" + Date.now());
+  } catch (e) { /* später nochmal */ }
+}, 300000);
+</script>
+</body>
+</html>

@@ -89,3 +89,43 @@ automation:
             data:
               aktion: erinnerung
               wert: "{{ {'chats': chats, 'art': 'einreichen'} | to_json | base64_encode }}"
+
+  # Einmalig nach dem Update: allen Bot-Nutzern per Telegram erklären, was neu ist (danach nie wieder, Merker in /config)
+  - id: akte_ankuendigung
+    alias: "Akte: Neuigkeit einmalig per Telegram erklären"
+    mode: single
+    triggers:
+      - trigger: homeassistant
+        event: start
+    actions:
+      - delay: 00:02:00
+      - action: shell_command.akte
+        continue_on_error: true
+        data:
+          aktion: ankuendigen
+          wert: >-
+            {{ {'chats': (states('input_text.telegram_empfaenger') | string).split(';') | map('trim')
+                          | select('match', '^-?\d+$') | list} | to_json | base64_encode }}
+
+script:
+  akte_aktion:
+    alias: "Akte: Liste / ansehen / eingereicht / löschen (Monitor-Seite)"
+    mode: queued
+    fields:
+      was:
+        description: liste, ansehen, eingereicht, offen oder loeschen
+      id:
+        description: Kennung des Eintrags
+    sequence:
+      - action: shell_command.akte
+        data:
+          aktion: seite
+          wert: >-
+            {{ {'was': was if was in ['liste', 'ansehen', 'eingereicht', 'offen', 'loeschen'] else 'liste',
+                'id': id | default('', true)} | to_json | base64_encode }}
+        response_variable: ergebnis
+      - variables:
+          antwort:
+            stdout: "{{ ergebnis.stdout | default('') if ergebnis is defined and ergebnis is mapping else '' }}"
+      - stop: fertig
+        response_variable: antwort

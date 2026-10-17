@@ -516,6 +516,64 @@ def erinnerung(auftrag):
         json_schreiben(VERZEICHNIS, liste)
 
 
+ANKUENDIGUNG = """Hallo! 👋 Neu im Zuhause-Bot: die digitale Akte 📁
+
+Alle Belege, Rechnungen, Arztrechnungen, Versicherungs- und Behördenbriefe einfach als Foto oder PDF hier an den Bot schicken. Er macht aus Fotos ein PDF, liest den Beleg und sortiert ihn ein: Art, von wem, Datum, Betrag, für wen, Steuer, Fristen.
+
+📸 Ablegen: Foto oder PDF schicken – am sichersten mit dem Text „Beleg“ dazu. Mehrere Seiten: die nächste Seite mit dem Text „+“ hinterherschicken.
+🔎 Suchen und fragen: „Akte Was zahlt die Zahnzusatzversicherung bei Implantaten?“ oder „Akte schick mir die Rechnung vom Elektriker“.
+🏥 Arztrechnungen: werden als „noch einreichen“ gemerkt. „Einreichen“ schickt dir alle offenen als Dateien (zum Hochladen in die Versicherungs-App), danach „Eingereicht“ schreiben.
+🧾 Steuer: „Steuer 2026“ – Übersicht mit Summen und alle Belege als ZIP.
+⏰ Fristen: „Fristen“ zeigt, was ansteht. Erinnerungen kommen automatisch eine Woche vorher, offene Arztrechnungen am Monatsanfang.
+🖥 Am Monitor im Flur gibt es den Reiter „Akte“ mit Liste, Filtern und Ansicht der PDFs.
+
+Alles bleibt bei uns zu Hause auf dem Home-Assistant-Rechner. „Akte Hilfe“ zeigt diese Übersicht jederzeit wieder."""
+
+
+# ---------- Monitor-Seite (www/akte.html, schnell und ohne Claude) ----------
+
+ANSICHT = "/media/akte/_ansicht/"   # kurzzeitige Kopie zum Anzeigen (nur mit Home-Assistant-Anmeldung abrufbar)
+
+
+def seite(auftrag):
+    was = auftrag.get("was")
+    liste = verzeichnis()
+    eintrag = next((e for e in liste if e.get("id") == auftrag.get("id")), None)
+    if was == "ansehen" and eintrag:
+        import shutil
+        os.makedirs(ANSICHT, exist_ok=True)
+        for alt in os.listdir(ANSICHT):
+            if time.time() - os.path.getmtime(os.path.join(ANSICHT, alt)) > 3600:
+                _weg(os.path.join(ANSICHT, alt))
+        name = uuid.uuid4().hex + ".pdf"
+        shutil.copyfile(os.path.join(ABLAGE, eintrag.get("datei", "")), os.path.join(ANSICHT, name))
+        return {"ok": True, "datei": "akte/_ansicht/" + name}
+    if was in ("eingereicht", "offen") and eintrag and eintrag.get("einreichen", {}).get("noetig"):
+        eintrag["einreichen"].update({"status": was, "am": date.today().isoformat() if was == "eingereicht" else ""})
+        json_schreiben(VERZEICHNIS, liste)
+    elif was == "loeschen" and eintrag:
+        _weg(os.path.join(ABLAGE, eintrag.get("datei", "")))
+        for s in eintrag.get("seiten") or []:
+            _weg(os.path.join(SEITEN, s))
+        liste.remove(eintrag)
+        json_schreiben(VERZEICHNIS, liste)
+    felder = ("id", "titel", "typ", "kategorie", "absender", "datum", "betrag", "person", "steuer", "einreichen", "fristen",
+              "schlagworte", "von", "eingang", "notiz")
+    aus = [dict({k: e.get(k) for k in felder}, kurz=(e.get("inhalt") or "")[:500]) for e in liste]
+    aus.sort(key=lambda e: (e.get("datum") or "", e.get("eingang") or ""), reverse=True)
+    return {"ok": True, "eintraege": aus}
+
+
+def ankuendigen(auftrag):
+    """Einmalig nach dem Update: allen Bot-Nutzern erklären, was neu ist (Merker verhindert Wiederholung)."""
+    marke = "/config/.akte_ankuendigung_1"
+    if os.path.exists(marke):
+        return
+    open(marke, "w").close()
+    for c in [c for c in auftrag.get("chats") or [] if str(c).lstrip("-").isdigit()]:
+        senden(c, ANKUENDIGUNG)
+
+
 # ---------- Start (lange Arbeit im Hintergrund) ----------
 
 def im_hintergrund(funktion, auftrag):
@@ -565,7 +623,10 @@ def main():
     for d in (ABLAGE, EINGANG, SEITEN):
         os.makedirs(d, exist_ok=True)
     umziehen()
-    funktion = {"neu": ablegen, "befehl": befehl, "erinnerung": erinnerung}.get(aktion)
+    if aktion == "seite":
+        print(json.dumps(seite(auftrag), ensure_ascii=False))
+        return
+    funktion = {"neu": ablegen, "befehl": befehl, "erinnerung": erinnerung, "ankuendigen": ankuendigen}.get(aktion)
     if not funktion:
         print(json.dumps({"ok": False, "fehler": "unbekannte Aktion"}))
         return
