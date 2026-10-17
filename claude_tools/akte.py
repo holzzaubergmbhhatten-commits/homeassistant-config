@@ -857,7 +857,7 @@ def seite(auftrag):
         ab = max(0, int(auftrag.get("ab") or 0))
         with open(pfad, "rb") as f:
             f.seek(ab)
-            roh = f.read(300_000)
+            roh = f.read(150_000)   # Base64 ca. 200 000 Zeichen
         gesamt = os.path.getsize(pfad)
         return {"ok": True, "daten": base64.b64encode(roh).decode("ascii"), "gesamt": gesamt, "ende": ab + len(roh) >= gesamt}
     if was == "ansehen" and eintrag:

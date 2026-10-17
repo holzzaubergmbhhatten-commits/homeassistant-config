@@ -173,11 +173,9 @@ script:
             {{ {'was': was if was in ['liste', 'lesen', 'eingereicht', 'offen', 'loeschen', 'notiz', 'bezahlt', 'unbezahlt', 'einstellungen', 'einstellungen_speichern', 'alle_neu', 'antwort', 'ordner_setzen', 'ordner_umbenennen'] else 'liste',
                 'id': id | default('', true), 'ab': ab | default(0) | int(0), 'text': text | default('', true), 'ordner': ordner | default('', true), 'chat': (states('input_text.telegram_empfaenger') | string).split(';') | first | trim} | to_json | base64_encode }}
         response_variable: ergebnis
-      - variables:
-          antwort:
-            stdout: "{{ ergebnis.stdout | default('') if ergebnis is defined and ergebnis is mapping else '' }}"
+      # Antwort direkt zurückgeben (über eine Vorlage wären höchstens 256 000 Zeichen möglich)
       - stop: fertig
-        response_variable: antwort
+        response_variable: ergebnis
 
   akte_hochladen:
     alias: "Akte: Datei von der Akte-Seite hochladen (in Stücken)"
@@ -193,7 +191,7 @@ script:
       letzt:
         description: true beim letzten Stück
       daten:
-        description: Base64-Stück (höchstens 400 000 Zeichen)
+        description: Base64-Stück (höchstens 200 000 Zeichen – Vorlagen in Home Assistant dürfen nicht länger als 256 000 Zeichen werden)
     sequence:
       - action: shell_command.akte_stueck
         data:
@@ -204,11 +202,8 @@ script:
           daten: >-
             {% set s = daten | regex_replace('[^A-Za-z0-9+/=]', '') %}{% for i in range(0, s | length, 100000) %}{{ s[i:i + 100000] }} {% endfor %}
         response_variable: ergebnis
-      - variables:
-          antwort:
-            stdout: "{{ ergebnis.stdout | default('') if ergebnis is defined and ergebnis is mapping else '' }}"
       # fertig zusammengesetzt → gleich abholen (antwortet per Telegram)
-      - if: "{{ letzt | default(false) and '\"fertig\": true' in antwort.stdout }}"
+      - if: "{{ letzt | default(false) and '\"fertig\": true' in (ergebnis.stdout | default('')) }}"
         then:
           - action: shell_command.akte
             continue_on_error: true
@@ -217,5 +212,6 @@ script:
               wert: >-
                 {{ {'chats': (states('input_text.telegram_empfaenger') | string).split(';') | map('trim')
                               | select('match', '^-?\d+$') | list} | to_json | base64_encode }}
+      # Antwort direkt zurückgeben (über eine Vorlage wären höchstens 256 000 Zeichen möglich)
       - stop: fertig
-        response_variable: antwort
+        response_variable: ergebnis
