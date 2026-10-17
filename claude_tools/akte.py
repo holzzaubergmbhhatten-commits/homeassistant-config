@@ -72,6 +72,9 @@ JSON-Objekt:
  "ordner": "genau einer der Ordner der Familie (siehe unten) – wofür/für wen ist das Dokument",
  "fortsetzung": true, wenn dieses Bild nur eine weitere Seite des unten genannten vorherigen Dokuments ist (gleicher Absender,
                 "Seite 2 von …", kein eigener Briefkopf/Betreff), sonst false,
+ "frage": "nur wenn du dir bei Ordner, Person, Zweck oder Steuer NICHT sicher bist: eine kurze Rückfrage an die Familie
+           (z. B. „Für welche Wohnung war diese Handwerkerrechnung?“), sonst leer",
+ "vorschlaege": ["2–4 kurze Antwortmöglichkeiten zur Frage, möglichst Ordnernamen"] oder [],
  "einreichen": true, wenn es eine Rechnung über Behandlung/Arznei/Hilfsmittel/Zahnarzt/Heilpraktiker ist, die man bei einer
                privaten Krankenversicherung, Beihilfe oder Zusatzversicherung zur Erstattung einreicht, sonst false,
  "fristen": [{{"datum": "JJJJ-MM-TT", "was": "z. B. Zahlung fällig / Einspruchsfrist / Kündigungsfrist / Garantie endet"}}],
@@ -84,7 +87,8 @@ Vermietung: Betrifft eine Rechnung ein vermietetes Objekt (Mietobjekt, Mieter/in
 kategorie "Vermietung" und steuer.art "Vermietung" mit dem vollen Betrag (Werbungskosten). "Handwerkerleistung" nur für den
 selbst bewohnten Haushalt, dann nur Arbeits-, Fahrt- und Maschinenkosten inkl. MwSt. als steuer.betrag.
 Ein Aufmaß, Angebot oder Lieferschein ist keine Rechnung: typ "Sonstiges" bzw. passend, steuer.relevant false.
-Steht beim Text dazu eine Notiz der Familie (z. B. "ist schon bezahlt", "gehört zur Ferienwohnung"), gilt sie vorrangig.
+Frage lieber nach, als falsch einzusortieren – aber nur, wenn es wirklich unklar ist. Steht eine Antwort der Familie in der
+Notiz, nicht noch einmal fragen. Steht beim Text dazu eine Notiz der Familie (z. B. "ist schon bezahlt", "gehört zur Ferienwohnung"), gilt sie vorrangig.
 Fristen nur, wenn sie wirklich im Dokument stehen oder sich klar ergeben (Einspruch: 1 Monat nach Bescheid-Datum).
 Wenn etwas unleserlich ist, lieber leer lassen als raten."""
 
@@ -440,6 +444,10 @@ def ablegen(auftrag):
         zeilen.append(hinweis_mahnung)
     if neu_eintrag.get("notiz"):
         zeilen.append(f"📝 Notiz: {neu_eintrag['notiz']}")
+    if neu_eintrag.get("frage"):
+        zeilen.append(f"❓ Rückfrage: {neu_eintrag['frage']}"
+                      + (f" ({' / '.join(neu_eintrag['vorschlaege'])})" if neu_eintrag.get("vorschlaege") else "")
+                      + "\nAntwort im Reiter Akte (gelbe Blase) oder hier: „Akte …“ mit der Antwort.")
     senden(chat, "\n".join(zeilen))
 
 
@@ -463,6 +471,8 @@ def felder_setzen(eintrag, e, jahr=None):
         "fristen": [{"datum": f.get("datum"), "was": f.get("was", ""), "erinnert": False}
                     for f in (e.get("fristen") or []) if re.match(r"^\d{4}-\d\d-\d\d$", str(f.get("datum", "")))],
         "schlagworte": e.get("schlagworte") or [], "inhalt": (e.get("inhalt") or "")[:6000],
+        "frage": "" if eintrag.get("beantwortet") else str(e.get("frage") or "")[:300],
+        "vorschlaege": [] if eintrag.get("beantwortet") else [str(v)[:60] for v in (e.get("vorschlaege") or [])[:4]],
     })
 
 
@@ -513,6 +523,8 @@ def aenderungen_anwenden(liste, aenderungen, nummern=None):
             continue
         if a.get("notiz"):
             e["notiz"] = (((e.get("notiz") or "") + " · ") if e.get("notiz") else "") + str(a["notiz"])[:300]
+            if e.get("frage"):
+                e.update({"frage": "", "vorschlaege": [], "beantwortet": True})
         if a.get("zahlung") in ("bezahlt", "offen"):
             e["zahlung"], e["zahlung_fest"] = a["zahlung"], True
         if a.get("kategorie"):
@@ -862,7 +874,21 @@ def seite(auftrag):
     if was == "alle_neu":
         im_hintergrund(alle_neu_lesen, {"chat": auftrag.get("chat")})
         return {"ok": True}
-    if was == "notiz" and eintrag:
+    if was == "antwort" and eintrag:
+        antwort = (auftrag.get("text") or "").strip()[:300]
+        frage = eintrag.get("frage") or ""
+        if auftrag.get("ordner"):
+            eintrag["ordner"], eintrag["ordner_fest"] = ordner_name(auftrag["ordner"]), True
+            datei_einordnen(eintrag)
+        teile = [t for t in [antwort, ("Ordner: " + eintrag["ordner"]) if auftrag.get("ordner") else ""] if t]
+        if teile:
+            eintrag["notiz"] = ((eintrag.get("notiz") or "") + " · " if eintrag.get("notiz") else "") + \
+                               (f"Auf „{frage}“: " if frage else "") + ", ".join(teile)
+        eintrag.update({"frage": "", "vorschlaege": [], "beantwortet": True})
+        json_schreiben(VERZEICHNIS, liste)
+        logbuch(f"Rückfrage beantwortet: {eintrag.get('titel')}")
+        im_hintergrund(neu_lesen, {"id": eintrag["id"]})
+    elif was == "notiz" and eintrag:
         eintrag["notiz"] = (auftrag.get("text") or "").strip()[:500]
         json_schreiben(VERZEICHNIS, liste)
         logbuch(f"Notiz: {eintrag.get('titel')}")
@@ -881,7 +907,7 @@ def seite(auftrag):
         liste.remove(eintrag)
         json_schreiben(VERZEICHNIS, liste)
     felder = ("id", "titel", "typ", "kategorie", "absender", "datum", "betrag", "person", "steuer", "einreichen", "fristen",
-              "schlagworte", "von", "eingang", "notiz", "zahlung", "mahnung", "rechnungsnummer", "ordner")
+              "schlagworte", "von", "eingang", "notiz", "zahlung", "mahnung", "rechnungsnummer", "ordner", "frage", "vorschlaege")
     aus = [dict({k: e.get(k) for k in felder}, kurz=(e.get("inhalt") or "")[:500]) for e in liste]
     aus.sort(key=lambda e: (e.get("datum") or "", e.get("eingang") or ""), reverse=True)
     wartend = 0

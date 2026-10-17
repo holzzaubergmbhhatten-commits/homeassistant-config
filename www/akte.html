@@ -53,6 +53,14 @@
   .einst-inhalt { background: var(--karte); color: var(--text); margin: 0 10px 10px; border-radius: 12px; padding: 16px; overflow: auto; flex: 1; display: flex; flex-direction: column; gap: 10px; }
   .gross-feld { min-height: 170px; font-size: 15px; line-height: 1.5; }
   .marke.ordner { background: #5856D61F; color: #5856D6; }
+  .frage { background: #FFF4D6; border: 1px solid #F5C451; border-radius: 12px; padding: 9px 11px; display: grid; gap: 7px; font-size: 14px; }
+  .frage b { font-size: 14px; }
+  .frage .wahl { display: flex; gap: 6px; flex-wrap: wrap; }
+  .frage .wahl button { background: #fff; border: 1px solid #F5C451; border-radius: 10px; padding: 7px 11px; font-weight: 600; font-size: 13px; }
+  .frage input { border: 1px solid #E5C26B; border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 14px; min-width: 0; flex: 1; }
+  .frage .zeile2 { display: flex; gap: 6px; }
+  .eintrag.fragt { box-shadow: 0 0 0 2px #F5C451; }
+  :root.dunkel .frage { background: #3A3018; border-color: #8A6D1F; } :root.dunkel .frage .wahl button, :root.dunkel .frage input { background: #2C2C2E; color: #fff; }
   .knopf.gruen { background: var(--gruen); color: #fff; }
   .knopf.rot { color: var(--rot); }
   .knopf.scharf { background: var(--rot); color: #fff; }
@@ -88,7 +96,7 @@
 <div class="toast" id="toast"></div>
 <input type="file" id="datei" multiple accept=".pdf,application/pdf,image/jpeg,image/png" hidden>
 <script>
-const SEITEN_VERSION = 6;
+const SEITEN_VERSION = 7;
 const $ = id => document.getElementById(id);
 const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const euro = x => x == null || x === "" ? "" : Number(x).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
@@ -96,7 +104,7 @@ const datum = iso => /^\d{4}-\d\d-\d\d$/.test(iso || "") ? iso.slice(8, 10) + ".
 function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
 function toast(t) { const m = $("toast"); m.textContent = t; m.style.display = "block"; clearTimeout(toast.t); toast.t = setTimeout(() => m.style.display = "none", 3000); }
 
-let eintraege = [], filter = "alle", suche = "", letzter = "", wartend = 0, log = [], notizOffen = "";
+let ordnerListe = [], eintraege = [], filter = "alle", suche = "", letzter = "", wartend = 0, log = [], notizOffen = "";
 const JAHR = new Date().getFullYear();
 async function skript(daten) {
   const r = await hass().callWS({ type: "call_service", domain: "script", service: "akte_aktion", service_data: daten, return_response: true });
@@ -119,6 +127,7 @@ function baldFristen(e) {
 }
 const FILTER = [
   ["alle", "Alle", () => true],
+  ["fragen", "❓ Rückfragen", e => !!e.frage],
   ["einreichen", "Noch einreichen", offen],
   ["steuer" + JAHR, "Steuer " + JAHR, e => steuerJahr(e) === JAHR],
   ["steuer" + (JAHR - 1), "Steuer " + (JAHR - 1), e => steuerJahr(e) === JAHR - 1],
@@ -153,7 +162,7 @@ function zeichnen() {
       ${log.slice(0, 3).map(l => `<span class="${l.art === "fehler" ? "fehler" : ""}">${esc(l.zeit)}: ${esc(l.text)}</span>`).join(" · ")}</div>` : ""}
     ${sicht.length ? `<p class="summe">${sicht.length} Dokument${sicht.length === 1 ? "" : "e"}${summe ? " · zusammen " + euro(summe) : ""}</p>
     <div class="liste">${sicht.map(e => `
-      <div class="eintrag">
+      <div class="eintrag ${e.frage ? "fragt" : ""}">
         <div class="zeile"><b>${esc(e.titel || e.typ)}</b><span class="betrag">${euro(e.betrag)}</span></div>
         <div class="klein">${[esc(e.absender), datum(e.datum), esc(e.person)].filter(Boolean).join(" · ")}</div>
         <div class="marken">
@@ -165,6 +174,9 @@ function zeichnen() {
           ${e.zahlung === "offen" ? `<span class="marke zahlen">noch zu zahlen</span>` : e.zahlung === "bezahlt" ? `<span class="marke steuer">bezahlt</span>` : ""}
           ${baldFristen(e).map(f => `<span class="marke frist">⏰ ${datum(f.datum)}: ${esc(f.was)}</span>`).join("")}
         </div>
+        ${e.frage ? `<div class="frage"><b>❓ ${esc(e.frage)}</b>
+          ${(e.vorschlaege || []).length ? `<div class="wahl">${e.vorschlaege.map(v => `<button data-a="antwort" data-w="${esc(e.id)}" data-v="${esc(v)}">${esc(v)}</button>`).join("")}</div>` : ""}
+          <div class="zeile2"><input id="antwort-${esc(e.id)}" placeholder="oder eigene Antwort …"><button class="knopf gruen" data-a="antwort" data-w="${esc(e.id)}">OK</button></div></div>` : ""}
         ${notizOffen === e.id ? `<textarea class="notiz-feld" id="notiz-${esc(e.id)}" placeholder="z. B. ist schon bezahlt am 05.10. · gehört zur Ferienwohnung · Mahnung erledigt">${esc(e.notiz || "")}</textarea>`
           : e.notiz ? `<div class="notiz">📝 ${esc(e.notiz)}</div>` : ""}
         ${e.kurz ? `<div class="kurz">${esc(e.kurz)}</div>` : ""}
@@ -245,6 +257,15 @@ document.addEventListener("click", async ev => {
       toast(text ? "Notiz gespeichert – ich ordne den Beleg damit neu ein" : "Notiz gelöscht"); zeichnen();
       setTimeout(neuLaden, 40000); break;
     }
+    case "antwort": {
+      const v = el.dataset.v || "", feld = $("antwort-" + w), text = v ? "" : (feld ? feld.value.trim() : "");
+      if (!v && !text) { toast("Bitte eine Antwort antippen oder eintippen"); break; }
+      if (!ordnerListe.length) { const r = await skript({ was: "einstellungen" }); ordnerListe = ((r && r.einstellungen && r.einstellungen.ordner) || []).map(o => o.name); }
+      const istOrdner = v && ordnerListe.some(o => o.toLowerCase() === v.toLowerCase());
+      const a = await skript({ was: "antwort", id: w, text: istOrdner ? "" : (v || text), ordner: istOrdner ? v : "" });
+      if (a && Array.isArray(a.eintraege)) eintraege = a.eintraege;
+      toast("Danke – ich ordne den Beleg damit neu ein"); zeichnen(); setTimeout(neuLaden, 40000); break;
+    }
     case "bezahlt": await aktion("bezahlt", w); toast("Als bezahlt markiert"); zeichnen(); break;
     case "unbezahlt": await aktion("unbezahlt", w); zeichnen(); break;
     case "offen": await aktion("offen", w); zeichnen(); break;
@@ -314,7 +335,7 @@ setInterval(() => {
   }
 }, 10000);
 async function neuLaden() {
-  if (notizOffen || (document.activeElement && document.activeElement.id === "suche")) return;
+  if (notizOffen || (document.activeElement && /^(suche|antwort-)/.test(document.activeElement.id || ""))) return;
   const a = await aktion("liste");
   clearTimeout(neuLaden.t); if (wartend) neuLaden.t = setTimeout(neuLaden, 15000);   // während gelesen wird öfter schauen
   const sig = JSON.stringify([eintraege, wartend, log]);
