@@ -64,6 +64,10 @@ JSON-Objekt:
             Vertrags-/Versicherungsnummer, Tarif, Leistungen mit Prozent/Höchstbeträgen, Selbstbehalt, Beitrag, Laufzeit,
             Kündigung – höchstens 600 Wörter",
  "antwort": "1–2 kurze Sätze für den Chat, was abgelegt wurde (ohne Nummern und Codes)"}}
+Vermietung: Betrifft eine Rechnung ein vermietetes Objekt (Mietobjekt, Mieter/in genannt, Ferienwohnung, Stellplätze), dann
+kategorie "Vermietung" und steuer.art "Vermietung" mit dem vollen Betrag (Werbungskosten). "Handwerkerleistung" nur für den
+selbst bewohnten Haushalt, dann nur Arbeits-, Fahrt- und Maschinenkosten inkl. MwSt. als steuer.betrag.
+Ein Aufmaß, Angebot oder Lieferschein ist keine Rechnung: typ "Sonstiges" bzw. passend, steuer.relevant false.
 Fristen nur, wenn sie wirklich im Dokument stehen oder sich klar ergeben (Einspruch: 1 Monat nach Bescheid-Datum).
 Wenn etwas unleserlich ist, lieber leer lassen als raten."""
 
@@ -74,6 +78,7 @@ erfinden. Antworte NUR mit JSON: {"antwort": "Text für Telegram", "senden": [Nu
 werden sollen – nur wenn danach gefragt wird ("schick mir …") oder es klar hilft, höchstens 5]}"""
 
 HILFE = """📁 Digitale Akte – so geht's
+• Ohne Telegram: in Home Assistant unter Medien → Lokale Medien → Ordner „Akte-Eingang“ Dateien hochladen.
 • Beleg ablegen: Foto oder PDF an den Bot schicken. Rechnungen, Arztrechnungen, Versicherungsbriefe usw. erkennt er selbst;
   sicherheitshalber „Beleg“ als Text zum Foto schreiben.
 • Mehrseitig: weitere Seiten mit dem Text „+“ hinterherschicken (innerhalb einer Stunde).
@@ -596,6 +601,46 @@ def im_hintergrund(funktion, auftrag):
     os._exit(0)
 
 
+ORDNER = "/media/Akte-Eingang/"   # Ablage ohne Telegram: Dateien über Home Assistant → Medien hochladen
+
+
+def ordner_einlesen(auftrag):
+    """Alles aus dem Ordner Akte-Eingang nacheinander ablegen (Antwort an den ersten Telegram-Empfänger)."""
+    chats = [c for c in auftrag.get("chats") or [] if str(c).lstrip("-").isdigit()]
+    chat = chats[0] if chats else None
+    for pfad in auftrag.get("dateien") or []:
+        try:
+            ablegen({"datei": pfad, "chat": chat, "von": "Ordner Akte-Eingang", "text": "Beleg"})
+        except Exception as fehler:  # noqa: BLE001
+            if chat:
+                senden(chat, f"⚠️ Akte: {os.path.basename(pfad)} ging nicht ({str(fehler)[:150]}).")
+
+
+def ordner_pruefen(auftrag):
+    """Schnell: liegen neue Dateien im Ordner? Dann in den Eingang holen und im Hintergrund ablegen."""
+    os.makedirs(ORDNER, exist_ok=True)
+    dateien = []
+    for n in sorted(os.listdir(ORDNER)):
+        pfad = os.path.join(ORDNER, n)
+        endung = n.lower().rsplit(".", 1)[-1] if "." in n else ""
+        if not os.path.isfile(pfad) or time.time() - os.path.getmtime(pfad) < 20:
+            continue   # noch beim Hochladen
+        if endung not in ("pdf", "jpg", "jpeg", "png"):
+            continue
+        ziel = os.path.join(EINGANG, f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}.{'pdf' if endung == 'pdf' else 'jpg'}")
+        if endung == "png":
+            from PIL import Image
+            Image.open(pfad).convert("RGB").save(ziel, "JPEG", quality=90)
+            _weg(pfad)
+        else:
+            os.replace(pfad, ziel)
+        dateien.append(ziel)
+    if dateien:
+        auftrag["dateien"] = dateien
+        im_hintergrund(ordner_einlesen, auftrag)
+    return len(dateien)
+
+
 def umziehen():
     """Einmalig: Belege aus der früheren Ablage /media/akte/ in den Konfigurationsordner holen."""
     import shutil
@@ -623,6 +668,9 @@ def main():
     for d in (ABLAGE, EINGANG, SEITEN):
         os.makedirs(d, exist_ok=True)
     umziehen()
+    if aktion == "ordner":
+        print(json.dumps({"ok": True, "neu": ordner_pruefen(auftrag)}))
+        return
     if aktion == "seite":
         print(json.dumps(seite(auftrag), ensure_ascii=False))
         return
