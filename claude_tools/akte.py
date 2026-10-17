@@ -38,6 +38,13 @@ ALT = "/media/akte/"                   # frühere Ablage, wird einmalig umgezoge
 VERZEICHNIS = "/config/akte.json"
 ZUSTAND = "/config/akte_zustand.json"   # letzte Liste je Chat (für "eingereicht 1 3")
 LOGBUCH = "/config/akte_log.json"       # letzte Aktivitäten (für die Monitor-Seite)
+EINSTELLUNGEN = "/config/akte_einstellungen.json"   # Ordner und Hinweise der Familie (nur lokal, über die Akte-Seite)
+SPERRE = "/config/.akte.lock"           # immer nur eine Arbeit gleichzeitig (sonst überschreiben sich Einträge)
+STANDARD_ORDNER = [{"name": "Persönlich", "beschreibung": "Dokumente einzelner Personen"},
+                   {"name": "Familie", "beschreibung": "alles Gemeinsame"},
+                   {"name": "Haus", "beschreibung": "eigenes Haus und Hof"},
+                   {"name": "Vermietung", "beschreibung": "vermietete Wohnungen, Ferienwohnung, Stellplätze"},
+                   {"name": "Sonstiges", "beschreibung": "passt nirgends"}]
 
 TYPEN = ["Rechnung", "Arztrechnung", "Rezept/Verordnung", "Quittung/Kassenbon", "Versicherungspolice", "Versicherungsschreiben",
          "Erstattung/Leistungsabrechnung", "Vertrag", "Bescheid", "Lohn-/Gehaltsabrechnung", "Kontoauszug", "Garantie/Kaufbeleg",
@@ -62,6 +69,9 @@ JSON-Objekt:
             Abbuchung per Lastschrift angekündigt, Kontoauszug) oder "keine" (kein Zahlungsbeleg),
  "mahnung": true bei Mahnung/Zahlungserinnerung, sonst false,
  "bezug": "bei Mahnung, Erstattung, Gutschrift oder Storno: Nummer der ursprünglichen Rechnung, sonst leer",
+ "ordner": "genau einer der Ordner der Familie (siehe unten) – wofür/für wen ist das Dokument",
+ "fortsetzung": true, wenn dieses Bild nur eine weitere Seite des unten genannten vorherigen Dokuments ist (gleicher Absender,
+                "Seite 2 von …", kein eigener Briefkopf/Betreff), sonst false,
  "einreichen": true, wenn es eine Rechnung über Behandlung/Arznei/Hilfsmittel/Zahnarzt/Heilpraktiker ist, die man bei einer
                privaten Krankenversicherung, Beihilfe oder Zusatzversicherung zur Erstattung einreicht, sonst false,
  "fristen": [{{"datum": "JJJJ-MM-TT", "was": "z. B. Zahlung fällig / Einspruchsfrist / Kündigungsfrist / Garantie endet"}}],
@@ -92,8 +102,11 @@ DURCHSICHT = """Du gehst die digitale Akte einer Familie durch (Liste unten, je 
 - Doppelte Einträge (gleicher Absender, Datum, Betrag), Aufmaße/Angebote ohne zugehörige Rechnung.
 - Kategorie und Steuer-Zuordnung offensichtlich falsch? (Rechnungen für vermietete Objekte → Vermietung)
 - Offene Zahlungen, deren Fälligkeit vorbei ist.
+- Einzelne Seiten EINES Schreibens, die als getrennte Einträge abgelegt wurden (gleicher Absender/Datum, "Seite 2", Fortsetzung)
+  → in "zusammenfuehren" als Gruppe von Nummern in Seitenreihenfolge (nur Einträge mit "Fotos").
+- Liegt jeder Eintrag im richtigen Ordner der Familie?
 Antworte NUR mit JSON: {"aenderungen": [{"nr": Nummer, "notiz": "…", "zahlung": "bezahlt"|"offen", "kategorie": "…",
-"steuer_art": "…"} – nur sichere Korrekturen, nur geänderte Felder], "bericht": "kurzer Überblick für Telegram (max. 10 Zeilen):
+"steuer_art": "…", "ordner": "…"} – nur sichere Korrekturen, nur geänderte Felder], "zusammenfuehren": [[Nummern], …], "bericht": "kurzer Überblick für Telegram (max. 10 Zeilen):
 was auffällt und was zu tun ist; leer lassen, wenn nichts Wichtiges"}"""
 
 HILFE = """📁 Digitale Akte – so geht's
@@ -190,6 +203,55 @@ def telegram(methode, felder, datei=None):
         req = urllib.request.Request(url, data=json.dumps(felder).encode(), headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=60) as r:
         return json.load(r)
+
+
+def einstellungen():
+    d = json_laden(EINSTELLUNGEN, {})
+    ordner = [o for o in (d.get("ordner") or []) if isinstance(o, dict) and o.get("name")] or STANDARD_ORDNER
+    return {"ordner": ordner, "hinweise": d.get("hinweise") or ""}
+
+
+def familien_kontext():
+    """Ordner und Hinweise der Familie als Text für Claude (stehen nur lokal, nicht im Programm)."""
+    e = einstellungen()
+    t = "Ordner der Familie:\n" + "\n".join(f"- {o['name']}: {o.get('beschreibung', '')}" for o in e["ordner"])
+    if e["hinweise"]:
+        t += "\nHinweise der Familie:\n" + e["hinweise"]
+    return t
+
+
+def ordner_name(name):
+    namen = [o["name"] for o in einstellungen()["ordner"]]
+    if name in namen:
+        return name
+    klein = {n.lower(): n for n in namen}
+    return klein.get((name or "").lower(), "Sonstiges" if "Sonstiges" in namen else namen[-1])
+
+
+class Sperre:
+    def __init__(self, warten=None):
+        self.warten = warten
+
+    def __enter__(self):
+        import fcntl
+        self.f = open(SPERRE, "w")
+        if self.warten is None:
+            fcntl.flock(self.f, fcntl.LOCK_EX)
+            return self
+        ende = time.time() + self.warten
+        while True:
+            try:
+                fcntl.flock(self.f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return self
+            except OSError:
+                if time.time() > ende:
+                    raise RuntimeError("Akte ist gerade beschäftigt – gleich nochmal versuchen")
+                time.sleep(0.5)
+
+    def __exit__(self, *a):
+        import fcntl
+        fcntl.flock(self.f, fcntl.LOCK_UN)
+        self.f.close()
 
 
 def logbuch(text, art="ok"):
@@ -299,30 +361,51 @@ def ablegen(auftrag):
     else:
         seiten = [] if ist_pdf else [seite]
 
+    # vorheriger Foto-Beleg aus diesem Chat (letzte 15 Minuten) – vielleicht ist das hier nur seine nächste Seite
+    vorher = None
+    if eintrag is None and not ist_pdf:
+        grenze = (datetime.now() - timedelta(minutes=15)).isoformat()
+        vorher = next((x for x in reversed(liste) if str(x.get("chat")) == str(chat) and x.get("seiten")
+                       and x.get("eingang", "") >= grenze), None)
+
+    def lesen(bloecke_):
+        kontext = familien_kontext()
+        if vorher is not None and eintrag is None:
+            kontext += (f"\nVorheriges Dokument in diesem Chat (vor wenigen Minuten): {vorher.get('titel')} von "
+                        f"{vorher.get('absender')}, {vorher.get('datum')}, {len(vorher.get('seiten') or [])} Seite(n).")
+        return claude(LESEN, bloecke_ + [{"type": "text", "text": f"Heute: {date.today().isoformat()}\nVon: {auftrag.get('von', '')}\n"
+                                                                    f"Text dazu: {text or '(keiner)'}\n{kontext}"}], max_tokens=4000)
+
     # Claude liest das Dokument (alle Seiten)
     if ist_pdf:
-        bloecke = [dokument_block(quelle)]
+        e = lesen([dokument_block(quelle)])
     else:
-        bloecke = [dokument_block(s) for s in seiten]
-    bloecke.append({"type": "text", "text": f"Heute: {date.today().isoformat()}\nVon: {auftrag.get('von', '')}\n"
-                                            f"Text dazu: {text or '(keiner)'}"})
-    e = claude(LESEN, bloecke, max_tokens=4000)
+        e = lesen([dokument_block(s) for s in seiten])
+        if vorher is not None and e.get("fortsetzung"):
+            # doch nur die nächste Seite: an den vorherigen Beleg hängen und alles zusammen neu lesen
+            eintrag = vorher
+            eintrag["seiten"].append(os.path.basename(seite))
+            seiten = [os.path.join(SEITEN, s_) for s_ in eintrag["seiten"]]
+            vorher = None
+            e = lesen([dokument_block(s_) for s_ in seiten])
 
     jahr = (e.get("datum") or "")[:4] if re.match(r"^\d{4}-\d\d-\d\d$", e.get("datum") or "") else str(date.today().year)
-    os.makedirs(os.path.join(ABLAGE, jahr), exist_ok=True)
+    unterordner = os.path.join(sicherer_name(ordner_name(e.get("ordner")), 50), jahr)
+    os.makedirs(os.path.join(ABLAGE, unterordner), exist_ok=True)
     name = "_".join([e.get("datum") or date.today().isoformat(), sicherer_name(e.get("typ"), 25), sicherer_name(e.get("absender"))])
     if e.get("betrag"):
         name += "_" + sicherer_name(f"{float(e['betrag']):.2f}".replace(".", "-"), 12)
     if eintrag is not None and eintrag.get("datei"):
         _weg(os.path.join(ABLAGE, eintrag["datei"]))
-    ziel_rel = os.path.join(jahr, name + ".pdf")
+    ziel_rel = os.path.join(unterordner, name + ".pdf")
     n = 2
     while os.path.exists(os.path.join(ABLAGE, ziel_rel)) and (eintrag is None or eintrag.get("datei") != ziel_rel):
-        ziel_rel = os.path.join(jahr, f"{name}_{n}.pdf")
+        ziel_rel = os.path.join(unterordner, f"{name}_{n}.pdf")
         n += 1
     ziel = os.path.join(ABLAGE, ziel_rel)
     if ist_pdf:
-        os.replace(quelle, ziel)
+        import shutil
+        shutil.move(quelle, ziel)   # Eingang (/media) und Ablage (/config) liegen auf verschiedenen Laufwerken
     else:
         seiten_zu_pdf(seiten, ziel)
         _weg(quelle)
@@ -369,6 +452,7 @@ def felder_setzen(eintrag, e, jahr=None):
         "typ": e.get("typ") or "Sonstiges", "kategorie": e.get("kategorie") or "Sonstiges",
         "titel": e.get("titel") or e.get("typ") or "Dokument", "absender": e.get("absender") or "",
         "datum": e.get("datum") or "", "betrag": e.get("betrag"), "person": e.get("person") or "",
+        "ordner": eintrag.get("ordner") if eintrag.get("ordner_fest") else ordner_name(e.get("ordner")),
         "rechnungsnummer": e.get("rechnungsnummer") or "", "bezug": e.get("bezug") or "",
         "mahnung": bool(e.get("mahnung")),
         "zahlung": eintrag.get("zahlung") if eintrag.get("zahlung_fest") else (e.get("zahlung") or "keine"),
@@ -380,6 +464,42 @@ def felder_setzen(eintrag, e, jahr=None):
                     for f in (e.get("fristen") or []) if re.match(r"^\d{4}-\d\d-\d\d$", str(f.get("datum", "")))],
         "schlagworte": e.get("schlagworte") or [], "inhalt": (e.get("inhalt") or "")[:6000],
     })
+
+
+def datei_einordnen(e):
+    """PDF in den Ordner/Jahr-Unterordner legen, der zum Eintrag passt (nach Änderungen)."""
+    alt = e.get("datei") or ""
+    jahr = (e.get("datum") or "")[:4] if re.match(r"^\d{4}", e.get("datum") or "") else alt.split("/")[-2] if "/" in alt else str(date.today().year)
+    soll = os.path.join(sicherer_name(e.get("ordner") or "Sonstiges", 50), jahr)
+    if os.path.dirname(alt) == soll or not os.path.exists(os.path.join(ABLAGE, alt)):
+        return
+    os.makedirs(os.path.join(ABLAGE, soll), exist_ok=True)
+    neu = os.path.join(soll, os.path.basename(alt))
+    if os.path.exists(os.path.join(ABLAGE, neu)):
+        neu = os.path.join(soll, uuid.uuid4().hex[:4] + "_" + os.path.basename(alt))
+    os.replace(os.path.join(ABLAGE, alt), os.path.join(ABLAGE, neu))
+    e["datei"] = neu
+
+
+def zusammenfuehren(liste, gruppe):
+    """Mehrere Foto-Belege (einzelne Seiten) zu einem zusammenführen und neu lesen."""
+    es = [e for e in gruppe if e in liste and e.get("seiten")]
+    if len(es) < 2:
+        return None
+    haupt = es[0]
+    for e in es[1:]:
+        haupt["seiten"] += e["seiten"]
+        _weg(os.path.join(ABLAGE, e.get("datei", "")))
+        if e.get("notiz"):
+            haupt["notiz"] = ((haupt.get("notiz") or "") + " · " + e["notiz"]).strip(" ·")
+        liste.remove(e)
+    pfad = os.path.join(ABLAGE, haupt.get("datei", ""))
+    seiten_zu_pdf([os.path.join(SEITEN, s) for s in haupt["seiten"]], pfad)
+    bloecke = [dokument_block(os.path.join(SEITEN, s)) for s in haupt["seiten"]]
+    bloecke.append({"type": "text", "text": f"Heute: {date.today().isoformat()}\nNotiz der Familie: {haupt.get('notiz') or '(keine)'}\n{familien_kontext()}"})
+    felder_setzen(haupt, claude(LESEN, bloecke, max_tokens=4000))
+    datei_einordnen(haupt)
+    return haupt
 
 
 def aenderungen_anwenden(liste, aenderungen, nummern=None):
@@ -397,6 +517,9 @@ def aenderungen_anwenden(liste, aenderungen, nummern=None):
             e["zahlung"], e["zahlung_fest"] = a["zahlung"], True
         if a.get("kategorie"):
             e["kategorie"] = str(a["kategorie"])[:40]
+        if a.get("ordner"):
+            e["ordner"], e["ordner_fest"] = ordner_name(a["ordner"]), True
+            datei_einordnen(e)
         if a.get("steuer_art") and a["steuer_art"] in STEUER_ARTEN:
             e.setdefault("steuer", {}).update({"art": a["steuer_art"], "relevant": a["steuer_art"] != "keine"})
         if a.get("eingereicht") and e.get("einreichen", {}).get("noetig"):
@@ -431,10 +554,22 @@ def neu_lesen(auftrag):
     if not e:
         return
     pfad = os.path.join(ABLAGE, e.get("datei", ""))
-    bloecke = [dokument_block(pfad), {"type": "text", "text": f"Heute: {date.today().isoformat()}\nNotiz der Familie: {e.get('notiz') or '(keine)'}"}]
+    bloecke = [dokument_block(pfad), {"type": "text", "text": f"Heute: {date.today().isoformat()}\nNotiz der Familie: {e.get('notiz') or '(keine)'}\n{familien_kontext()}"}]
     felder_setzen(e, claude(LESEN, bloecke, max_tokens=4000))
+    datei_einordnen(e)
     json_schreiben(VERZEICHNIS, liste)
     logbuch(f"Neu eingeordnet: {e.get('titel')}")
+
+
+def alle_neu_lesen(auftrag):
+    """Alle Belege mit den aktuellen Ordnern/Hinweisen neu einordnen, danach Durchsicht (Seiten zusammenführen usw.)."""
+    for e in list(verzeichnis()):
+        try:
+            neu_lesen({"id": e.get("id")})
+        except Exception as fehler:  # noqa: BLE001
+            logbuch(f"Fehler bei {e.get('titel')}: {str(fehler)[:120]}", "fehler")
+    durchsicht(auftrag)
+    logbuch("Alle Belege neu eingeordnet")
 
 
 def durchsicht(auftrag):
@@ -449,9 +584,21 @@ def durchsicht(auftrag):
                       "Nr " + (e.get("rechnungsnummer") or "-"), "Bezug " + (e.get("bezug") or "-"), "Zahlung " + (e.get("zahlung") or "?"),
                       "Mahnung" if e.get("mahnung") else "", e.get("kategorie"), "Steuer " + (st.get("art") if st.get("relevant") else "-"),
                       "Fristen " + ", ".join(f"{f.get('datum')} {f.get('was')}" for f in e.get("fristen") or []),
+                      "Ordner " + (e.get("ordner") or "-"), f"Fotos {len(e.get('seiten') or [])}" if e.get("seiten") else "PDF",
                       "Notiz " + (e.get("notiz") or "-"), (e.get("inhalt") or "")[:160].replace("\n", " ")]))
-    a = claude(DURCHSICHT, [{"type": "text", "text": f"Heute: {date.today().isoformat()}\n" + "\n".join(zeilen)}], max_tokens=3000, effort="medium")
+    a = claude(DURCHSICHT, [{"type": "text", "text": f"Heute: {date.today().isoformat()}\n{familien_kontext()}\n\n" + "\n".join(zeilen)}],
+               max_tokens=3000, effort="medium")
     geaendert = aenderungen_anwenden(liste, a.get("aenderungen"))
+    gruppen = []
+    for g in a.get("zusammenfuehren") or []:
+        try:
+            gruppen.append([liste[int(n) - 1] for n in g])
+        except (TypeError, ValueError, IndexError):
+            continue
+    for g in gruppen:
+        h = zusammenfuehren(liste, g)
+        if h:
+            geaendert.append(f"{len(g)} Seiten zusammengeführt: {h.get('titel')}")
     if geaendert:
         json_schreiben(VERZEICHNIS, liste)
     bericht = (a.get("bericht") or "").strip()
@@ -700,6 +847,21 @@ def seite(auftrag):
         name = uuid.uuid4().hex + ".pdf"
         shutil.copyfile(os.path.join(ABLAGE, eintrag.get("datei", "")), os.path.join(ANSICHT, name))
         return {"ok": True, "datei": "akte/_ansicht/" + name}
+    if was == "einstellungen":
+        return {"ok": True, "einstellungen": einstellungen()}
+    if was == "einstellungen_speichern":
+        try:
+            d = json.loads(auftrag.get("text") or "{}")
+        except ValueError:
+            return {"ok": False, "fehler": "ungültig"}
+        ordner = [{"name": str(o.get("name"))[:60].strip(), "beschreibung": str(o.get("beschreibung") or "")[:300].strip()}
+                  for o in d.get("ordner") or [] if isinstance(o, dict) and str(o.get("name") or "").strip()]
+        json_schreiben(EINSTELLUNGEN, {"ordner": ordner, "hinweise": str(d.get("hinweise") or "")[:3000]})
+        logbuch("Ordner und Hinweise gespeichert")
+        return {"ok": True, "einstellungen": einstellungen()}
+    if was == "alle_neu":
+        im_hintergrund(alle_neu_lesen, {"chat": auftrag.get("chat")})
+        return {"ok": True}
     if was == "notiz" and eintrag:
         eintrag["notiz"] = (auftrag.get("text") or "").strip()[:500]
         json_schreiben(VERZEICHNIS, liste)
@@ -719,13 +881,13 @@ def seite(auftrag):
         liste.remove(eintrag)
         json_schreiben(VERZEICHNIS, liste)
     felder = ("id", "titel", "typ", "kategorie", "absender", "datum", "betrag", "person", "steuer", "einreichen", "fristen",
-              "schlagworte", "von", "eingang", "notiz", "zahlung", "mahnung", "rechnungsnummer")
+              "schlagworte", "von", "eingang", "notiz", "zahlung", "mahnung", "rechnungsnummer", "ordner")
     aus = [dict({k: e.get(k) for k in felder}, kurz=(e.get("inhalt") or "")[:500]) for e in liste]
     aus.sort(key=lambda e: (e.get("datum") or "", e.get("eingang") or ""), reverse=True)
     wartend = 0
     for d in (EINGANG, ORDNER, UPLOAD):
         try:
-            wartend += len([n for n in os.listdir(d) if not n.startswith(".")])
+            wartend += len([n for n in os.listdir(d) if not n.startswith((".", "_"))])
         except OSError:
             pass
     log = json_laden(LOGBUCH, [])
@@ -754,7 +916,8 @@ def im_hintergrund(funktion, auftrag):
     for s in (0, 1, 2):
         os.dup2(fd, s)
     try:
-        funktion(auftrag)
+        with Sperre():
+            funktion(auftrag)
     except Exception as fehler:  # noqa: BLE001
         logbuch(f"Fehler: {type(fehler).__name__}: {str(fehler)[:150]}", "fehler")
         try:
@@ -804,6 +967,22 @@ def ordner_pruefen(auftrag):
         else:
             os.replace(pfad, ziel)
         dateien.append(ziel)
+    # hängengebliebene Dateien im Eingang (z. B. nach einem Fehler) nach 15 Minuten nochmal versuchen, höchstens dreimal
+    zaehler_pfad = os.path.join(EINGANG, ".versuche.json")
+    zaehler = json_laden(zaehler_pfad, {})
+    for n in sorted(os.listdir(EINGANG)):
+        pfad = os.path.join(EINGANG, n)
+        if n.startswith(".") or not os.path.isfile(pfad) or pfad in dateien or time.time() - os.path.getmtime(pfad) < 900:
+            continue
+        zaehler[n] = zaehler.get(n, 0) + 1
+        if zaehler[n] > 3:
+            os.makedirs(os.path.join(EINGANG, "_fehler"), exist_ok=True)
+            os.replace(pfad, os.path.join(EINGANG, "_fehler", n))
+            zaehler.pop(n, None)
+            continue
+        os.utime(pfad)   # erst in 15 Minuten wieder an der Reihe
+        dateien.append(pfad)
+    json_schreiben(zaehler_pfad, zaehler)
     if dateien:
         auftrag["dateien"] = dateien
         im_hintergrund(ordner_einlesen, auftrag)

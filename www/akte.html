@@ -50,6 +50,9 @@
   .knopf { padding: 8px 12px; border-radius: 11px; background: var(--bg); font-weight: 600; font-size: 13px; }
   .knopf.blau { background: var(--blau); color: #fff; }
   .gross-knopf { padding: 11px 16px; font-size: 15px; border-radius: 12px; }
+  .einst-inhalt { background: var(--karte); color: var(--text); margin: 0 10px 10px; border-radius: 12px; padding: 16px; overflow: auto; flex: 1; display: flex; flex-direction: column; gap: 10px; }
+  .gross-feld { min-height: 170px; font-size: 15px; line-height: 1.5; }
+  .marke.ordner { background: #5856D61F; color: #5856D6; }
   .knopf.gruen { background: var(--gruen); color: #fff; }
   .knopf.rot { color: var(--rot); }
   .knopf.scharf { background: var(--rot); color: #fff; }
@@ -71,11 +74,20 @@
 <body>
 <main id="inhalt"><div class="leer">Akte wird geladen …</div></main>
 <div class="pdf" id="pdf"><div class="leiste"><span id="pdf-titel"></span><button class="zu" data-a="zu">Schließen</button></div><iframe id="pdf-rahmen" title="Beleg"></iframe></div>
+<div class="pdf" id="einst"><div class="leiste"><b>⚙️ Ordner und Hinweise</b><button class="zu" data-a="einst-zu">Schließen</button></div>
+  <div class="einst-inhalt">
+    <p class="klein">Ein Ordner pro Zeile: <b>Name – wofür</b>. Claude sortiert jeden Beleg in genau einen Ordner. Diese Angaben bleiben nur bei euch auf dem Home-Assistant-Rechner.</p>
+    <textarea id="einst-ordner" class="notiz-feld gross-feld"></textarea>
+    <p class="klein">Hinweise, die Claude beim Einordnen kennen soll (Personen, Adressen, Telefonnummern, Verträge …):</p>
+    <textarea id="einst-hinweise" class="notiz-feld gross-feld"></textarea>
+    <div class="aktionen"><button class="knopf gruen gross-knopf" data-a="einst-speichern">Speichern</button>
+      <button class="knopf gross-knopf" data-a="alle-neu">Alle Belege neu einordnen</button></div>
+  </div></div>
 <div class="decke" id="decke" data-a="aufdecken"><b>📁 Akte</b><span class="klein">Zum Öffnen antippen</span></div>
 <div class="toast" id="toast"></div>
 <input type="file" id="datei" multiple accept=".pdf,application/pdf,image/jpeg,image/png" hidden>
 <script>
-const SEITEN_VERSION = 4;
+const SEITEN_VERSION = 5;
 const $ = id => document.getElementById(id);
 const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const euro = x => x == null || x === "" ? "" : Number(x).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
@@ -85,6 +97,11 @@ function toast(t) { const m = $("toast"); m.textContent = t; m.style.display = "
 
 let eintraege = [], filter = "alle", suche = "", letzter = "", pdfUrl = "", wartend = 0, log = [], notizOffen = "";
 const JAHR = new Date().getFullYear();
+async function skript(daten) {
+  const r = await hass().callWS({ type: "call_service", domain: "script", service: "akte_aktion", service_data: daten, return_response: true });
+  let a = r && r.response && r.response.stdout; if (typeof a === "string") { try { a = JSON.parse(a); } catch (e) { a = null; } }
+  return a;
+}
 async function aktion(was, id) {
   const h = hass(); if (!h) return null;
   const r = await h.callWS({ type: "call_service", domain: "script", service: "akte_aktion", service_data: { was, id: id || "" }, return_response: true });
@@ -111,8 +128,12 @@ const FILTER = [
   ["Haus", "Haus", e => e.kategorie === "Haus"],
   ["Vermietung", "Vermietung", e => e.kategorie === "Vermietung" || (e.steuer && e.steuer.art === "Vermietung")],
 ];
+function alleFilter() {
+  const ordner = [...new Set(eintraege.map(e => e.ordner).filter(Boolean))].sort();
+  return FILTER.concat(ordner.map(o => ["ordner:" + o, "📂 " + o, e => e.ordner === o]));
+}
 function passt(e) {
-  const f = FILTER.find(x => x[0] === filter); if (f && !f[2](e)) return false;
+  const f = alleFilter().find(x => x[0] === filter); if (f && !f[2](e)) return false;
   if (!suche) return true;
   const text = [e.titel, e.typ, e.kategorie, e.absender, e.person, e.datum, datum(e.datum), e.kurz, e.notiz, e.rechnungsnummer, (e.schlagworte || []).join(" ")].join(" ").toLowerCase();
   return suche.toLowerCase().split(/\s+/).every(w => text.includes(w));
@@ -124,8 +145,9 @@ function zeichnen() {
   $("inhalt").innerHTML = `
     <div class="kopf"><h1>📁 Akte</h1><span class="klein">Belege als Foto oder PDF an den Telegram-Bot schicken (Text „Beleg“ dazu) oder hier hochladen. Fragen per Telegram: „Akte …“, „Steuer ${JAHR}“, „Einreichen“, „Fristen“.</span>
       <input class="suche" id="suche" type="search" placeholder="Suchen: Zahnarzt, Allianz, 2026 …" value="${esc(suche)}">
-      <button class="knopf blau gross-knopf" data-a="hochladen">📤 Dateien hochladen</button></div>
-    <div class="filter">${FILTER.map(([w, t, fn]) => `<button data-a="filter" data-w="${esc(w)}" class="${w === filter ? "an" : ""}">${esc(t)}${w === "alle" ? "" : " (" + eintraege.filter(fn).length + ")"}</button>`).join("")}</div>
+      <button class="knopf blau gross-knopf" data-a="hochladen">⬆️ Dateien hochladen</button>
+      <button class="knopf gross-knopf" data-a="einstellungen">⚙️ Ordner</button></div>
+    <div class="filter">${alleFilter().map(([w, t, fn]) => `<button data-a="filter" data-w="${esc(w)}" class="${w === filter ? "an" : ""}">${esc(t)}${w === "alle" ? "" : " (" + eintraege.filter(fn).length + ")"}</button>`).join("")}</div>
     ${wartend || log.length ? `<div class="status">${wartend ? `<span class="warte">⏳ ${wartend} Datei${wartend === 1 ? "" : "en"} werden gelesen …</span>` : ""}
       ${log.slice(0, 3).map(l => `<span class="${l.art === "fehler" ? "fehler" : ""}">${esc(l.zeit)}: ${esc(l.text)}</span>`).join(" · ")}</div>` : ""}
     ${sicht.length ? `<p class="summe">${sicht.length} Dokument${sicht.length === 1 ? "" : "e"}${summe ? " · zusammen " + euro(summe) : ""}</p>
@@ -134,6 +156,7 @@ function zeichnen() {
         <div class="zeile"><b>${esc(e.titel || e.typ)}</b><span class="betrag">${euro(e.betrag)}</span></div>
         <div class="klein">${[esc(e.absender), datum(e.datum), esc(e.person)].filter(Boolean).join(" · ")}</div>
         <div class="marken">
+          ${e.ordner ? `<span class="marke ordner">📂 ${esc(e.ordner)}</span>` : ""}
           <span class="marke">${esc(e.typ)}</span>
           ${steuerJahr(e) ? `<span class="marke steuer">Steuer ${steuerJahr(e)}: ${esc(e.steuer.art)}</span>` : ""}
           ${e.einreichen && e.einreichen.noetig ? (offen(e) ? `<span class="marke offen">noch einreichen</span>` : `<span class="marke ok">eingereicht ${datum(e.einreichen.am)}</span>`) : ""}
@@ -168,6 +191,24 @@ document.addEventListener("click", async ev => {
   const w = el.dataset.w;
   switch (el.dataset.a) {
     case "hochladen": $("datei").click(); break;
+    case "einstellungen": {
+      const r = await skript({ was: "einstellungen" });
+      const e = (r && r.einstellungen) || { ordner: [], hinweise: "" };
+      $("einst-ordner").value = e.ordner.map(o => o.name + (o.beschreibung ? " – " + o.beschreibung : "")).join("\n");
+      $("einst-hinweise").value = e.hinweise || "";
+      $("einst").classList.add("offen"); break;
+    }
+    case "einst-zu": $("einst").classList.remove("offen"); break;
+    case "einst-speichern": {
+      const ordner = $("einst-ordner").value.split("\n").map(z => z.trim()).filter(Boolean).map(z => {
+        const m = z.split(/\s+[–-]\s+/); return { name: m[0].trim(), beschreibung: m.slice(1).join(" – ").trim() }; });
+      const r = await skript({ was: "einstellungen_speichern", text: JSON.stringify({ ordner, hinweise: $("einst-hinweise").value }) });
+      toast(r && r.ok ? "Gespeichert – neue Belege kommen jetzt in diese Ordner" : "Speichern hat nicht geklappt"); break;
+    }
+    case "alle-neu":
+      if (el.dataset.scharf !== "1") { el.dataset.scharf = "1"; el.textContent = "Wirklich alle neu einordnen? (kostet je Beleg ca. 2 Cent)"; return; }
+      await skript({ was: "alle_neu" }); $("einst").classList.remove("offen");
+      toast("Alle Belege werden neu eingeordnet – das dauert je ca. 30 Sekunden"); setTimeout(neuLaden, 20000); break;
     case "aufdecken": $("decke").classList.remove("an"); break;
     case "filter": filter = w; zeichnen(); break;
     case "zu": $("pdf").classList.remove("offen"); $("pdf-rahmen").src = "about:blank"; break;
@@ -244,7 +285,7 @@ let zuletzt = Date.now();
 function beruehrt() { zuletzt = Date.now(); }
 setInterval(() => {
   if (Date.now() - zuletzt > 180000 && !$("decke").classList.contains("an")) {
-    $("decke").classList.add("an"); $("pdf").classList.remove("offen"); $("pdf-rahmen").src = "about:blank";
+    $("decke").classList.add("an"); $("pdf").classList.remove("offen"); $("einst").classList.remove("offen"); $("pdf-rahmen").src = "about:blank";
     suche = ""; filter = "alle"; zeichnen();
   }
 }, 10000);
