@@ -53,6 +53,10 @@
   .einst-inhalt { background: var(--karte); color: var(--text); margin: 0 10px 10px; border-radius: 12px; padding: 16px; overflow: auto; flex: 1; display: flex; flex-direction: column; gap: 10px; }
   .gross-feld { min-height: 170px; font-size: 15px; line-height: 1.5; }
   .marke.ordner { background: #5856D61F; color: #5856D6; }
+  .kacheln { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+  .kachel { background: var(--karte); border-radius: 14px; padding: 14px; text-align: left; display: grid; gap: 4px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .kachel b { font-size: 16px; } .kachel-icon { font-size: 26px; }
+  .ordner-kopf { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 0 0 10px; } .ordner-kopf b { font-size: 18px; }
   .frage { background: #FFF4D6; border: 1px solid #F5C451; border-radius: 12px; padding: 9px 11px; display: grid; gap: 7px; font-size: 14px; }
   .frage b { font-size: 14px; }
   .frage .wahl { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -85,7 +89,7 @@
 <div class="pdf" id="pdf"><div class="leiste"><span id="pdf-titel"></span><button class="zu" data-a="zu">Schließen</button></div><div id="pdf-seiten" class="pdf-seiten"></div></div>
 <div class="pdf" id="einst"><div class="leiste"><b>⚙️ Ordner und Hinweise</b><button class="zu" data-a="einst-zu">Schließen</button></div>
   <div class="einst-inhalt">
-    <p class="klein">Ein Ordner pro Zeile: <b>Name – wofür</b>. Claude sortiert jeden Beleg in genau einen Ordner. Diese Angaben bleiben nur bei euch auf dem Home-Assistant-Rechner.</p>
+    <p class="klein">Ordner entstehen von selbst, sobald Belege einsortiert werden. Hier kannst du sie vorab anlegen oder beschreiben – ein Ordner pro Zeile: <b>Name – wofür</b>. Diese Angaben bleiben nur bei euch auf dem Home-Assistant-Rechner.</p>
     <textarea id="einst-ordner" class="notiz-feld gross-feld"></textarea>
     <p class="klein">Hinweise, die Claude beim Einordnen kennen soll (Personen, Adressen, Telefonnummern, Verträge …):</p>
     <textarea id="einst-hinweise" class="notiz-feld gross-feld"></textarea>
@@ -96,7 +100,7 @@
 <div class="toast" id="toast"></div>
 <input type="file" id="datei" multiple accept=".pdf,application/pdf,image/jpeg,image/png" hidden>
 <script>
-const SEITEN_VERSION = 7;
+const SEITEN_VERSION = 8;
 const $ = id => document.getElementById(id);
 const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const euro = x => x == null || x === "" ? "" : Number(x).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
@@ -104,7 +108,7 @@ const datum = iso => /^\d{4}-\d\d-\d\d$/.test(iso || "") ? iso.slice(8, 10) + ".
 function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
 function toast(t) { const m = $("toast"); m.textContent = t; m.style.display = "block"; clearTimeout(toast.t); toast.t = setTimeout(() => m.style.display = "none", 3000); }
 
-let ordnerListe = [], eintraege = [], filter = "alle", suche = "", letzter = "", wartend = 0, log = [], notizOffen = "";
+let ordnerWahl = "", ordnerListe = [], eintraege = [], filter = "eingang", suche = "", letzter = "", wartend = 0, log = [], notizOffen = "";
 const JAHR = new Date().getFullYear();
 async function skript(daten) {
   const r = await hass().callWS({ type: "call_service", domain: "script", service: "akte_aktion", service_data: daten, return_response: true });
@@ -125,28 +129,40 @@ function baldFristen(e) {
   const heute = new Date().toISOString().slice(0, 10), grenze = new Date(Date.now() + 60 * 864e5).toISOString().slice(0, 10);
   return (e.fristen || []).filter(f => f.datum >= heute && f.datum <= grenze);
 }
+// Vorne ("Zu erledigen") steht nur, was noch Arbeit macht – alles andere liegt in seinem Ordner
+function gruende(e) {
+  const g = [];
+  if (e.frage) g.push("Rückfrage");
+  if (!e.ordner) g.push("noch ohne Ordner");
+  if (e.zahlung === "offen") g.push(e.mahnung ? "Mahnung" : "noch zu zahlen");
+  if (offen(e)) g.push("noch einreichen");
+  return g;
+}
 const FILTER = [
+  ["eingang", "📥 Zu erledigen", e => gruende(e).length > 0],
+  ["ordner", "📂 Ordner", () => true],
   ["alle", "Alle", () => true],
   ["fragen", "❓ Rückfragen", e => !!e.frage],
+  ["zahlen", "Offene Zahlungen", e => e.zahlung === "offen"],
   ["einreichen", "Noch einreichen", offen],
+  ["fristen", "Fristen", e => baldFristen(e).length > 0],
   ["steuer" + JAHR, "Steuer " + JAHR, e => steuerJahr(e) === JAHR],
   ["steuer" + (JAHR - 1), "Steuer " + (JAHR - 1), e => steuerJahr(e) === JAHR - 1],
-  ["zahlen", "Offene Zahlungen", e => e.zahlung === "offen"],
-  ["fristen", "Fristen", e => baldFristen(e).length > 0],
-  ["Gesundheit", "Gesundheit", e => e.kategorie === "Gesundheit"],
-  ["Versicherung", "Versicherung", e => e.kategorie === "Versicherung" || /Versicherung/.test(e.typ || "")],
-  ["Haus", "Haus", e => e.kategorie === "Haus"],
-  ["Vermietung", "Vermietung", e => e.kategorie === "Vermietung" || (e.steuer && e.steuer.art === "Vermietung")],
 ];
-function alleFilter() {
-  const ordner = [...new Set(eintraege.map(e => e.ordner).filter(Boolean))].sort();
-  return FILTER.concat(ordner.map(o => ["ordner:" + o, "📂 " + o, e => e.ordner === o]));
-}
+function ordnerNamen() { return [...new Set(ordnerListe.concat(eintraege.map(e => e.ordner)).filter(Boolean))].sort((a, b) => a.localeCompare(b, "de")); }
+function alleFilter() { return FILTER.concat(ordnerNamen().map(o => ["ordner:" + o, "📂 " + o, e => e.ordner === o])); }
 function passt(e) {
   const f = alleFilter().find(x => x[0] === filter); if (f && !f[2](e)) return false;
   if (!suche) return true;
   const text = [e.titel, e.typ, e.kategorie, e.absender, e.person, e.datum, datum(e.datum), e.kurz, e.notiz, e.rechnungsnummer, (e.schlagworte || []).join(" ")].join(" ").toLowerCase();
   return suche.toLowerCase().split(/\s+/).every(w => text.includes(w));
+}
+function ordnerKacheln() {
+  const namen = ordnerNamen();
+  if (!namen.length) return `<div class="leer">Noch keine Ordner – sie entstehen automatisch, sobald Belege einsortiert werden.</div>`;
+  return `<div class="kacheln">${namen.map(o => { const es = eintraege.filter(e => e.ordner === o), summe = es.reduce((s, e) => s + (Number(e.betrag) || 0), 0);
+    return `<button class="kachel" data-a="filter" data-w="${esc("ordner:" + o)}"><span class="kachel-icon">📂</span><b>${esc(o)}</b>
+      <span class="klein">${es.length} Dokument${es.length === 1 ? "" : "e"}${summe ? " · " + euro(summe) : ""}</span></button>`; }).join("")}</div>`;
 }
 function zeichnen() {
   const sicht = eintraege.filter(passt);
@@ -157,16 +173,19 @@ function zeichnen() {
       <input class="suche" id="suche" type="search" placeholder="Suchen: Zahnarzt, Allianz, 2026 …" value="${esc(suche)}">
       <button class="knopf blau gross-knopf" data-a="hochladen">⬆️ Dateien hochladen</button>
       <button class="knopf gross-knopf" data-a="einstellungen">⚙️ Ordner</button></div>
-    <div class="filter">${alleFilter().map(([w, t, fn]) => `<button data-a="filter" data-w="${esc(w)}" class="${w === filter ? "an" : ""}">${esc(t)}${w === "alle" ? "" : " (" + eintraege.filter(fn).length + ")"}</button>`).join("")}</div>
+    <div class="filter">${FILTER.map(([w, t, fn]) => `<button data-a="filter" data-w="${esc(w)}" class="${w === filter || (w === "ordner" && filter.startsWith("ordner:")) ? "an" : ""}">${esc(t)}${["alle", "ordner"].includes(w) ? "" : " (" + eintraege.filter(fn).length + ")"}</button>`).join("")}</div>
     ${wartend || log.length ? `<div class="status">${wartend ? `<span class="warte">⏳ ${wartend} Datei${wartend === 1 ? "" : "en"} werden gelesen …</span>` : ""}
       ${log.slice(0, 3).map(l => `<span class="${l.art === "fehler" ? "fehler" : ""}">${esc(l.zeit)}: ${esc(l.text)}</span>`).join(" · ")}</div>` : ""}
-    ${sicht.length ? `<p class="summe">${sicht.length} Dokument${sicht.length === 1 ? "" : "e"}${summe ? " · zusammen " + euro(summe) : ""}</p>
+    ${filter === "ordner" && !suche ? ordnerKacheln() : ""}
+    ${filter.startsWith("ordner:") ? `<div class="ordner-kopf"><button class="knopf" data-a="filter" data-w="ordner">← Alle Ordner</button>
+      <b>📂 ${esc(filter.slice(7))}</b><button class="knopf" data-a="umbenennen" data-w="${esc(filter.slice(7))}">✏️ Umbenennen</button></div>` : ""}
+    ${filter === "ordner" && !suche ? "" : sicht.length ? `<p class="summe">${sicht.length} Dokument${sicht.length === 1 ? "" : "e"}${summe ? " · zusammen " + euro(summe) : ""}</p>
     <div class="liste">${sicht.map(e => `
       <div class="eintrag ${e.frage ? "fragt" : ""}">
         <div class="zeile"><b>${esc(e.titel || e.typ)}</b><span class="betrag">${euro(e.betrag)}</span></div>
         <div class="klein">${[esc(e.absender), datum(e.datum), esc(e.person)].filter(Boolean).join(" · ")}</div>
         <div class="marken">
-          ${e.ordner ? `<span class="marke ordner">📂 ${esc(e.ordner)}</span>` : ""}
+          ${e.ordner ? `<span class="marke ordner">📂 ${esc(e.ordner)}</span>` : `<span class="marke offen">📂 noch ohne Ordner</span>`}
           <span class="marke">${esc(e.typ)}</span>
           ${steuerJahr(e) ? `<span class="marke steuer">Steuer ${steuerJahr(e)}: ${esc(e.steuer.art)}</span>` : ""}
           ${e.einreichen && e.einreichen.noetig ? (offen(e) ? `<span class="marke offen">noch einreichen</span>` : `<span class="marke ok">eingereicht ${datum(e.einreichen.am)}</span>`) : ""}
@@ -177,11 +196,15 @@ function zeichnen() {
         ${e.frage ? `<div class="frage"><b>❓ ${esc(e.frage)}</b>
           ${(e.vorschlaege || []).length ? `<div class="wahl">${e.vorschlaege.map(v => `<button data-a="antwort" data-w="${esc(e.id)}" data-v="${esc(v)}">${esc(v)}</button>`).join("")}</div>` : ""}
           <div class="zeile2"><input id="antwort-${esc(e.id)}" placeholder="oder eigene Antwort …"><button class="knopf gruen" data-a="antwort" data-w="${esc(e.id)}">OK</button></div></div>` : ""}
+        ${ordnerWahl === e.id ? `<div class="frage"><b>📂 In welchen Ordner?</b>
+          <div class="wahl">${ordnerNamen().map(o => `<button data-a="ordner-setzen" data-w="${esc(e.id)}" data-v="${esc(o)}">${esc(o)}</button>`).join("")}</div>
+          <div class="zeile2"><input id="ordner-neu-${esc(e.id)}" placeholder="oder neuer Ordner, z. B. Mathilda"><button class="knopf gruen" data-a="ordner-setzen" data-w="${esc(e.id)}">OK</button></div></div>` : ""}
         ${notizOffen === e.id ? `<textarea class="notiz-feld" id="notiz-${esc(e.id)}" placeholder="z. B. ist schon bezahlt am 05.10. · gehört zur Ferienwohnung · Mahnung erledigt">${esc(e.notiz || "")}</textarea>`
           : e.notiz ? `<div class="notiz">📝 ${esc(e.notiz)}</div>` : ""}
         ${e.kurz ? `<div class="kurz">${esc(e.kurz)}</div>` : ""}
         <div class="aktionen">
           <button class="knopf blau" data-a="ansehen" data-w="${esc(e.id)}">PDF ansehen</button>
+          <button class="knopf" data-a="ordner-wahl" data-w="${esc(e.id)}">📂 Ordner</button>
           ${notizOffen === e.id ? `<button class="knopf gruen" data-a="notiz-speichern" data-w="${esc(e.id)}">Notiz speichern</button>`
             : `<button class="knopf" data-a="notiz" data-w="${esc(e.id)}">📝 Notiz</button>`}
           ${e.zahlung === "offen" ? `<button class="knopf gruen" data-a="bezahlt" data-w="${esc(e.id)}">Bezahlt</button>`
@@ -190,7 +213,8 @@ function zeichnen() {
             : `<button class="knopf" data-a="offen" data-w="${esc(e.id)}">Wieder offen</button>`) : ""}
           <button class="knopf rot" data-a="loeschen" data-w="${esc(e.id)}">Löschen</button>
         </div></div>`).join("")}</div>`
-      : `<div class="leer">${eintraege.length ? "Nichts gefunden." : "Die Akte ist noch leer.<br>Einfach ein Foto oder PDF an den Telegram-Bot schicken."}</div>`}`;
+      : `<div class="leer">${!eintraege.length ? "Die Akte ist noch leer.<br>Einfach ein Foto oder PDF an den Telegram-Bot schicken oder hier hochladen."
+          : filter === "eingang" && !suche ? "✅ Alles erledigt – alle Belege liegen in ihren Ordnern." : "Nichts gefunden."}</div>`}`;
   if (fokus) { const s = $("suche"); s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
 }
 document.addEventListener("input", ev => { if (ev.target.id === "suche") { suche = ev.target.value.trim(); clearTimeout(zeichnen.t); zeichnen.t = setTimeout(zeichnen, 250); } });
@@ -266,6 +290,28 @@ document.addEventListener("click", async ev => {
       if (a && Array.isArray(a.eintraege)) eintraege = a.eintraege;
       toast("Danke – ich ordne den Beleg damit neu ein"); zeichnen(); setTimeout(neuLaden, 40000); break;
     }
+    case "ordner-wahl": ordnerWahl = ordnerWahl === w ? "" : w; zeichnen(); break;
+    case "ordner-setzen": {
+      const feld = $("ordner-neu-" + w), o = el.dataset.v || (feld ? feld.value.trim() : "");
+      if (!o) { toast("Bitte einen Ordner antippen oder einen Namen eintippen"); break; }
+      ordnerWahl = "";
+      const a = await skript({ was: "ordner_setzen", id: w, ordner: o });
+      if (a && Array.isArray(a.eintraege)) eintraege = a.eintraege;
+      if (!ordnerListe.includes(o)) ordnerListe.push(o);
+      toast("In „" + o + "“ abgelegt"); zeichnen(); break;
+    }
+    case "umbenennen": {
+      if (!el.dataset.offen) { el.dataset.offen = "1"; el.outerHTML = `<input id="umbenennen-feld" value="${esc(w)}" style="padding:7px 10px;border-radius:10px;border:1px solid #ccc;font:inherit"><button class="knopf gruen" data-a="umbenennen-ok" data-w="${esc(w)}">Speichern</button>`; break; }
+      break;
+    }
+    case "umbenennen-ok": {
+      const neu = ($("umbenennen-feld") || {}).value || "";
+      if (!neu.trim() || neu.trim() === w) { zeichnen(); break; }
+      const a = await skript({ was: "ordner_umbenennen", id: w, ordner: neu.trim() });
+      if (a && Array.isArray(a.eintraege)) eintraege = a.eintraege;
+      ordnerListe = ordnerListe.filter(o => o !== w).concat(neu.trim()); filter = "ordner:" + neu.trim();
+      toast("Umbenannt"); zeichnen(); break;
+    }
     case "bezahlt": await aktion("bezahlt", w); toast("Als bezahlt markiert"); zeichnen(); break;
     case "unbezahlt": await aktion("unbezahlt", w); zeichnen(); break;
     case "offen": await aktion("offen", w); zeichnen(); break;
@@ -331,11 +377,12 @@ function beruehrt() { zuletzt = Date.now(); }
 setInterval(() => {
   if (Date.now() - zuletzt > 180000 && !$("decke").classList.contains("an")) {
     $("decke").classList.add("an"); $("pdf").classList.remove("offen"); $("einst").classList.remove("offen"); $("pdf-seiten").innerHTML = "";
-    suche = ""; filter = "alle"; zeichnen();
+    suche = ""; filter = "eingang"; zeichnen();
   }
 }, 10000);
 async function neuLaden() {
-  if (notizOffen || (document.activeElement && /^(suche|antwort-)/.test(document.activeElement.id || ""))) return;
+  if (notizOffen || ordnerWahl || (document.activeElement && /^(suche|antwort-|ordner-neu-|umbenennen)/.test(document.activeElement.id || ""))) return;
+  if (!ordnerListe.length) { const r = await skript({ was: "einstellungen" }); ordnerListe = ((r && r.einstellungen && r.einstellungen.ordner) || []).map(o => o.name); }
   const a = await aktion("liste");
   clearTimeout(neuLaden.t); if (wartend) neuLaden.t = setTimeout(neuLaden, 15000);   // während gelesen wird öfter schauen
   const sig = JSON.stringify([eintraege, wartend, log]);

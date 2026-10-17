@@ -40,11 +40,7 @@ ZUSTAND = "/config/akte_zustand.json"   # letzte Liste je Chat (für "eingereich
 LOGBUCH = "/config/akte_log.json"       # letzte Aktivitäten (für die Monitor-Seite)
 EINSTELLUNGEN = "/config/akte_einstellungen.json"   # Ordner und Hinweise der Familie (nur lokal, über die Akte-Seite)
 SPERRE = "/config/.akte.lock"           # immer nur eine Arbeit gleichzeitig (sonst überschreiben sich Einträge)
-STANDARD_ORDNER = [{"name": "Persönlich", "beschreibung": "Dokumente einzelner Personen"},
-                   {"name": "Familie", "beschreibung": "alles Gemeinsame"},
-                   {"name": "Haus", "beschreibung": "eigenes Haus und Hof"},
-                   {"name": "Vermietung", "beschreibung": "vermietete Wohnungen, Ferienwohnung, Stellplätze"},
-                   {"name": "Sonstiges", "beschreibung": "passt nirgends"}]
+STANDARD_ORDNER = []   # Ordner entstehen erst mit den Belegen (Claude schlägt sie vor, die Familie kann umbenennen)
 
 TYPEN = ["Rechnung", "Arztrechnung", "Rezept/Verordnung", "Quittung/Kassenbon", "Versicherungspolice", "Versicherungsschreiben",
          "Erstattung/Leistungsabrechnung", "Vertrag", "Bescheid", "Lohn-/Gehaltsabrechnung", "Kontoauszug", "Garantie/Kaufbeleg",
@@ -69,7 +65,9 @@ JSON-Objekt:
             Abbuchung per Lastschrift angekündigt, Kontoauszug) oder "keine" (kein Zahlungsbeleg),
  "mahnung": true bei Mahnung/Zahlungserinnerung, sonst false,
  "bezug": "bei Mahnung, Erstattung, Gutschrift oder Storno: Nummer der ursprünglichen Rechnung, sonst leer",
- "ordner": "genau einer der Ordner der Familie (siehe unten) – wofür/für wen ist das Dokument",
+ "ordner": "passender vorhandener Ordner (siehe unten); passt keiner, einen NEUEN kurzen Ordnernamen vorschlagen – nach Person
+            (z. B. „Mathilda“), Objekt (z. B. „Nadorster Str. 299 – Oberwohnung“) oder Thema (z. B. „Auto“); bei Unsicherheit
+            leer lassen und nachfragen",
  "fortsetzung": true, wenn dieses Bild nur eine weitere Seite des unten genannten vorherigen Dokuments ist (gleicher Absender,
                 "Seite 2 von …", kein eigener Briefkopf/Betreff), sonst false,
  "frage": "nur wenn du dir bei Ordner, Person, Zweck oder Steuer NICHT sicher bist: eine kurze Rückfrage an die Familie
@@ -215,21 +213,33 @@ def einstellungen():
     return {"ordner": ordner, "hinweise": d.get("hinweise") or ""}
 
 
+def alle_ordner():
+    """Ordner aus den Einstellungen plus alle, die schon in der Akte benutzt werden."""
+    namen = [o["name"] for o in einstellungen()["ordner"]]
+    for e in verzeichnis():
+        if e.get("ordner") and e["ordner"] not in namen:
+            namen.append(e["ordner"])
+    return namen
+
+
 def familien_kontext():
     """Ordner und Hinweise der Familie als Text für Claude (stehen nur lokal, nicht im Programm)."""
     e = einstellungen()
-    t = "Ordner der Familie:\n" + "\n".join(f"- {o['name']}: {o.get('beschreibung', '')}" for o in e["ordner"])
+    beschr = {o["name"]: o.get("beschreibung", "") for o in e["ordner"]}
+    namen = alle_ordner()
+    t = "Vorhandene Ordner:\n" + ("\n".join(f"- {n}" + (f": {beschr[n]}" if beschr.get(n) else "") for n in namen)
+                                   if namen else "(noch keine – lege passende neu an)")
     if e["hinweise"]:
         t += "\nHinweise der Familie:\n" + e["hinweise"]
     return t
 
 
 def ordner_name(name):
-    namen = [o["name"] for o in einstellungen()["ordner"]]
-    if name in namen:
-        return name
-    klein = {n.lower(): n for n in namen}
-    return klein.get((name or "").lower(), "Sonstiges" if "Sonstiges" in namen else namen[-1])
+    """Vorhandenen Ordner finden (Groß-/Kleinschreibung egal) oder einen neuen übernehmen; leer = noch unsortiert."""
+    name = re.sub(r"\s+", " ", str(name or "")).strip()[:60]
+    if not name:
+        return ""
+    return {n.lower(): n for n in alle_ordner()}.get(name.lower(), name)
 
 
 class Sperre:
@@ -394,7 +404,7 @@ def ablegen(auftrag):
             e = lesen([dokument_block(s_) for s_ in seiten])
 
     jahr = (e.get("datum") or "")[:4] if re.match(r"^\d{4}-\d\d-\d\d$", e.get("datum") or "") else str(date.today().year)
-    unterordner = os.path.join(sicherer_name(ordner_name(e.get("ordner")), 50), jahr)
+    unterordner = os.path.join(sicherer_name(ordner_name(e.get("ordner")) or "Unsortiert", 50), jahr)
     os.makedirs(os.path.join(ABLAGE, unterordner), exist_ok=True)
     name = "_".join([e.get("datum") or date.today().isoformat(), sicherer_name(e.get("typ"), 25), sicherer_name(e.get("absender"))])
     if e.get("betrag"):
@@ -480,7 +490,7 @@ def datei_einordnen(e):
     """PDF in den Ordner/Jahr-Unterordner legen, der zum Eintrag passt (nach Änderungen)."""
     alt = e.get("datei") or ""
     jahr = (e.get("datum") or "")[:4] if re.match(r"^\d{4}", e.get("datum") or "") else alt.split("/")[-2] if "/" in alt else str(date.today().year)
-    soll = os.path.join(sicherer_name(e.get("ordner") or "Sonstiges", 50), jahr)
+    soll = os.path.join(sicherer_name(e.get("ordner") or "Unsortiert", 50), jahr)
     if os.path.dirname(alt) == soll or not os.path.exists(os.path.join(ABLAGE, alt)):
         return
     os.makedirs(os.path.join(ABLAGE, soll), exist_ok=True)
@@ -874,7 +884,23 @@ def seite(auftrag):
     if was == "alle_neu":
         im_hintergrund(alle_neu_lesen, {"chat": auftrag.get("chat")})
         return {"ok": True}
-    if was == "antwort" and eintrag:
+    if was == "ordner_setzen" and eintrag:
+        eintrag["ordner"], eintrag["ordner_fest"] = ordner_name(auftrag.get("ordner")), True
+        if eintrag.get("frage"):
+            eintrag.update({"frage": "", "vorschlaege": [], "beantwortet": True})
+        datei_einordnen(eintrag)
+        json_schreiben(VERZEICHNIS, liste)
+        logbuch(f"In Ordner „{eintrag['ordner']}“: {eintrag.get('titel')}")
+    elif was == "ordner_umbenennen":
+        alt, neu = auftrag.get("id") or "", ordner_name(auftrag.get("ordner"))
+        if alt and neu and alt != neu:
+            for x in liste:
+                if x.get("ordner") == alt:
+                    x["ordner"] = neu
+                    datei_einordnen(x)
+            json_schreiben(VERZEICHNIS, liste)
+            logbuch(f"Ordner „{alt}“ heißt jetzt „{neu}“")
+    elif was == "antwort" and eintrag:
         antwort = (auftrag.get("text") or "").strip()[:300]
         frage = eintrag.get("frage") or ""
         if auftrag.get("ordner"):
