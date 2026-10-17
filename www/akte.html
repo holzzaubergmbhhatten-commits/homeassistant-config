@@ -7,7 +7,7 @@
 <!--
   Digitale Akte (Reiter "Akte" im Flur-Dashboard): alle Belege, die per Telegram abgelegt wurden (claude_tools/akte.py).
   Liste über script.akte_aktion (packages/akte.yaml) – die Daten kommen nur über die Home-Assistant-Anmeldung, in dieser
-  Datei steht nichts davon. PDFs werden kurzzeitig nach /media/akte/_ansicht kopiert und über eine signierte Adresse gezeigt.
+  Datei steht nichts davon. PDFs kommen in Stücken über dieselbe Verbindung (script.akte_aktion, was: lesen) und werden im Browser angezeigt.
   Datenschutz am Monitor: nach 3 Minuten ohne Berührung wird die Liste verdeckt.
 -->
 <style>
@@ -42,6 +42,7 @@
   .aktionen { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
   .knopf { padding: 8px 12px; border-radius: 11px; background: var(--bg); font-weight: 600; font-size: 13px; }
   .knopf.blau { background: var(--blau); color: #fff; }
+  .gross-knopf { padding: 11px 16px; font-size: 15px; border-radius: 12px; }
   .knopf.gruen { background: var(--gruen); color: #fff; }
   .knopf.rot { color: var(--rot); }
   .knopf.scharf { background: var(--rot); color: #fff; }
@@ -65,8 +66,9 @@
 <div class="pdf" id="pdf"><div class="leiste"><span id="pdf-titel"></span><button class="zu" data-a="zu">Schließen</button></div><iframe id="pdf-rahmen" title="Beleg"></iframe></div>
 <div class="decke" id="decke" data-a="aufdecken"><b>📁 Akte</b><span class="klein">Zum Öffnen antippen</span></div>
 <div class="toast" id="toast"></div>
+<input type="file" id="datei" multiple accept=".pdf,application/pdf,image/jpeg,image/png" hidden>
 <script>
-const SEITEN_VERSION = 1;
+const SEITEN_VERSION = 3;
 const $ = id => document.getElementById(id);
 const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const euro = x => x == null || x === "" ? "" : Number(x).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
@@ -74,7 +76,7 @@ const datum = iso => /^\d{4}-\d\d-\d\d$/.test(iso || "") ? iso.slice(8, 10) + ".
 function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
 function toast(t) { const m = $("toast"); m.textContent = t; m.style.display = "block"; clearTimeout(toast.t); toast.t = setTimeout(() => m.style.display = "none", 3000); }
 
-let eintraege = [], filter = "alle", suche = "", letzter = "";
+let eintraege = [], filter = "alle", suche = "", letzter = "", pdfUrl = "";
 const JAHR = new Date().getFullYear();
 async function aktion(was, id) {
   const h = hass(); if (!h) return null;
@@ -112,8 +114,9 @@ function zeichnen() {
   const summe = sicht.reduce((s, e) => s + (Number(e.betrag) || 0), 0);
   const fokus = document.activeElement && document.activeElement.id === "suche";
   $("inhalt").innerHTML = `
-    <div class="kopf"><h1>📁 Akte</h1><span class="klein">Belege als Foto oder PDF an den Telegram-Bot schicken (Text „Beleg“ dazu). Fragen per Telegram: „Akte …“, „Steuer ${JAHR}“, „Einreichen“, „Fristen“.</span>
-      <input class="suche" id="suche" type="search" placeholder="Suchen: Zahnarzt, Allianz, 2026 …" value="${esc(suche)}"></div>
+    <div class="kopf"><h1>📁 Akte</h1><span class="klein">Belege als Foto oder PDF an den Telegram-Bot schicken (Text „Beleg“ dazu) oder hier hochladen. Fragen per Telegram: „Akte …“, „Steuer ${JAHR}“, „Einreichen“, „Fristen“.</span>
+      <input class="suche" id="suche" type="search" placeholder="Suchen: Zahnarzt, Allianz, 2026 …" value="${esc(suche)}">
+      <button class="knopf blau gross-knopf" data-a="hochladen">📤 Dateien hochladen</button></div>
     <div class="filter">${FILTER.map(([w, t, fn]) => `<button data-a="filter" data-w="${esc(w)}" class="${w === filter ? "an" : ""}">${esc(t)}${w === "alle" ? "" : " (" + eintraege.filter(fn).length + ")"}</button>`).join("")}</div>
     ${sicht.length ? `<p class="summe">${sicht.length} Dokument${sicht.length === 1 ? "" : "e"}${summe ? " · zusammen " + euro(summe) : ""}</p>
     <div class="liste">${sicht.map(e => `
@@ -146,18 +149,27 @@ document.addEventListener("click", async ev => {
   if (Date.now() - letzterTipp < 450) return; letzterTipp = Date.now();
   const w = el.dataset.w;
   switch (el.dataset.a) {
+    case "hochladen": $("datei").click(); break;
     case "aufdecken": $("decke").classList.remove("an"); break;
     case "filter": filter = w; zeichnen(); break;
     case "zu": $("pdf").classList.remove("offen"); $("pdf-rahmen").src = "about:blank"; break;
     case "ansehen": {
-      toast("PDF wird geöffnet …");
-      const a = await aktion("ansehen", w);
-      if (!a || !a.datei) { toast("PDF nicht gefunden"); break; }
+      toast("PDF wird geladen …");
       try {
-        const r = await hass().callWS({ type: "media_source/resolve_media", media_content_id: "media-source://media_source/local/" + a.datei, expires: 600 });
+        const teile = []; let ab = 0, ende = false, sicher = 0;
+        while (!ende && sicher++ < 80) {
+          const r = await hass().callWS({ type: "call_service", domain: "script", service: "akte_aktion", service_data: { was: "lesen", id: w, ab }, return_response: true });
+          let a = r && r.response && r.response.stdout; if (typeof a === "string") a = JSON.parse(a);
+          if (!a || !a.ok || typeof a.daten !== "string") throw new Error("leer");
+          const bin = atob(a.daten), bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          teile.push(bytes); ab += bytes.length; ende = a.ende || !bytes.length;
+        }
+        if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+        pdfUrl = URL.createObjectURL(new Blob(teile, { type: "application/pdf" }));
         const e = eintraege.find(x => x.id === w) || {};
         $("pdf-titel").textContent = [e.titel, e.absender, datum(e.datum)].filter(Boolean).join(" · ");
-        $("pdf-rahmen").src = r.url; $("pdf").classList.add("offen");
+        $("pdf-rahmen").src = pdfUrl; $("pdf").classList.add("offen"); $("toast").style.display = "none";
       } catch (e) { toast("PDF konnte nicht geöffnet werden"); }
       break;
     }
@@ -167,6 +179,34 @@ document.addEventListener("click", async ev => {
       if (el.dataset.scharf !== "1") { el.dataset.scharf = "1"; el.classList.add("scharf"); el.textContent = "Wirklich löschen?"; return; }
       await aktion("loeschen", w); toast("Gelöscht"); zeichnen(); break;
   }
+});
+// Hochladen: Datei als Base64 in Stücken an script.akte_hochladen; die Akte liest sie dann und meldet sich per Telegram
+function alsBase64(datei) {
+  return new Promise((ok, fehler) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1] || ""); r.onerror = fehler; r.readAsDataURL(datei); });
+}
+document.addEventListener("change", async ev => {
+  if (ev.target.id !== "datei") return;
+  const dateien = [...ev.target.files]; ev.target.value = "";
+  let geschafft = 0;
+  for (const [n, d] of dateien.entries()) {
+    if (d.size > 40e6) { toast(d.name + " ist zu groß (höchstens 40 MB)"); continue; }
+    try {
+      const b64 = await alsBase64(d), STUECK = 400000;
+      const kennung = Array.from(crypto.getRandomValues(new Uint8Array(10)), x => (x % 36).toString(36)).join("");
+      const name = btoa(unescape(encodeURIComponent(d.name))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      const teile = Math.max(1, Math.ceil(b64.length / STUECK));
+      let ergebnis = null;
+      for (let i = 0; i < teile; i++) {
+        toast(`Lade hoch: ${d.name} (${n + 1}/${dateien.length})${teile > 1 ? " – " + Math.round((i + 1) / teile * 100) + " %" : ""}`);
+        const r = await hass().callWS({ type: "call_service", domain: "script", service: "akte_hochladen", return_response: true,
+          service_data: { kennung, teil: i, name, letzt: i === teile - 1, daten: b64.slice(i * STUECK, (i + 1) * STUECK) } });
+        ergebnis = r && r.response && r.response.stdout;
+      }
+      if (String(ergebnis).includes('"fertig": true')) geschafft++; else toast(d.name + ": " + (String(ergebnis).match(/"fehler": "([^"]+)"/) || [, "hat nicht geklappt"])[1]);
+    } catch (e) { toast(d.name + ": hat nicht geklappt"); }
+  }
+  if (geschafft) toast(`${geschafft} Datei${geschafft === 1 ? "" : "en"} hochgeladen – die Akte liest sie jetzt (dauert je ca. 30 Sek., Meldung per Telegram)`);
+  setTimeout(neuLaden, 45000); setTimeout(neuLaden, 120000);
 });
 // Datenschutz: nach 3 Minuten ohne Berührung verdecken (Monitor im Flur)
 let zuletzt = Date.now();

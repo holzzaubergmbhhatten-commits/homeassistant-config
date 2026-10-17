@@ -544,6 +544,15 @@ def seite(auftrag):
     was = auftrag.get("was")
     liste = verzeichnis()
     eintrag = next((e for e in liste if e.get("id") == auftrag.get("id")), None)
+    if was == "lesen" and eintrag:
+        # PDF in Stücken über die Home-Assistant-Verbindung (der Medien-Weg liefert keine PDFs aus)
+        pfad = os.path.join(ABLAGE, eintrag.get("datei", ""))
+        ab = max(0, int(auftrag.get("ab") or 0))
+        with open(pfad, "rb") as f:
+            f.seek(ab)
+            roh = f.read(300_000)
+        gesamt = os.path.getsize(pfad)
+        return {"ok": True, "daten": base64.b64encode(roh).decode("ascii"), "gesamt": gesamt, "ende": ab + len(roh) >= gesamt}
     if was == "ansehen" and eintrag:
         import shutil
         os.makedirs(ANSICHT, exist_ok=True)
@@ -641,6 +650,42 @@ def ordner_pruefen(auftrag):
     return len(dateien)
 
 
+UPLOAD = "/media/akte/_upload/"
+
+
+def stueck(argumente):
+    """Hochladen über die Akte-Seite: Datei kommt in Stücken (Base64), das letzte Stück setzt sie zusammen."""
+    kennung, teil, name_b64, letzt = argumente[:4]
+    if not re.match(r"^[a-z0-9]{8,40}$", kennung) or not teil.isdigit():
+        return {"ok": False, "fehler": "ungültig"}
+    ordner = os.path.join(UPLOAD, kennung)
+    os.makedirs(ordner, exist_ok=True)
+    with open(os.path.join(ordner, f"{int(teil):05d}"), "w", encoding="ascii") as f:
+        f.write("".join(argumente[4:]))
+    if letzt != "1":
+        return {"ok": True}
+    import shutil
+    teile = sorted(os.listdir(ordner))
+    daten = "".join(open(os.path.join(ordner, t), encoding="ascii").read() for t in teile)
+    shutil.rmtree(ordner, ignore_errors=True)
+    roh = base64.b64decode(daten)
+    if len(roh) > 40_000_000:
+        return {"ok": False, "fehler": "Datei zu groß (höchstens 40 MB)"}
+    name = base64.urlsafe_b64decode(name_b64 + "=" * (-len(name_b64) % 4)).decode("utf-8", "replace")
+    endung = name.lower().rsplit(".", 1)[-1] if "." in name else ""
+    if roh[:4] == b"%PDF":
+        endung = "pdf"
+    elif endung not in ("jpg", "jpeg", "png"):
+        return {"ok": False, "fehler": "Nur PDF, JPG oder PNG"}
+    os.makedirs(ORDNER, exist_ok=True)
+    ziel = os.path.join(ORDNER, sicherer_name(name.rsplit(".", 1)[0], 60) + "_" + uuid.uuid4().hex[:4] + "." + endung)
+    with open(ziel, "wb") as f:
+        f.write(roh)
+    alt = time.time() - 60   # gleich abholbar (der Ordner-Abholer wartet sonst 20 Sekunden)
+    os.utime(ziel, (alt, alt))
+    return {"ok": True, "fertig": True}
+
+
 def umziehen():
     """Einmalig: Belege aus der früheren Ablage /media/akte/ in den Konfigurationsordner holen."""
     import shutil
@@ -664,6 +709,9 @@ def umziehen():
 
 def main():
     aktion = sys.argv[1] if len(sys.argv) > 1 else ""
+    if aktion == "stueck":
+        print(json.dumps(stueck(sys.argv[2:]), ensure_ascii=False))
+        return
     auftrag = json.loads(base64.b64decode(sys.argv[2]).decode("utf-8")) if len(sys.argv) > 2 else {}
     for d in (ABLAGE, EINGANG, SEITEN):
         os.makedirs(d, exist_ok=True)

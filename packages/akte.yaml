@@ -8,6 +8,8 @@
 # antwortet selbst per Telegram (Home Assistant wartet nur 60 Sekunden auf einen Befehl).
 shell_command:
   akte: python3 /config/claude_tools/akte.py {{ aktion }} {{ wert }}
+  # Hochladen über die Akte-Seite: ein Stück der Datei (Base64, in Argumente zu je 100 000 Zeichen geteilt)
+  akte_stueck: python3 /config/claude_tools/akte.py stueck {{ kennung }} {{ teil }} {{ name }} {{ letzt }} {{ daten }}
 
 automation:
   - id: telegram_akte_datei
@@ -133,7 +135,9 @@ script:
     mode: queued
     fields:
       was:
-        description: liste, ansehen, eingereicht, offen oder loeschen
+        description: liste, lesen (PDF in Stücken), eingereicht, offen oder loeschen
+      ab:
+        description: beim Lesen ab Byte
       id:
         description: Kennung des Eintrags
     sequence:
@@ -141,11 +145,52 @@ script:
         data:
           aktion: seite
           wert: >-
-            {{ {'was': was if was in ['liste', 'ansehen', 'eingereicht', 'offen', 'loeschen'] else 'liste',
-                'id': id | default('', true)} | to_json | base64_encode }}
+            {{ {'was': was if was in ['liste', 'lesen', 'eingereicht', 'offen', 'loeschen'] else 'liste',
+                'id': id | default('', true), 'ab': ab | default(0) | int(0)} | to_json | base64_encode }}
         response_variable: ergebnis
       - variables:
           antwort:
             stdout: "{{ ergebnis.stdout | default('') if ergebnis is defined and ergebnis is mapping else '' }}"
+      - stop: fertig
+        response_variable: antwort
+
+  akte_hochladen:
+    alias: "Akte: Datei von der Akte-Seite hochladen (in Stücken)"
+    mode: queued
+    max: 50
+    fields:
+      kennung:
+        description: zufällige Kennung der Datei (a–z, 0–9)
+      teil:
+        description: Nummer des Stücks (0, 1, 2 …)
+      name:
+        description: Dateiname (Base64, URL-sicher)
+      letzt:
+        description: true beim letzten Stück
+      daten:
+        description: Base64-Stück (höchstens 400 000 Zeichen)
+    sequence:
+      - action: shell_command.akte_stueck
+        data:
+          kennung: "{{ kennung | regex_replace('[^a-z0-9]', '') }}"
+          teil: "{{ teil | int(0) }}"
+          name: "{{ name | regex_replace('[^A-Za-z0-9_-]', '') }}"
+          letzt: "{{ 1 if letzt | default(false) else 0 }}"
+          daten: >-
+            {% set s = daten | regex_replace('[^A-Za-z0-9+/=]', '') %}{% for i in range(0, s | length, 100000) %}{{ s[i:i + 100000] }} {% endfor %}
+        response_variable: ergebnis
+      - variables:
+          antwort:
+            stdout: "{{ ergebnis.stdout | default('') if ergebnis is defined and ergebnis is mapping else '' }}"
+      # fertig zusammengesetzt → gleich abholen (antwortet per Telegram)
+      - if: "{{ letzt | default(false) and '\"fertig\": true' in antwort.stdout }}"
+        then:
+          - action: shell_command.akte
+            continue_on_error: true
+            data:
+              aktion: ordner
+              wert: >-
+                {{ {'chats': (states('input_text.telegram_empfaenger') | string).split(';') | map('trim')
+                              | select('match', '^-?\d+$') | list} | to_json | base64_encode }}
       - stop: fertig
         response_variable: antwort
