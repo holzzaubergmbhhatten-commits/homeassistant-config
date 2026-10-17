@@ -37,6 +37,7 @@ EXPORT = "/media/akte/_export/"        # nur kurz: ZIP für die Steuer
 ALT = "/media/akte/"                   # frühere Ablage, wird einmalig umgezogen
 VERZEICHNIS = "/config/akte.json"
 ZUSTAND = "/config/akte_zustand.json"   # letzte Liste je Chat (für "eingereicht 1 3")
+LOGBUCH = "/config/akte_log.json"       # letzte Aktivitäten (für die Monitor-Seite)
 
 TYPEN = ["Rechnung", "Arztrechnung", "Rezept/Verordnung", "Quittung/Kassenbon", "Versicherungspolice", "Versicherungsschreiben",
          "Erstattung/Leistungsabrechnung", "Vertrag", "Bescheid", "Lohn-/Gehaltsabrechnung", "Kontoauszug", "Garantie/Kaufbeleg",
@@ -56,6 +57,11 @@ JSON-Objekt:
  "person": "für wen (Vorname laut Dokument, sonst leer)",
  "steuer": {{"relevant": true/false, "art": eins von {json.dumps(STEUER_ARTEN, ensure_ascii=False)}, "jahr": Jahr der Zahlung,
             "betrag": absetzbarer Teil in Euro oder null (bei Handwerkern nur Arbeits-/Fahrtkosten)}},
+ "rechnungsnummer": "Rechnungs-/Vorgangs-/Vertragsnummer oder leer",
+ "zahlung": "offen" (Rechnung/Mahnung mit Zahlungsaufforderung), "bezahlt" (Quittung, Kassenbon, Vermerk "bezahlt",
+            Abbuchung per Lastschrift angekündigt, Kontoauszug) oder "keine" (kein Zahlungsbeleg),
+ "mahnung": true bei Mahnung/Zahlungserinnerung, sonst false,
+ "bezug": "bei Mahnung, Erstattung, Gutschrift oder Storno: Nummer der ursprünglichen Rechnung, sonst leer",
  "einreichen": true, wenn es eine Rechnung über Behandlung/Arznei/Hilfsmittel/Zahnarzt/Heilpraktiker ist, die man bei einer
                privaten Krankenversicherung, Beihilfe oder Zusatzversicherung zur Erstattung einreicht, sonst false,
  "fristen": [{{"datum": "JJJJ-MM-TT", "was": "z. B. Zahlung fällig / Einspruchsfrist / Kündigungsfrist / Garantie endet"}}],
@@ -68,6 +74,7 @@ Vermietung: Betrifft eine Rechnung ein vermietetes Objekt (Mietobjekt, Mieter/in
 kategorie "Vermietung" und steuer.art "Vermietung" mit dem vollen Betrag (Werbungskosten). "Handwerkerleistung" nur für den
 selbst bewohnten Haushalt, dann nur Arbeits-, Fahrt- und Maschinenkosten inkl. MwSt. als steuer.betrag.
 Ein Aufmaß, Angebot oder Lieferschein ist keine Rechnung: typ "Sonstiges" bzw. passend, steuer.relevant false.
+Steht beim Text dazu eine Notiz der Familie (z. B. "ist schon bezahlt", "gehört zur Ferienwohnung"), gilt sie vorrangig.
 Fristen nur, wenn sie wirklich im Dokument stehen oder sich klar ergeben (Einspruch: 1 Monat nach Bescheid-Datum).
 Wenn etwas unleserlich ist, lieber leer lassen als raten."""
 
@@ -75,7 +82,19 @@ FRAGE = """Du beantwortest Fragen zur digitalen Akte einer Familie (Belege, Vers
 Unten stehen passende Einträge aus dem Verzeichnis, die wichtigsten Dokumente sind angehängt. Antworte auf Deutsch, kurz und
 konkret, nenne die Quelle (Titel + Datum). Steht die Antwort nicht drin, sag das ehrlich. Keine Rechts- oder Steuerberatung
 erfinden. Antworte NUR mit JSON: {"antwort": "Text für Telegram", "senden": [Nummern der Einträge, die als Datei mitgeschickt
-werden sollen – nur wenn danach gefragt wird ("schick mir …") oder es klar hilft, höchstens 5]}"""
+werden sollen – nur wenn danach gefragt wird ("schick mir …") oder es klar hilft, höchstens 5],
+ "aenderungen": [nur wenn die Nachricht etwas über einen Eintrag MITTEILT, z. B. "die Rechnung vom Fliesenleger ist bezahlt"
+                 oder "das gehört zur Ferienwohnung": {"nr": Nummer, "notiz": "kurze Notiz", "zahlung": "bezahlt"|"offen",
+                 "kategorie": "…", "steuer_art": "…", "eingereicht": true}] – nur die Felder, die sich ändern}"""
+
+DURCHSICHT = """Du gehst die digitale Akte einer Familie durch (Liste unten, je Eintrag mit Nummer). Prüfe:
+- Mahnungen: gibt es die ursprüngliche Rechnung? Ist sie laut Notiz/Status bezahlt? Dann die Mahnung als bezahlt markieren.
+- Doppelte Einträge (gleicher Absender, Datum, Betrag), Aufmaße/Angebote ohne zugehörige Rechnung.
+- Kategorie und Steuer-Zuordnung offensichtlich falsch? (Rechnungen für vermietete Objekte → Vermietung)
+- Offene Zahlungen, deren Fälligkeit vorbei ist.
+Antworte NUR mit JSON: {"aenderungen": [{"nr": Nummer, "notiz": "…", "zahlung": "bezahlt"|"offen", "kategorie": "…",
+"steuer_art": "…"} – nur sichere Korrekturen, nur geänderte Felder], "bericht": "kurzer Überblick für Telegram (max. 10 Zeilen):
+was auffällt und was zu tun ist; leer lassen, wenn nichts Wichtiges"}"""
 
 HILFE = """📁 Digitale Akte – so geht's
 • Ohne Telegram: in Home Assistant unter Medien → Lokale Medien → Ordner „Akte-Eingang“ Dateien hochladen.
@@ -86,6 +105,9 @@ HILFE = """📁 Digitale Akte – so geht's
 • Steuer: „Steuer 2026“ – Übersicht mit Summen + ZIP mit allen Belegen
 • Arztrechnungen: „Einreichen“ – offene Belege als Dateien; danach „Eingereicht“ (alle) oder „Eingereicht 1 3“
 • Fristen: „Fristen“ – was in den nächsten Wochen fällig ist
+• Infos dazu: „Akte Die Rechnung vom Fliesenleger ist bezahlt“ oder „Akte Heizungsrechnung gehört zur Ferienwohnung“ –
+  wird beim Beleg vermerkt. Kommt eine Mahnung, sage ich, ob sie laut Akte schon bezahlt ist.
+• Jeden Sonntag gehe ich die Akte durch und melde, was auffällt (Mahnungen, offene Zahlungen, fehlende Rechnungen).
 Erinnerung kommt automatisch: Fristen eine Woche vorher, offene Arztrechnungen am Monatsanfang."""
 
 
@@ -170,7 +192,18 @@ def telegram(methode, felder, datei=None):
         return json.load(r)
 
 
+def logbuch(text, art="ok"):
+    log = json_laden(LOGBUCH, [])
+    log = (log if isinstance(log, list) else [])[-49:] + [{"zeit": datetime.now().strftime("%d.%m. %H:%M"), "text": text[:200], "art": art}]
+    try:
+        json_schreiben(LOGBUCH, log)
+    except OSError:
+        pass
+
+
 def senden(chat, text):
+    if not chat:
+        return
     for i in range(0, len(text), 3900):
         telegram("sendMessage", {"chat_id": chat, "text": text[i:i + 3900], "disable_web_page_preview": True})
 
@@ -294,26 +327,18 @@ def ablegen(auftrag):
         seiten_zu_pdf(seiten, ziel)
         _weg(quelle)
 
-    steuer = e.get("steuer") if isinstance(e.get("steuer"), dict) else {}
     neu_eintrag = eintrag or {"id": datetime.now().strftime("%Y%m%d%H%M%S") + uuid.uuid4().hex[:4], "sha": pruef,
                               "eingang": datetime.now().isoformat(timespec="seconds"), "chat": chat,
                               "von": auftrag.get("von", ""), "seiten": [] if ist_pdf else [os.path.basename(seite)]}
-    alt_einreichen = (eintrag or {}).get("einreichen") or {}
-    neu_eintrag.update({
-        "datei": ziel_rel, "typ": e.get("typ") or "Sonstiges", "kategorie": e.get("kategorie") or "Sonstiges",
-        "titel": e.get("titel") or e.get("typ") or "Dokument", "absender": e.get("absender") or "",
-        "datum": e.get("datum") or "", "betrag": e.get("betrag"), "person": e.get("person") or "",
-        "steuer": {"relevant": bool(steuer.get("relevant")), "art": steuer.get("art") or "keine",
-                   "jahr": steuer.get("jahr") or (int(jahr) if jahr.isdigit() else None), "betrag": steuer.get("betrag")},
-        "einreichen": {"noetig": bool(e.get("einreichen")), "status": alt_einreichen.get("status", "offen"),
-                       "am": alt_einreichen.get("am", "")} if e.get("einreichen") else {"noetig": False},
-        "fristen": [{"datum": f.get("datum"), "was": f.get("was", ""), "erinnert": False}
-                    for f in (e.get("fristen") or []) if re.match(r"^\d{4}-\d\d-\d\d$", str(f.get("datum", "")))],
-        "schlagworte": e.get("schlagworte") or [], "inhalt": (e.get("inhalt") or "")[:6000], "notiz": text,
-    })
+    felder_setzen(neu_eintrag, e, jahr)
+    neu_eintrag["datei"] = ziel_rel
+    if text and not re.match(r"^\s*(\+|beleg|akte|weiter|seite\s*\d*|rückseite|rueckseite)\s*$", text, re.I):
+        neu_eintrag["notiz"] = text
     if eintrag is None:
         liste.append(neu_eintrag)
+    hinweis_mahnung = mahnung_pruefen(liste, neu_eintrag)
     json_schreiben(VERZEICHNIS, liste)
+    logbuch(f"Abgelegt: {neu_eintrag['titel']} ({neu_eintrag['absender']})")
 
     zeilen = [f"📁 {e.get('antwort') or 'Abgelegt.'}",
               "🗂 " + " · ".join(t for t in [neu_eintrag["typ"], neu_eintrag["absender"], de_datum(neu_eintrag["datum"]),
@@ -326,8 +351,115 @@ def ablegen(auftrag):
     if neu_eintrag["einreichen"].get("noetig") and neu_eintrag["einreichen"].get("status") == "offen":
         zeilen.append("🏥 Noch bei der Versicherung einreichen – „Einreichen“ zeigt alle offenen.")
     for f in neu_eintrag["fristen"]:
-        zeilen.append(f"⏰ {de_datum(f['datum'])}: {f['was']} – ich erinnere eine Woche vorher.")
+        if f["datum"] >= date.today().isoformat():
+            zeilen.append(f"⏰ {de_datum(f['datum'])}: {f['was']} – ich erinnere eine Woche vorher.")
+    if hinweis_mahnung:
+        zeilen.append(hinweis_mahnung)
+    if neu_eintrag.get("notiz"):
+        zeilen.append(f"📝 Notiz: {neu_eintrag['notiz']}")
     senden(chat, "\n".join(zeilen))
+
+
+def felder_setzen(eintrag, e, jahr=None):
+    """Ergebnis von Claude ins Verzeichnis übernehmen (Status wie "eingereicht" und Notizen bleiben erhalten)."""
+    jahr = jahr or (e.get("datum") or "")[:4]
+    steuer = e.get("steuer") if isinstance(e.get("steuer"), dict) else {}
+    alt_einreichen = eintrag.get("einreichen") or {}
+    eintrag.update({
+        "typ": e.get("typ") or "Sonstiges", "kategorie": e.get("kategorie") or "Sonstiges",
+        "titel": e.get("titel") or e.get("typ") or "Dokument", "absender": e.get("absender") or "",
+        "datum": e.get("datum") or "", "betrag": e.get("betrag"), "person": e.get("person") or "",
+        "rechnungsnummer": e.get("rechnungsnummer") or "", "bezug": e.get("bezug") or "",
+        "mahnung": bool(e.get("mahnung")),
+        "zahlung": eintrag.get("zahlung") if eintrag.get("zahlung_fest") else (e.get("zahlung") or "keine"),
+        "steuer": {"relevant": bool(steuer.get("relevant")), "art": steuer.get("art") or "keine",
+                   "jahr": steuer.get("jahr") or (int(jahr) if str(jahr).isdigit() else None), "betrag": steuer.get("betrag")},
+        "einreichen": {"noetig": True, "status": alt_einreichen.get("status", "offen"), "am": alt_einreichen.get("am", "")}
+                      if e.get("einreichen") else {"noetig": False},
+        "fristen": [{"datum": f.get("datum"), "was": f.get("was", ""), "erinnert": False}
+                    for f in (e.get("fristen") or []) if re.match(r"^\d{4}-\d\d-\d\d$", str(f.get("datum", "")))],
+        "schlagworte": e.get("schlagworte") or [], "inhalt": (e.get("inhalt") or "")[:6000],
+    })
+
+
+def aenderungen_anwenden(liste, aenderungen, nummern=None):
+    """Änderungen aus Fragen/Durchsicht (Nummern 1-basiert, ggf. über eine Auswahl) übernehmen."""
+    texte = []
+    for a in aenderungen or []:
+        try:
+            i = int(a.get("nr")) - 1
+            e = liste[nummern[i]] if nummern is not None else liste[i]
+        except (TypeError, ValueError, IndexError, AttributeError):
+            continue
+        if a.get("notiz"):
+            e["notiz"] = (((e.get("notiz") or "") + " · ") if e.get("notiz") else "") + str(a["notiz"])[:300]
+        if a.get("zahlung") in ("bezahlt", "offen"):
+            e["zahlung"], e["zahlung_fest"] = a["zahlung"], True
+        if a.get("kategorie"):
+            e["kategorie"] = str(a["kategorie"])[:40]
+        if a.get("steuer_art") and a["steuer_art"] in STEUER_ARTEN:
+            e.setdefault("steuer", {}).update({"art": a["steuer_art"], "relevant": a["steuer_art"] != "keine"})
+        if a.get("eingereicht") and e.get("einreichen", {}).get("noetig"):
+            e["einreichen"].update({"status": "eingereicht", "am": date.today().isoformat()})
+        texte.append(f"{e.get('titel')} ({e.get('absender')})")
+    return texte
+
+
+def mahnung_pruefen(liste, neu):
+    """Bei einer Mahnung die ursprüngliche Rechnung suchen und sagen, ob sie laut Akte schon bezahlt ist."""
+    if not neu.get("mahnung"):
+        return ""
+    nr = (neu.get("bezug") or neu.get("rechnungsnummer") or "").strip()
+    kandidaten = [e for e in liste if e is not neu and not e.get("mahnung") and (
+        (nr and nr in (e.get("rechnungsnummer") or "")) or
+        (e.get("absender") and e.get("absender") == neu.get("absender") and e.get("betrag") and e.get("betrag") == neu.get("betrag")))]
+    if not kandidaten:
+        return "⚠️ Mahnung – die ursprüngliche Rechnung habe ich nicht in der Akte."
+    r = kandidaten[-1]
+    if r.get("zahlung") == "bezahlt":
+        neu["notiz"] = ((neu.get("notiz") or "") + " · laut Akte bezahlt").strip(" ·")
+        return f"✅ Mahnung zu „{r.get('titel')}“ vom {de_datum(r.get('datum'))} – laut Akte schon bezahlt" + \
+               (f" (Notiz: {r.get('notiz')})" if r.get("notiz") else "") + ". Ggf. beim Absender melden."
+    return f"⚠️ Mahnung zu „{r.get('titel')}“ vom {de_datum(r.get('datum'))} – laut Akte noch nicht bezahlt. " \
+           f"Wenn doch bezahlt: „Akte {r.get('absender')} ist bezahlt“ schreiben."
+
+
+def neu_lesen(auftrag):
+    """Einen Eintrag mit Notiz neu einordnen lassen (z. B. nach "gehört zur Ferienwohnung")."""
+    liste = verzeichnis()
+    e = next((x for x in liste if x.get("id") == auftrag.get("id")), None)
+    if not e:
+        return
+    pfad = os.path.join(ABLAGE, e.get("datei", ""))
+    bloecke = [dokument_block(pfad), {"type": "text", "text": f"Heute: {date.today().isoformat()}\nNotiz der Familie: {e.get('notiz') or '(keine)'}"}]
+    felder_setzen(e, claude(LESEN, bloecke, max_tokens=4000))
+    json_schreiben(VERZEICHNIS, liste)
+    logbuch(f"Neu eingeordnet: {e.get('titel')}")
+
+
+def durchsicht(auftrag):
+    """Wöchentlich (und nach dem Hochladen mehrerer Dateien): alles prüfen, Sicheres korrigieren, Auffälliges melden."""
+    liste = verzeichnis()
+    if not liste:
+        return
+    zeilen = []
+    for n, e in enumerate(liste, 1):
+        st = e.get("steuer") or {}
+        zeilen.append(" | ".join(str(x) for x in [n, e.get("typ"), e.get("titel"), e.get("absender"), e.get("datum"), e.get("betrag"),
+                      "Nr " + (e.get("rechnungsnummer") or "-"), "Bezug " + (e.get("bezug") or "-"), "Zahlung " + (e.get("zahlung") or "?"),
+                      "Mahnung" if e.get("mahnung") else "", e.get("kategorie"), "Steuer " + (st.get("art") if st.get("relevant") else "-"),
+                      "Fristen " + ", ".join(f"{f.get('datum')} {f.get('was')}" for f in e.get("fristen") or []),
+                      "Notiz " + (e.get("notiz") or "-"), (e.get("inhalt") or "")[:160].replace("\n", " ")]))
+    a = claude(DURCHSICHT, [{"type": "text", "text": f"Heute: {date.today().isoformat()}\n" + "\n".join(zeilen)}], max_tokens=3000, effort="medium")
+    geaendert = aenderungen_anwenden(liste, a.get("aenderungen"))
+    if geaendert:
+        json_schreiben(VERZEICHNIS, liste)
+    bericht = (a.get("bericht") or "").strip()
+    logbuch("Durchsicht: " + (f"{len(geaendert)} Korrektur(en)" if geaendert else "alles in Ordnung"))
+    if bericht or geaendert:
+        text = "🗂 Akte-Durchsicht\n" + (bericht or "") + (("\n\n✏️ Angepasst: " + "; ".join(geaendert)) if geaendert else "")
+        for c in auftrag.get("chats") or ([auftrag["chat"]] if auftrag.get("chat") else []):
+            senden(c, text)
 
 
 def _weg(pfad):
@@ -364,8 +496,9 @@ def frage_beantworten(chat, frage, liste):
         senden(chat, "📁 Die Akte ist noch leer – schick mir einfach Fotos oder PDFs von Belegen.")
         return
     treffer = suchen(liste, frage)
-    verz = "\n".join(f"[{i + 1}] {zeile(i + 1, liste[i])} | {liste[i].get('typ')} | Steuer: {liste[i]['steuer'].get('art') if liste[i].get('steuer', {}).get('relevant') else '-'}"
-                     f" | {(liste[i].get('inhalt') or '')[:300]}" for i in treffer)
+    verz = "\n".join(f"[{i + 1}] {zeile(i + 1, liste[i])} | {liste[i].get('typ')} | Nr {liste[i].get('rechnungsnummer') or '-'}"
+                     f" | Zahlung {liste[i].get('zahlung') or '?'} | Steuer: {liste[i]['steuer'].get('art') if liste[i].get('steuer', {}).get('relevant') else '-'}"
+                     f" | Notiz: {liste[i].get('notiz') or '-'} | {(liste[i].get('inhalt') or '')[:300]}" for i in treffer)
     inhalt = []
     groesse = 0
     for i in treffer[:3]:
@@ -376,7 +509,12 @@ def frage_beantworten(chat, frage, liste):
             inhalt.append(dokument_block(pfad))
     inhalt.append({"type": "text", "text": f"Heute: {date.today().isoformat()}\nVerzeichnis (Auszug):\n{verz}\n\nFrage: {frage}"})
     a = claude(FRAGE, inhalt, max_tokens=2000, effort="medium")
-    senden(chat, "📁 " + (a.get("antwort") or "Dazu habe ich nichts gefunden."))
+    geaendert = aenderungen_anwenden(liste, a.get("aenderungen"))
+    if geaendert:
+        json_schreiben(VERZEICHNIS, liste)
+        logbuch("Per Telegram geändert: " + "; ".join(geaendert))
+    senden(chat, "📁 " + (a.get("antwort") or "Dazu habe ich nichts gefunden.") +
+           (("\n📝 Gemerkt bei: " + "; ".join(geaendert)) if geaendert else ""))
     for nr in (a.get("senden") or [])[:5]:
         try:
             e = liste[int(nr) - 1]
@@ -562,7 +700,16 @@ def seite(auftrag):
         name = uuid.uuid4().hex + ".pdf"
         shutil.copyfile(os.path.join(ABLAGE, eintrag.get("datei", "")), os.path.join(ANSICHT, name))
         return {"ok": True, "datei": "akte/_ansicht/" + name}
-    if was in ("eingereicht", "offen") and eintrag and eintrag.get("einreichen", {}).get("noetig"):
+    if was == "notiz" and eintrag:
+        eintrag["notiz"] = (auftrag.get("text") or "").strip()[:500]
+        json_schreiben(VERZEICHNIS, liste)
+        logbuch(f"Notiz: {eintrag.get('titel')}")
+        if eintrag["notiz"]:
+            im_hintergrund(neu_lesen, {"id": eintrag["id"]})
+    elif was in ("bezahlt", "unbezahlt") and eintrag:
+        eintrag["zahlung"], eintrag["zahlung_fest"] = ("bezahlt" if was == "bezahlt" else "offen"), True
+        json_schreiben(VERZEICHNIS, liste)
+    elif was in ("eingereicht", "offen") and eintrag and eintrag.get("einreichen", {}).get("noetig"):
         eintrag["einreichen"].update({"status": was, "am": date.today().isoformat() if was == "eingereicht" else ""})
         json_schreiben(VERZEICHNIS, liste)
     elif was == "loeschen" and eintrag:
@@ -572,10 +719,17 @@ def seite(auftrag):
         liste.remove(eintrag)
         json_schreiben(VERZEICHNIS, liste)
     felder = ("id", "titel", "typ", "kategorie", "absender", "datum", "betrag", "person", "steuer", "einreichen", "fristen",
-              "schlagworte", "von", "eingang", "notiz")
+              "schlagworte", "von", "eingang", "notiz", "zahlung", "mahnung", "rechnungsnummer")
     aus = [dict({k: e.get(k) for k in felder}, kurz=(e.get("inhalt") or "")[:500]) for e in liste]
     aus.sort(key=lambda e: (e.get("datum") or "", e.get("eingang") or ""), reverse=True)
-    return {"ok": True, "eintraege": aus}
+    wartend = 0
+    for d in (EINGANG, ORDNER, UPLOAD):
+        try:
+            wartend += len([n for n in os.listdir(d) if not n.startswith(".")])
+        except OSError:
+            pass
+    log = json_laden(LOGBUCH, [])
+    return {"ok": True, "eintraege": aus, "wartend": wartend, "log": list(reversed(log if isinstance(log, list) else []))[:8]}
 
 
 def ankuendigen(auftrag):
@@ -602,6 +756,7 @@ def im_hintergrund(funktion, auftrag):
     try:
         funktion(auftrag)
     except Exception as fehler:  # noqa: BLE001
+        logbuch(f"Fehler: {type(fehler).__name__}: {str(fehler)[:150]}", "fehler")
         try:
             for c in ([auftrag.get("chat")] if auftrag.get("chat") else auftrag.get("chats") or [])[:1]:
                 senden(c, f"⚠️ Akte: Das hat nicht geklappt ({type(fehler).__name__}: {str(fehler)[:200]}). Bitte nochmal versuchen.")
@@ -619,10 +774,15 @@ def ordner_einlesen(auftrag):
     chat = chats[0] if chats else None
     for pfad in auftrag.get("dateien") or []:
         try:
-            ablegen({"datei": pfad, "chat": chat, "von": "Ordner Akte-Eingang", "text": "Beleg"})
+            ablegen({"datei": pfad, "chat": chat, "von": "Hochgeladen", "text": ""})
         except Exception as fehler:  # noqa: BLE001
-            if chat:
-                senden(chat, f"⚠️ Akte: {os.path.basename(pfad)} ging nicht ({str(fehler)[:150]}).")
+            logbuch(f"Fehler bei {os.path.basename(pfad)}: {str(fehler)[:150]}", "fehler")
+            senden(chat, f"⚠️ Akte: {os.path.basename(pfad)} ging nicht ({str(fehler)[:150]}).")
+    if len(auftrag.get("dateien") or []) > 1:
+        try:
+            durchsicht({"chat": chat})
+        except Exception as fehler:  # noqa: BLE001
+            logbuch(f"Fehler bei der Durchsicht: {str(fehler)[:150]}", "fehler")
 
 
 def ordner_pruefen(auftrag):
@@ -722,7 +882,8 @@ def main():
     if aktion == "seite":
         print(json.dumps(seite(auftrag), ensure_ascii=False))
         return
-    funktion = {"neu": ablegen, "befehl": befehl, "erinnerung": erinnerung, "ankuendigen": ankuendigen}.get(aktion)
+    funktion = {"neu": ablegen, "befehl": befehl, "erinnerung": erinnerung, "ankuendigen": ankuendigen,
+                "durchsicht": durchsicht}.get(aktion)
     if not funktion:
         print(json.dumps({"ok": False, "fehler": "unbekannte Aktion"}))
         return

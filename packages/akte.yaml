@@ -3,6 +3,8 @@
 #   Fotos ohne solchen Text erkennt packages/eingang.yaml (Rechnung & Co. → hierher, Pflanze → Garten, Haus → Eingang).
 # - Text: "Akte <Frage>", "Steuer 2026", "Einreichen", "Eingereicht [1 3]", "Fristen", "Akte Hilfe".
 # - Ohne Telegram: Dateien in Home Assistant → Medien → Lokale Medien → Ordner "Akte-Eingang" hochladen.
+# - Notizen ("ist bezahlt") per Telegram oder am Monitor; Mahnungen werden mit der Rechnung abgeglichen;
+#   sonntags prüft Claude die ganze Akte und meldet Auffälliges.
 # - Erinnerungen: Fristen eine Woche vorher (täglich geprüft), offene Arztrechnungen am Monatsanfang.
 # Ablage nur lokal: /config/akte_ablage (PDFs, damit in jedem Backup), /config/akte.json (Verzeichnis). Die Arbeit läuft im Hintergrund weiter und
 # antwortet selbst per Telegram (Home Assistant wartet nur 60 Sekunden auf einen Befehl).
@@ -93,6 +95,25 @@ automation:
               aktion: erinnerung
               wert: "{{ {'chats': chats, 'art': 'einreichen'} | to_json | base64_encode }}"
 
+  # Sonntags: Claude geht die ganze Akte durch (Mahnungen ↔ Rechnungen, offene Zahlungen, Dubletten, Zuordnung)
+  - id: akte_durchsicht
+    alias: "Akte: wöchentliche Durchsicht"
+    mode: single
+    triggers:
+      - trigger: time
+        at: "18:05:00"
+    conditions:
+      - condition: time
+        weekday: sun
+    actions:
+      - action: shell_command.akte
+        continue_on_error: true
+        data:
+          aktion: durchsicht
+          wert: >-
+            {{ {'chats': (states('input_text.telegram_empfaenger') | string).split(';') | map('trim')
+                          | select('match', '^-?\d+$') | list} | to_json | base64_encode }}
+
   # Ohne Telegram: Dateien in Home Assistant → Medien → Lokale Medien → "Akte-Eingang" hochladen, alle 2 Minuten abholen
   - id: akte_ordner_eingang
     alias: "Akte: Ordner Akte-Eingang abholen"
@@ -135,7 +156,9 @@ script:
     mode: queued
     fields:
       was:
-        description: liste, lesen (PDF in Stücken), eingereicht, offen oder loeschen
+        description: liste, lesen (PDF in Stücken), eingereicht, offen, loeschen, notiz, bezahlt oder unbezahlt
+      text:
+        description: Notiz zum Beleg
       ab:
         description: beim Lesen ab Byte
       id:
@@ -145,8 +168,8 @@ script:
         data:
           aktion: seite
           wert: >-
-            {{ {'was': was if was in ['liste', 'lesen', 'eingereicht', 'offen', 'loeschen'] else 'liste',
-                'id': id | default('', true), 'ab': ab | default(0) | int(0)} | to_json | base64_encode }}
+            {{ {'was': was if was in ['liste', 'lesen', 'eingereicht', 'offen', 'loeschen', 'notiz', 'bezahlt', 'unbezahlt'] else 'liste',
+                'id': id | default('', true), 'ab': ab | default(0) | int(0), 'text': text | default('', true)} | to_json | base64_encode }}
         response_variable: ergebnis
       - variables:
           antwort:
