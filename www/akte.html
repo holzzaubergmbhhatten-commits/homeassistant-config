@@ -53,6 +53,13 @@
   .einst-inhalt { background: var(--karte); color: var(--text); margin: 0 10px 10px; border-radius: 12px; padding: 16px; overflow: auto; flex: 1; display: flex; flex-direction: column; gap: 10px; }
   .gross-feld { min-height: 170px; font-size: 15px; line-height: 1.5; }
   .marke.ordner { background: #5856D61F; color: #5856D6; }
+  .ruhe { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; background: var(--karte); border-radius: 18px; padding: 22px 26px; margin: 4px 0 18px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .ruhe-bild { width: 200px; max-width: 100%; color: var(--text); flex: none; }
+  .ruhe-text { flex: 1; min-width: 240px; display: grid; gap: 8px; }
+  .ruhe-text h2 { margin: 0; font-size: 26px; }
+  .ruhe-zahlen { display: flex; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+  .ruhe-zahlen span { background: var(--bg); border-radius: 10px; padding: 6px 10px; font-variant-numeric: tabular-nums; }
+  .ruhe-titel { margin: 0 0 8px; font-size: 15px; color: var(--grau); text-transform: uppercase; letter-spacing: .05em; }
   .kacheln { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
   .kachel { background: var(--karte); border-radius: 14px; padding: 14px; text-align: left; display: grid; gap: 4px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
   .kachel b { font-size: 16px; } .kachel-icon { font-size: 26px; }
@@ -100,7 +107,7 @@
 <div class="toast" id="toast"></div>
 <input type="file" id="datei" multiple accept=".pdf,application/pdf,image/jpeg,image/png" hidden>
 <script>
-const SEITEN_VERSION = 8;
+const SEITEN_VERSION = 9;
 const $ = id => document.getElementById(id);
 const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const euro = x => x == null || x === "" ? "" : Number(x).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
@@ -157,6 +164,30 @@ function passt(e) {
   const text = [e.titel, e.typ, e.kategorie, e.absender, e.person, e.datum, datum(e.datum), e.kurz, e.notiz, e.rechnungsnummer, (e.schlagworte || []).join(" ")].join(" ").toLowerCase();
   return suche.toLowerCase().split(/\s+/).every(w => text.includes(w));
 }
+// Ruhe-Ansicht, wenn vorne nichts zu tun ist: freundliches Bild, kurzer Überblick, darunter die Ordner
+function ruhe() {
+  const steuerSumme = eintraege.filter(e => steuerJahr(e) === JAHR).reduce((s, e) => s + (Number((e.steuer && e.steuer.betrag) || e.betrag) || 0), 0);
+  const fristen = eintraege.flatMap(e => baldFristen(e).map(f => ({ ...f, e }))).sort((a, b) => a.datum.localeCompare(b.datum));
+  const n = ordnerNamen().length;
+  return `<div class="ruhe">
+    <svg class="ruhe-bild" viewBox="0 0 220 150" aria-hidden="true">
+      <ellipse cx="110" cy="136" rx="82" ry="9" fill="currentColor" opacity=".08"/>
+      <path d="M40 46h52l12 12h76a8 8 0 0 1 8 8v62a8 8 0 0 1-8 8H40a8 8 0 0 1-8-8V54a8 8 0 0 1 8-8z" fill="#F4B740"/>
+      <rect x="46" y="34" width="118" height="78" rx="6" fill="#fff" stroke="#E3E3E8"/>
+      <rect x="58" y="48" width="70" height="7" rx="3.5" fill="#D1D1D6"/><rect x="58" y="62" width="92" height="6" rx="3" fill="#E5E5EA"/>
+      <rect x="58" y="74" width="80" height="6" rx="3" fill="#E5E5EA"/>
+      <path d="M32 74h156a8 8 0 0 1 8 9l-6 45a8 8 0 0 1-8 7H38a8 8 0 0 1-8-7l-6-45a8 8 0 0 1 8-9z" fill="#FFCC4D"/>
+      <circle cx="172" cy="40" r="20" fill="#34C759"/><path d="M162 40l7 7 13-14" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div class="ruhe-text"><h2>Alles erledigt</h2>
+      <p class="klein">Keine Rückfragen, nichts zu zahlen, nichts einzureichen. Neue Belege einfach per Telegram schicken oder oben hochladen.</p>
+      <div class="ruhe-zahlen">
+        <span><b>${eintraege.length}</b> Belege</span><span><b>${n}</b> Ordner</span>
+        ${steuerSumme ? `<span><b>${euro(steuerSumme)}</b> für die Steuer ${JAHR}</span>` : ""}
+        ${fristen.length ? `<span>⏰ nächste Frist <b>${datum(fristen[0].datum)}</b>: ${esc(fristen[0].was)}</span>` : ""}
+      </div></div></div>
+    ${n ? `<h3 class="ruhe-titel">Ordner</h3>${ordnerKacheln()}` : ""}`;
+}
 function ordnerKacheln() {
   const namen = ordnerNamen();
   if (!namen.length) return `<div class="leer">Noch keine Ordner – sie entstehen automatisch, sobald Belege einsortiert werden.</div>`;
@@ -174,12 +205,12 @@ function zeichnen() {
       <button class="knopf blau gross-knopf" data-a="hochladen">⬆️ Dateien hochladen</button>
       <button class="knopf gross-knopf" data-a="einstellungen">⚙️ Ordner</button></div>
     <div class="filter">${FILTER.map(([w, t, fn]) => `<button data-a="filter" data-w="${esc(w)}" class="${w === filter || (w === "ordner" && filter.startsWith("ordner:")) ? "an" : ""}">${esc(t)}${["alle", "ordner"].includes(w) ? "" : " (" + eintraege.filter(fn).length + ")"}</button>`).join("")}</div>
-    ${wartend || log.length ? `<div class="status">${wartend ? `<span class="warte">⏳ ${wartend} Datei${wartend === 1 ? "" : "en"} werden gelesen …</span>` : ""}
-      ${log.slice(0, 3).map(l => `<span class="${l.art === "fehler" ? "fehler" : ""}">${esc(l.zeit)}: ${esc(l.text)}</span>`).join(" · ")}</div>` : ""}
+    ${wartend || log.slice(0, 3).some(l => l.art === "fehler") ? `<div class="status">${wartend ? `<span class="warte">⏳ ${wartend} Datei${wartend === 1 ? "" : "en"} werden gelesen …</span>` : ""}
+      ${(wartend ? log.slice(0, 2) : log.slice(0, 3).filter(l => l.art === "fehler")).map(l => `<span class="${l.art === "fehler" ? "fehler" : ""}">${esc(l.zeit)}: ${esc(l.text)}</span>`).join(" · ")}</div>` : ""}
     ${filter === "ordner" && !suche ? ordnerKacheln() : ""}
     ${filter.startsWith("ordner:") ? `<div class="ordner-kopf"><button class="knopf" data-a="filter" data-w="ordner">← Alle Ordner</button>
       <b>📂 ${esc(filter.slice(7))}</b><button class="knopf" data-a="umbenennen" data-w="${esc(filter.slice(7))}">✏️ Umbenennen</button></div>` : ""}
-    ${filter === "ordner" && !suche ? "" : sicht.length ? `<p class="summe">${sicht.length} Dokument${sicht.length === 1 ? "" : "e"}${summe ? " · zusammen " + euro(summe) : ""}</p>
+    ${filter === "ordner" && !suche ? "" : filter === "eingang" && !suche && !sicht.length && eintraege.length ? ruhe() : sicht.length ? `<p class="summe">${sicht.length} Dokument${sicht.length === 1 ? "" : "e"}${summe ? " · zusammen " + euro(summe) : ""}</p>
     <div class="liste">${sicht.map(e => `
       <div class="eintrag ${e.frage ? "fragt" : ""}">
         <div class="zeile"><b>${esc(e.titel || e.typ)}</b><span class="betrag">${euro(e.betrag)}</span></div>
@@ -214,7 +245,7 @@ function zeichnen() {
           <button class="knopf rot" data-a="loeschen" data-w="${esc(e.id)}">Löschen</button>
         </div></div>`).join("")}</div>`
       : `<div class="leer">${!eintraege.length ? "Die Akte ist noch leer.<br>Einfach ein Foto oder PDF an den Telegram-Bot schicken oder hier hochladen."
-          : filter === "eingang" && !suche ? "✅ Alles erledigt – alle Belege liegen in ihren Ordnern." : "Nichts gefunden."}</div>`}`;
+          : "Nichts gefunden."}</div>`}`;
   if (fokus) { const s = $("suche"); s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
 }
 document.addEventListener("input", ev => { if (ev.target.id === "suche") { suche = ev.target.value.trim(); clearTimeout(zeichnen.t); zeichnen.t = setTimeout(zeichnen, 250); } });
