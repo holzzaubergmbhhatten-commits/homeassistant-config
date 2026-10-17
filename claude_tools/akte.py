@@ -11,7 +11,7 @@ Ablauf (packages/akte.yaml):
   akte.py erinnerung <base64-JSON {chats: [...], art: "fristen"|"einreichen"}>
 
 Alles, was länger dauert, läuft im Hintergrund weiter (Home Assistant wartet höchstens 60 Sekunden auf Befehle) und
-antwortet selbst über den Telegram-Bot. Ablage: /media/akte/<Jahr>/…pdf, Verzeichnis: /config/akte.json – beides nur
+antwortet selbst über den Telegram-Bot. Ablage: /config/akte_ablage/<Jahr>/…pdf, Verzeichnis: /config/akte.json – beides nur
 lokal auf dem Home-Assistant-Rechner, nie im Repository. Schlüssel kommen aus den Integrationen (Anthropic, Telegram).
 """
 import base64
@@ -29,10 +29,12 @@ from datetime import date, datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import garten_ki  # noqa: E402  – Anthropic-Schlüssel und Modell
 
-ABLAGE = "/media/akte/"
-EINGANG = "/media/akte/_eingang/"
-SEITEN = "/media/akte/_seiten/"
-EXPORT = "/media/akte/_export/"
+# Ablage im Konfigurationsordner: der ist in jedem Home-Assistant-Backup enthalten (der Medien-Ordner nicht immer)
+ABLAGE = "/config/akte_ablage/"
+SEITEN = "/config/akte_ablage/_seiten/"
+EINGANG = "/media/akte/_eingang/"      # nur kurz: Download aus Telegram
+EXPORT = "/media/akte/_export/"        # nur kurz: ZIP für die Steuer
+ALT = "/media/akte/"                   # frühere Ablage, wird einmalig umgezogen
 VERZEICHNIS = "/config/akte.json"
 ZUSTAND = "/config/akte_zustand.json"   # letzte Liste je Chat (für "eingereicht 1 3")
 
@@ -536,11 +538,33 @@ def im_hintergrund(funktion, auftrag):
     os._exit(0)
 
 
+def umziehen():
+    """Einmalig: Belege aus der früheren Ablage /media/akte/ in den Konfigurationsordner holen."""
+    import shutil
+    try:
+        namen = os.listdir(ALT)
+    except OSError:
+        return
+    for n in namen:
+        quelle = os.path.join(ALT, n)
+        if n == "_seiten" or re.match(r"^\d{4}$", n):
+            ziel = os.path.join(ABLAGE, n)
+            os.makedirs(ziel, exist_ok=True)
+            for d in os.listdir(quelle):
+                if not os.path.exists(os.path.join(ziel, d)):
+                    shutil.move(os.path.join(quelle, d), os.path.join(ziel, d))
+            try:
+                os.rmdir(quelle)
+            except OSError:
+                pass
+
+
 def main():
     aktion = sys.argv[1] if len(sys.argv) > 1 else ""
     auftrag = json.loads(base64.b64decode(sys.argv[2]).decode("utf-8")) if len(sys.argv) > 2 else {}
     for d in (ABLAGE, EINGANG, SEITEN):
         os.makedirs(d, exist_ok=True)
+    umziehen()
     funktion = {"neu": ablegen, "befehl": befehl, "erinnerung": erinnerung}.get(aktion)
     if not funktion:
         print(json.dumps({"ok": False, "fehler": "unbekannte Aktion"}))
