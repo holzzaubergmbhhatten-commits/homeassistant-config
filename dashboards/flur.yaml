@@ -1528,6 +1528,75 @@ views:
       tap_action:
         action: navigate
         navigation_path: /flur-display/kameras
+- title: Raumklima
+  path: raumklima
+  icon: mdi:home-thermometer
+  type: sections
+  max_columns: 2
+  sections:
+  - type: grid
+    cards:
+    # Temperatur und Luftfeuchte aus den HomePods (packages/raumklima.yaml) – Räume ohne Wert werden ausgelassen
+    - type: markdown
+      grid_options:
+        columns: full
+      content: |-
+        ## <ha-icon icon="mdi:home-thermometer"></ha-icon> Raumklima
+        {%- set raeume = [('kuche', 'Küche'), ('badezimmer', 'Badezimmer'), ('badezimmer_2', 'Badezimmer 2'), ('schlafzimmer', 'Schlafzimmer'), ('muckis_zimmer', 'Muckis Zimmer'), ('wohnzimmer', 'Wohnzimmer'), ('buro', 'Büro'), ('diele', 'Diele'), ('flur', 'Flur'), ('kind_1', 'Kind 1'), ('kind_2', 'Kind 2')] %}
+        {%- set ns = namespace(zeilen=[]) %}
+        {%- for k, n in raeume %}
+        {%- set t = states('sensor.temperatur_' ~ k) %}
+        {%- set h = states('sensor.luftfeuchte_' ~ k) %}
+        {%- if t | is_number %}
+        {%- set ns.zeilen = ns.zeilen + [(n, t | float, h, states.sensor['temperatur_' ~ k].last_reported)] %}
+        {%- endif %}
+        {%- endfor %}
+        {%- if ns.zeilen %}
+
+        | Raum | Temperatur | Luftfeuchte | |
+        |:--|--:|--:|:--|
+        {%- for n, t, h, zeit in ns.zeilen %}
+        | **{{ n }}** | {{ '%.1f' | format(t) | replace('.', ',') }} °C | {{ (h | float(0) | round(0) | int ~ ' %') if h | is_number else '–' }} | {% if h | is_number and h | float > 65 %}<font color="#FF9500">feucht</font>{% elif h | is_number and h | float < 35 %}<font color="#FF9500">trocken</font>{% endif %} |
+        {%- endfor %}
+
+        <font color="#8E8E93">Aus den HomePods, alle 15 Minuten · zuletzt {{ (ns.zeilen | map(attribute=3) | max | as_local).strftime('%H:%M') }} Uhr</font>
+        {%- else %}
+        Noch keine Werte – die HomePods melden sich alle 15 Minuten.
+        {%- endif %}
+  - type: grid
+    cards:
+    - type: history-graph
+      title: Temperatur (24 Stunden)
+      hours_to_show: 24
+      grid_options:
+        columns: full
+      entities:
+      - entity: sensor.temperatur_kuche
+        name: Küche
+      - entity: sensor.temperatur_badezimmer
+        name: Badezimmer
+      - entity: sensor.temperatur_badezimmer_2
+        name: Badezimmer 2
+      - entity: sensor.temperatur_schlafzimmer
+        name: Schlafzimmer
+      - entity: sensor.temperatur_muckis_zimmer
+        name: Muckis Zimmer
+    - type: history-graph
+      title: Luftfeuchte (24 Stunden)
+      hours_to_show: 24
+      grid_options:
+        columns: full
+      entities:
+      - entity: sensor.luftfeuchte_kuche
+        name: Küche
+      - entity: sensor.luftfeuchte_badezimmer
+        name: Badezimmer
+      - entity: sensor.luftfeuchte_badezimmer_2
+        name: Badezimmer 2
+      - entity: sensor.luftfeuchte_schlafzimmer
+        name: Schlafzimmer
+      - entity: sensor.luftfeuchte_muckis_zimmer
+        name: Muckis Zimmer
 - title: Grundriss
   path: grundriss
   icon: mdi:floor-plan
