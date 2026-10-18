@@ -74,14 +74,24 @@ def zahl(x):
         return None
 
 
+def monate_im_zeitraum(z, einzug, auszug):
+    """Volle Mietmonate innerhalb des Abrechnungszeitraums."""
+    try:
+        von = max(date.fromisoformat(z["von"]), date.fromisoformat(einzug) if einzug else date.min)
+        bis = min(date.fromisoformat(z["bis"]), date.fromisoformat(auszug) if auszug else date.max)
+    except ValueError:
+        return 12
+    return max(0, (bis.year - von.year) * 12 + bis.month - von.month + 1) if bis >= von else 0
+
+
 # ---------- Belege der Akte auswerten ----------
 
 AUSWAHL = """Du hilfst einer Familie bei der Heiz- und Betriebskostenabrechnung für ihr Mietshaus (Objekt unten, zwei Wohnungen:
 EG Ferienwohnung, OG). Unten steht die Liste ihrer digitalen Akte. Suche ALLE Belege heraus, die Kosten des GANZEN Hauses im
 Abrechnungszeitraum betreffen könnten: Gas/Erdgas (Jahresrechnung des Versorgers), Heizungswartung, Schornsteinfeger,
 Heizstrom/Allgemeinstrom, Wasser/Abwasser, Niederschlagswasser, Müll/Abfall, Straßenreinigung, Grundsteuer (Bescheid),
-Gebäude-/Haftpflichtversicherung, Gartenpflege, Hausreinigung, Rauchmelder-/Zählermiete, Ablesedienst (OLMESS), Winterdienst.
-Auch Belege, die etwas später kommen (Jahresrechnungen nach Ende des Zeitraums) oder Bescheide für das ganze Jahr.
+Gebäude-/Haftpflichtversicherung, Gartenpflege, Hausreinigung, Rauchmelder-/Zählermiete, Ablesedienst (OLMESS), Winterdienst –
+und den Mietvertrag der vermieteten Wohnung (für Mieter, Einzug, Vorauszahlungen). Auch Belege, die etwas später kommen (Jahresrechnungen nach Ende des Zeitraums) oder Bescheide für das ganze Jahr.
 Nicht: Belege eines anderen Objekts (z. B. Hof Fünfhauser Weg), private Belege, reine Abschlagspläne ohne Jahresabrechnung.
 Antworte NUR mit JSON: {"nummern": [Nummern], "fehlt": ["typische Kostenarten, für die kein Beleg in der Liste steht, z. B.
 "Grundsteuerbescheid", "Wasserrechnung"]}"""
@@ -111,7 +121,13 @@ Antworte NUR mit JSON: {"brennstoff": [{"datum": "", "kwh": Zahl, "brutto": Zahl
  "abgaben": {"co2": Zahl|null, "energiesteuer": Zahl|null, "netzentgelt": Zahl|null, "weitere": Zahl|null},
  "heizneben": [{"art": "", "datum": "", "brutto": Zahl, "mwst": Zahl, "hhdl": Zahl|null, "hhtyp": "3"|"4"|"", "beleg": Nummer, "hinweis": ""}],
  "betrieb": [{"art": "", "bs": "S032", "datum": "", "brutto": Zahl, "mwst": Zahl, "hhdl": Zahl|null, "hhtyp": "", "beleg": Nummer, "hinweis": ""}],
- "wasser_cbm": Zahl|null, "hinweise": ["kurze Hinweise: Anteilige Umrechnungen, Unklarheiten, nicht umlagefähige Posten"]}"""
+ "wasser_cbm": Zahl|null,
+ "nutzer": [nur aus einem Mietvertrag: {"lage": "EG"|"OG", "nutzer": "Name der Mieter", "einzug": "JJJJ-MM-TT Mietbeginn",
+            "auszug": "JJJJ-MM-TT oder leer", "flaeche": Zahl|null (Wohnfläche laut Vertrag), "personen": Zahl|null,
+            "vz_monat": Zahl (monatliche Neben-/Betriebskostenvorauszahlung laut Vertrag), "vz_heizung_monat": Zahl|null (nur wenn
+            Heizkosten getrennt vorausgezahlt werden), "hinweis": "Widersprüche, z. B. Zahl und Betrag in Worten verschieden"}],
+ "hinweise": ["kurze Hinweise: Anteilige Umrechnungen, Unklarheiten, nicht umlagefähige Posten"]}
+"Oberwohnung" = OG, "Erdgeschoss"/Ferienwohnung = EG."""
 
 ZAEHLER = """Auf dem Foto ist ein Zähler (Wasser, Wärme, Gas, Strom oder Heizkostenverteiler) eines Hauses mit zwei Wohnungen
 (EG Ferienwohnung, OG). Lies ihn ab. Viele Zähler zeigen auch einen Stichtagswert mit Datum (z. B. "31.10.24" / "Stichtag") –
@@ -144,7 +160,7 @@ def auswerten(auftrag):
                        f"Ordner {e.get('ordner') or '-'} · {e.get('kategorie')} · {(e.get('inhalt') or '')[:250]}" for nr, e in kandidaten)
     wahl = akte.claude(AUSWAHL, [{"type": "text", "text": _zeitraum_text(z) + "\n\nAkte:\n" + (zeilen or "(leer)")}], max_tokens=2000)
     nummern = [n for n in wahl.get("nummern") or [] if isinstance(n, int) and 1 <= n <= len(liste)][:30]
-    ergebnis = {"brennstoff": [], "abgaben": {}, "heizneben": [], "betrieb": [], "wasser_cbm": None,
+    ergebnis = {"brennstoff": [], "abgaben": {}, "heizneben": [], "betrieb": [], "wasser_cbm": None, "nutzer": [],
                 "hinweise": [f"Kein Beleg gefunden für: {', '.join(wahl['fehlt'])}"] if wahl.get("fehlt") else []}
     for i in range(0, len(nummern), 6):   # höchstens 6 Belege je Anfrage
         bloecke = []
@@ -157,7 +173,7 @@ def auswerten(auftrag):
         if not bloecke:
             continue
         teil = akte.claude(AUSWERTEN, bloecke + [{"type": "text", "text": _zeitraum_text(z)}], max_tokens=6000, effort="medium")
-        for feld in ("brennstoff", "heizneben", "betrieb", "hinweise"):
+        for feld in ("brennstoff", "heizneben", "betrieb", "hinweise", "nutzer"):
             ergebnis[feld] += [x for x in teil.get(feld) or [] if x]
         for k, v in (teil.get("abgaben") or {}).items():
             if zahl(v) is not None:
@@ -183,6 +199,26 @@ def auswerten(auftrag):
     z["abgaben_vorschlag"] = bool(ergebnis["abgaben"])
     if ergebnis["wasser_cbm"] is not None and (not z.get("wasser_cbm") or z.get("wasser_vorschlag")):
         z["wasser_cbm"], z["wasser_vorschlag"] = ergebnis["wasser_cbm"], True
+    # Nutzerliste aus dem Mietvertrag: nur leere Felder füllen, Vorauszahlungen auf die Monate im Zeitraum hochrechnen
+    for n in ergebnis["nutzer"]:
+        e = next((x for x in z["einheiten"] if x.get("lage") == n.get("lage")), None)
+        if not e:
+            continue
+        for k, v in (("nutzer", n.get("nutzer")), ("einzug", n.get("einzug")), ("auszug", n.get("auszug")),
+                     ("hz_flaeche", n.get("flaeche")), ("ww_flaeche", n.get("flaeche")), ("personen", n.get("personen"))):
+            if v not in (None, "") and not e.get(k):
+                e[k] = v
+        if not e.get("nutzung"):
+            e["nutzung"] = "vermietet"
+        monate = monate_im_zeitraum(z, e.get("einzug"), e.get("auszug"))
+        for k, v in (("vz_neben", n.get("vz_monat")), ("vz_heizung", n.get("vz_heizung_monat"))):
+            if zahl(v) and not e.get(k):
+                e[k] = round(zahl(v) * monate, 2)
+        if n.get("hinweis"):
+            ergebnis["hinweise"].append(f"Mietvertrag {n.get('lage')}: {n['hinweis']}")
+        if zahl(n.get("vz_monat")):
+            ergebnis["hinweise"].append(f"Vorauszahlung {n.get('lage')}: {monate} Monate × {akte.euro(zahl(n['vz_monat']))} laut Mietvertrag "
+                                        "– bitte mit den tatsächlichen Zahlungseingängen vergleichen.")
     z["hinweise"] = [str(h)[:300] for h in ergebnis["hinweise"]][:12]
     anzahl = sum(len([x for x in z[f] if x.get("vorschlag")]) for f in ("brennstoff", "heizneben", "betrieb"))
     z["status"] = f"Aus {len(nummern)} Belegen {anzahl} Posten übernommen ({datetime.now().strftime('%d.%m. %H:%M')}) – bitte prüfen"
