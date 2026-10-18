@@ -11,10 +11,6 @@ views:
   sections:
   - type: grid
     cards:
-    # Begrüßung mit Familienwappen (www/wappen.js)
-    - type: custom:familie-gruss
-      grid_options:
-        columns: full
     # Nachricht von Jarvis / Telegram ("Schreib auf den Monitor: …"), verschwindet von selbst
     - type: conditional
       grid_options:
@@ -43,12 +39,17 @@ views:
             perform_action: script.jarvis_monitor_nachricht
             data:
               text: ''
-    # Uhrzeit und Datum klein statt der großen Kopfzeile (Platz sparen)
+    # Begrüßung mit Familienwappen (Bild von der eigenen Webseite), darunter Uhrzeit und Datum
     - type: markdown
       text_only: true
       grid_options:
         columns: full
-      content: >-
+      content: |-
+        {%- set h = now().hour -%}
+        <table><tr><td><img src="https://urlaub-wie-zuhause.eu/images/wappen-schlag.png" height="58"></td><td>
+        <h2>{{ 'Gute Nacht' if h < 5 or h >= 22 else 'Guten Morgen' if h < 11 else 'Guten Tag' if h < 18 else 'Guten Abend' }}, <font color="#B8902F"><i>Familie Schlag</i></font></h2>
+        </td></tr></table>
+
         ### {{ now().strftime('%H:%M') }} <font color="#8E8E93">· {{ ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'][now().weekday()] }}, {{ now().day }}. {{ ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'][now().month-1] }}</font>
       heading_style: title
     - type: weather-forecast
