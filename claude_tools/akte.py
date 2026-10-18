@@ -1030,6 +1030,8 @@ def seite(auftrag):
     if was == "alle_neu":
         im_hintergrund(alle_neu_lesen, {"chat": auftrag.get("chat")})
         return {"ok": True}
+    if was == "wappen_lesen":
+        return {"ok": True, "bild": base64.b64encode(open(WAPPEN, "rb").read()).decode("ascii") if os.path.exists(WAPPEN) else ""}
     if was == "wappen":
         try:
             wappen_speichern(base64.b64decode(auftrag.get("text") or ""))

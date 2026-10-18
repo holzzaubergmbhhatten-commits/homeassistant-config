@@ -22,5 +22,7 @@ __pycache__/
 !/www/wartung.html
 !/www/eingang.html
 !/www/akte.html
+!/www/ruhe.html
+!/www/ruhemodus.js
 !/www/pdfjs/
 !/www/apple-glas.css

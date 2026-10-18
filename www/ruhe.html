@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ruhebild</title>
+<!--
+  Ruhebild für den Touchmonitor im Flur (/flur-display/ruhe, eingeschaltet von www/ruhemodus.js nach 7 Minuten ohne
+  Berührung): Familienwappen, Uhrzeit, Datum, Wetter. Abends gedimmt, verschiebt sich langsam gegen Einbrennen.
+  Das Wappen kommt über die Home-Assistant-Anmeldung (script.akte_aktion, was: wappen_lesen), liegt nicht öffentlich.
+-->
+<style>
+  :root { --grund: #0E1012; --text: #F4EFE3; --gold: #D9A93F; --grau: #9A968C; }
+  html, body { margin: 0; height: 100%; background: radial-gradient(ellipse at 50% 35%, #1D1F22 0%, var(--grund) 70%); color: var(--text);
+    font-family: -apple-system, "SF Pro Display", Roboto, "Helvetica Neue", system-ui, sans-serif; overflow: hidden; cursor: none; }
+  .buehne { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 7vw; transition: transform 4s ease, opacity 2s; }
+  .wappen { height: 62vh; max-width: 38vw; object-fit: contain; filter: drop-shadow(0 18px 40px rgba(0,0,0,.6)); opacity: 0; transition: opacity 2s; }
+  .wappen.da { opacity: 1; }
+  .rechts { display: grid; gap: 1.6vh; }
+  .uhr { font-size: 17vh; font-weight: 200; letter-spacing: -.02em; line-height: .9; font-variant-numeric: tabular-nums; }
+  .datum { font-size: 3.6vh; color: var(--gold); letter-spacing: .04em; }
+  .wetter { font-size: 3vh; color: var(--grau); display: flex; gap: 1.2vw; align-items: center; }
+  .wetter b { color: var(--text); font-weight: 500; }
+  .hinweis { position: absolute; bottom: 3vh; width: 100%; text-align: center; font-size: 1.8vh; color: #5E5B55; letter-spacing: .08em; }
+  body.nacht .buehne { opacity: .45; }
+</style>
+</head>
+<body>
+<div class="buehne" id="buehne">
+  <img class="wappen" id="wappen" alt="">
+  <div class="rechts">
+    <div class="uhr" id="uhr">--:--</div>
+    <div class="datum" id="datum"></div>
+    <div class="wetter" id="wetter"></div>
+  </div>
+</div>
+<div class="hinweis">ANTIPPEN ZUM ZURÜCKKEHREN</div>
+<script>
+const $ = id => document.getElementById(id);
+function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
+const TAGE = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
+const MONATE = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+const WETTER = { "clear-night": "Klar", cloudy: "Bewölkt", fog: "Nebel", hail: "Hagel", lightning: "Gewitter", "lightning-rainy": "Gewitter",
+  partlycloudy: "Teils bewölkt", pouring: "Starkregen", rainy: "Regen", snowy: "Schnee", "snowy-rainy": "Schneeregen", sunny: "Sonnig",
+  windy: "Windig", "windy-variant": "Windig", exceptional: "Unwetter" };
+const ICON = { "clear-night": "🌙", cloudy: "☁️", fog: "🌫", hail: "🌨", lightning: "⛈", "lightning-rainy": "⛈", partlycloudy: "⛅",
+  pouring: "🌧", rainy: "🌦", snowy: "❄️", "snowy-rainy": "🌨", sunny: "☀️", windy: "💨", "windy-variant": "💨", exceptional: "⚠️" };
+function zeichnen() {
+  const d = new Date();
+  $("uhr").textContent = d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+  $("datum").textContent = `${TAGE[d.getDay()]}, ${d.getDate()}. ${MONATE[d.getMonth()]}`;
+  const h = hass(), w = h && h.states["weather.touchmonitor_home"];
+  if (w) $("wetter").innerHTML = `<span>${ICON[w.state] || ""}</span><b>${Math.round(w.attributes.temperature)} °C</b><span>${WETTER[w.state] || ""}</span>`;
+  const std = d.getHours();
+  document.body.classList.toggle("nacht", std >= 21 || std < 6);
+  // langsam wandern, damit sich nichts einbrennt
+  const m = d.getMinutes();
+  $("buehne").style.transform = `translate(${Math.sin(m / 9) * 2.5}vw, ${Math.cos(m / 7) * 2}vh)`;
+}
+async function wappenLaden() {
+  const h = hass(); if (!h) { setTimeout(wappenLaden, 500); return; }
+  try {
+    const r = await h.callWS({ type: "call_service", domain: "script", service: "akte_aktion", service_data: { was: "wappen_lesen" }, return_response: true });
+    let a = r && r.response && r.response.stdout; if (typeof a === "string") a = JSON.parse(a);
+    if (a && a.bild) { $("wappen").src = await freistellen("data:image/jpeg;base64," + a.bild); $("wappen").classList.add("da"); }
+  } catch (e) { /* ohne Wappen */ }
+}
+// Weißen Hintergrund um das Wappen durchsichtig machen: nur Weiß, das mit dem Bildrand verbunden ist
+// (weiße Flächen im Wappen selbst, z. B. das Schachbrett, bleiben), Kante weich auslaufen lassen
+async function freistellen(url) {
+  const img = new Image(); await new Promise((ok, f) => { img.onload = ok; img.onerror = f; img.src = url; });
+  const c = document.createElement("canvas"), w = c.width = img.width, h = c.height = img.height, g = c.getContext("2d");
+  g.drawImage(img, 0, 0);
+  const d = g.getImageData(0, 0, w, h), p = d.data, gesehen = new Uint8Array(w * h), stapel = [];
+  const hell = i => Math.min(p[i * 4], p[i * 4 + 1], p[i * 4 + 2]);
+  for (let x = 0; x < w; x++) stapel.push(x, (h - 1) * w + x);
+  for (let y = 0; y < h; y++) stapel.push(y * w, y * w + w - 1);
+  while (stapel.length) {
+    const i = stapel.pop();
+    if (gesehen[i] || hell(i) < 225) continue;
+    gesehen[i] = 1;
+    p[i * 4 + 3] = Math.max(0, Math.min(255, (255 - hell(i)) * 8));   // fast weiß → durchsichtig, Kante weich
+    const x = i % w, y = (i / w) | 0;
+    if (x > 0) stapel.push(i - 1); if (x < w - 1) stapel.push(i + 1);
+    if (y > 0) stapel.push(i - w); if (y < h - 1) stapel.push(i + w);
+  }
+  // eingeschlossene, reinweiße Flächen zwischen Helmdecke und Schild (größer als ein Schachbrettfeld) auch ausblenden
+  const gross = Math.max(1500, w * h / 300);
+  for (let s0 = 0; s0 < w * h; s0++) {
+    if (gesehen[s0] || hell(s0) < 246) continue;
+    const feld = [s0], rand = []; gesehen[s0] = 2;
+    for (let k = 0; k < feld.length; k++) {
+      const i = feld[k], x = i % w, y = (i / w) | 0;
+      for (const n of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, y > 0 ? i - w : -1, y < h - 1 ? i + w : -1]) {
+        if (n < 0 || gesehen[n]) continue;
+        if (hell(n) >= 246) { gesehen[n] = 2; feld.push(n); } else if (hell(n) >= 215) rand.push(n);
+      }
+    }
+    if (feld.length > gross) {
+      for (const i of feld) p[i * 4 + 3] = 0;
+      for (const i of rand) p[i * 4 + 3] = Math.min(p[i * 4 + 3], Math.max(0, (255 - hell(i)) * 6));
+    }
+  }
+  g.putImageData(d, 0, 0);
+  return c.toDataURL("image/png");
+}
+zeichnen(); setInterval(zeichnen, 10000); wappenLaden();
+</script>
+</body>
+</html>

@@ -188,7 +188,7 @@ script:
         data:
           aktion: seite
           wert: >-
-            {{ {'was': was if was in ['liste', 'lesen', 'eingereicht', 'offen', 'loeschen', 'notiz', 'bezahlt', 'unbezahlt', 'einstellungen', 'einstellungen_speichern', 'alle_neu', 'antwort', 'ordner_setzen', 'ordner_umbenennen', 'teilen', 'schreiben', 'wappen'] else 'liste',
+            {{ {'was': was if was in ['liste', 'lesen', 'eingereicht', 'offen', 'loeschen', 'notiz', 'bezahlt', 'unbezahlt', 'einstellungen', 'einstellungen_speichern', 'alle_neu', 'antwort', 'ordner_setzen', 'ordner_umbenennen', 'teilen', 'schreiben', 'wappen', 'wappen_lesen'] else 'liste',
                 'id': id | default('', true), 'ab': ab | default(0) | int(0), 'text': text | default('', true), 'ordner': ordner | default('', true), 'chat': (states('input_text.telegram_empfaenger') | string).split(';') | first | trim,
                 'chats': (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | list, 'wer': wer | default('', true)} | to_json | base64_encode }}
         response_variable: ergebnis
