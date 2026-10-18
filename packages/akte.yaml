@@ -15,9 +15,9 @@ shell_command:
 
 automation:
   - id: telegram_akte_datei
-    alias: "Akte: PDF oder Beleg-Foto aus Telegram ablegen"
+    alias: "Akte: PDF, ZIP oder Beleg-Foto aus Telegram ablegen"
     mode: queued
-    max: 20
+    max: 200
     triggers:
       - trigger: event
         event_type: telegram_attachment
@@ -25,13 +25,14 @@ automation:
       - condition: template
         value_template: >-
           {% set m = trigger.event.data.file_mime_type | default('') %}
-          {{ m == 'application/pdf' or (m.startswith('image/') and (trigger.event.data.text | default('', true))
+          {{ m in ['application/pdf', 'application/zip', 'application/x-zip-compressed'] or (m.startswith('image/') and (trigger.event.data.text | default('', true))
              is match('^\s*(\+|beleg|akte|weiter|seite|rückseite|rueckseite|wappen)', ignorecase=True)) }}
     actions:
       - variables:
           chat: "{{ trigger.event.data.chat_id }}"
           pdf: "{{ trigger.event.data.file_mime_type | default('') == 'application/pdf' }}"
-          name: "{{ now().strftime('%Y%m%d_%H%M%S') }}_{{ range(1000, 9999) | random }}.{{ 'pdf' if pdf else 'jpg' }}"
+          zip: "{{ 'zip' in (trigger.event.data.file_mime_type | default('')) }}"
+          name: "{{ now().strftime('%Y%m%d_%H%M%S') }}_{{ range(1000, 9999) | random }}.{{ 'pdf' if pdf else 'zip' if zip else 'jpg' }}"
       - action: telegram_bot.download_file
         continue_on_error: true
         data:

@@ -88,6 +88,9 @@ Vermietung: Betrifft eine Rechnung ein vermietetes Objekt (Mietobjekt, Mieter/in
 kategorie "Vermietung" und steuer.art "Vermietung" mit dem vollen Betrag (Werbungskosten). "Handwerkerleistung" nur für den
 selbst bewohnten Haushalt, dann nur Arbeits-, Fahrt- und Maschinenkosten inkl. MwSt. als steuer.betrag.
 Ein Aufmaß, Angebot oder Lieferschein ist keine Rechnung: typ "Sonstiges" bzw. passend, steuer.relevant false.
+Kommt das Dokument aus einem schon vorhandenen Ordner der Familie (unten "Lag vorher im Ordner"), ist das ein guter Hinweis
+für Person, Objekt und Thema – übernimm die Einteilung aber nicht stur: passe sie an die vorhandenen Ordner an und verbessere
+sie, wo es Sinn macht (z. B. "Scans 2019/Allianz" → "Marco / Versicherungen").
 Frage lieber nach, als falsch einzusortieren – aber nur, wenn es wirklich unklar ist. Steht eine Antwort der Familie in der
 Notiz, nicht noch einmal fragen. Steht beim Text dazu eine Notiz der Familie (z. B. "ist schon bezahlt", "gehört zur Ferienwohnung"), gilt sie vorrangig.
 Fristen nur, wenn sie wirklich im Dokument stehen oder sich klar ergeben (Einspruch: 1 Monat nach Bescheid-Datum).
@@ -386,6 +389,13 @@ def ablegen(auftrag):
     if not os.path.realpath(quelle).startswith((EINGANG, "/media/eingang/")) or not os.path.exists(quelle):
         senden(chat, "⚠️ Akte: Datei nicht gefunden – bitte nochmal schicken.")
         return
+    if quelle.lower().endswith(".zip"):
+        with open(quelle, "rb") as f:
+            n, uebersprungen = zip_entpacken(f.read(), "")
+        _weg(quelle)
+        senden(chat, f"📦 {n} Dokument{'e' if n != 1 else ''} aus dem ZIP übernommen – ich lese sie jetzt nacheinander (je ca. 30 Sekunden) "
+                     "und melde mich, wenn alles einsortiert ist." + (f" {uebersprungen} Datei(en) übersprungen (nur PDF, JPG, PNG)." if uebersprungen else ""))
+        return
     text = (auftrag.get("text") or "").strip()
     ist_pdf = quelle.lower().endswith(".pdf")
     liste = verzeichnis()
@@ -434,6 +444,8 @@ def ablegen(auftrag):
         if vorher is not None and eintrag is None:
             kontext += (f"\nVorheriges Dokument in diesem Chat (vor wenigen Minuten): {vorher.get('titel')} von "
                         f"{vorher.get('absender')}, {vorher.get('datum')}, {len(vorher.get('seiten') or [])} Seite(n).")
+        if auftrag.get("herkunft"):
+            kontext += f"\nLag vorher im Ordner: {auftrag['herkunft']}"
         return claude(LESEN, bloecke_ + [{"type": "text", "text": f"Heute: {date.today().isoformat()}\nVon: {auftrag.get('von', '')}\n"
                                                                     f"Text dazu: {text or '(keiner)'}\n{kontext}"}], max_tokens=4000)
 
@@ -476,6 +488,8 @@ def ablegen(auftrag):
                               "von": auftrag.get("von", ""), "seiten": [] if ist_pdf else [os.path.basename(seite)]}
     felder_setzen(neu_eintrag, e, jahr)
     neu_eintrag["datei"] = ziel_rel
+    if auftrag.get("herkunft"):
+        neu_eintrag["herkunft"] = auftrag["herkunft"][:200]
     if text and not re.match(r"^\s*(\+|beleg|akte|weiter|seite\s*\d*|rückseite|rueckseite)\s*$", text, re.I):
         neu_eintrag["notiz"] = text
     if eintrag is None:
@@ -1152,9 +1166,10 @@ def ordner_einlesen(auftrag):
     """Alles aus dem Ordner Akte-Eingang nacheinander ablegen (Antwort an den ersten Telegram-Empfänger)."""
     chats = [c for c in auftrag.get("chats") or [] if str(c).lstrip("-").isdigit()]
     chat = chats[0] if chats else None
+    herkunft = auftrag.get("herkunft") or {}
     for pfad in auftrag.get("dateien") or []:
         try:
-            ablegen({"datei": pfad, "chat": chat, "von": "Hochgeladen", "text": ""})
+            ablegen({"datei": pfad, "chat": chat, "von": "Hochgeladen", "text": "", "herkunft": herkunft.get(pfad, "")})
         except Exception as fehler:  # noqa: BLE001
             logbuch(f"Fehler bei {os.path.basename(pfad)}: {str(fehler)[:150]}", "fehler")
             senden(chat, f"⚠️ Akte: {os.path.basename(pfad)} ging nicht ({str(fehler)[:150]}).")
@@ -1169,6 +1184,8 @@ def ordner_pruefen(auftrag):
     """Schnell: liegen neue Dateien im Ordner? Dann in den Eingang holen und im Hintergrund ablegen."""
     os.makedirs(ORDNER, exist_ok=True)
     dateien = []
+    merk = json_laden(HERKUNFT, {})
+    herkunft = {}
     for n in sorted(os.listdir(ORDNER)):
         pfad = os.path.join(ORDNER, n)
         endung = n.lower().rsplit(".", 1)[-1] if "." in n else ""
@@ -1184,6 +1201,10 @@ def ordner_pruefen(auftrag):
         else:
             os.replace(pfad, ziel)
         dateien.append(ziel)
+        if merk.get(n):
+            herkunft[ziel] = merk.pop(n)
+    if herkunft:
+        json_schreiben(HERKUNFT, merk)
     # hängengebliebene Dateien im Eingang (z. B. nach einem Fehler) nach 15 Minuten nochmal versuchen, höchstens dreimal
     zaehler_pfad = os.path.join(EINGANG, ".versuche.json")
     zaehler = json_laden(zaehler_pfad, {})
@@ -1202,11 +1223,39 @@ def ordner_pruefen(auftrag):
     json_schreiben(zaehler_pfad, zaehler)
     if dateien:
         auftrag["dateien"] = dateien
+        auftrag["herkunft"] = herkunft
         im_hintergrund(ordner_einlesen, auftrag)
     return len(dateien)
 
 
 UPLOAD = "/media/akte/_upload/"
+HERKUNFT = "/media/Akte-Eingang/.herkunft.json"   # Ordnerpfad je hochgeladener Datei (aus Ordner-Upload oder ZIP)
+
+
+def zip_entpacken(roh, zip_name):
+    """ZIP (z. B. ein Ordner aus der Cloud) in den Akte-Eingang legen; der Pfad im ZIP wird als Herkunft gemerkt."""
+    os.makedirs(ORDNER, exist_ok=True)
+    merk = json_laden(HERKUNFT, {})
+    n = uebersprungen = 0
+    with zipfile.ZipFile(io.BytesIO(roh)) as z:
+        for info in z.infolist():
+            pfad = info.filename.replace("\\", "/")
+            teile = [t for t in pfad.split("/") if t]
+            if info.is_dir() or not teile or any(t.startswith((".", "__MACOSX")) for t in teile):
+                continue
+            endung = teile[-1].lower().rsplit(".", 1)[-1] if "." in teile[-1] else ""
+            if endung not in ("pdf", "jpg", "jpeg", "png") or info.file_size > 60_000_000:
+                uebersprungen += 1
+                continue
+            ziel = os.path.join(ORDNER, sicherer_name(teile[-1].rsplit(".", 1)[0], 60) + "_" + uuid.uuid4().hex[:4] + "." + endung)
+            with z.open(info) as quelle, open(ziel, "wb") as f:
+                f.write(quelle.read())
+            alt = time.time() - 60
+            os.utime(ziel, (alt, alt))
+            merk[os.path.basename(ziel)] = " / ".join([t for t in [zip_name] + teile[:-1] if t])[:200]
+            n += 1
+    json_schreiben(HERKUNFT, merk)
+    return n, uebersprungen
 
 
 def stueck(argumente):
@@ -1225,8 +1274,8 @@ def stueck(argumente):
     daten = "".join(open(os.path.join(ordner, t), encoding="ascii").read() for t in teile)
     shutil.rmtree(ordner, ignore_errors=True)
     roh = base64.b64decode(daten)
-    if len(roh) > 40_000_000:
-        return {"ok": False, "fehler": "Datei zu groß (höchstens 40 MB)"}
+    if len(roh) > 300_000_000:
+        return {"ok": False, "fehler": "Datei zu groß (höchstens 300 MB)"}
     name = base64.urlsafe_b64decode(name_b64 + "=" * (-len(name_b64) % 4)).decode("utf-8", "replace")
     if name.startswith("nk-zaehler_"):   # Zählerfoto für die Nebenkosten, nicht in die Akte
         import nebenkosten
@@ -1234,6 +1283,11 @@ def stueck(argumente):
             return {"ok": True, "fertig": True, "foto": nebenkosten.foto_speichern(roh, name)}
         except Exception as fehler:  # noqa: BLE001
             return {"ok": False, "fehler": f"Foto ging nicht: {str(fehler)[:100]}"}
+    if roh[:4] == b"PK\x03\x04":
+        n, uebersprungen = zip_entpacken(roh, name.rsplit("/", 1)[-1].rsplit(".", 1)[0])
+        return {"ok": True, "fertig": True, "anzahl": n, "uebersprungen": uebersprungen}
+    herkunft = name.rsplit("/", 1)[0] if "/" in name else ""   # Ordner-Upload: relativer Pfad
+    name = name.rsplit("/", 1)[-1]
     endung = name.lower().rsplit(".", 1)[-1] if "." in name else ""
     if roh[:4] == b"%PDF":
         endung = "pdf"
@@ -1243,6 +1297,10 @@ def stueck(argumente):
     ziel = os.path.join(ORDNER, sicherer_name(name.rsplit(".", 1)[0], 60) + "_" + uuid.uuid4().hex[:4] + "." + endung)
     with open(ziel, "wb") as f:
         f.write(roh)
+    if herkunft:
+        merk = json_laden(HERKUNFT, {})
+        merk[os.path.basename(ziel)] = herkunft[:200]
+        json_schreiben(HERKUNFT, merk)
     alt = time.time() - 60   # gleich abholbar (der Ordner-Abholer wartet sonst 20 Sekunden)
     os.utime(ziel, (alt, alt))
     return {"ok": True, "fertig": True}

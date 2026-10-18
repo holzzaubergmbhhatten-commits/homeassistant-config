@@ -118,10 +118,11 @@
   </div></div>
 <div class="decke" id="decke" data-a="aufdecken"><b>📁 Akte</b><span class="klein">Zum Öffnen antippen</span></div>
 <div class="toast" id="toast"></div>
-<input type="file" id="datei" multiple accept=".pdf,application/pdf,image/jpeg,image/png" hidden>
+<input type="file" id="datei" multiple accept=".pdf,application/pdf,image/jpeg,image/png,.zip,application/zip" hidden>
+<input type="file" id="ordner-datei" webkitdirectory multiple hidden>
 <script src="/local/wappen.js?v=1"></script>
 <script>
-const SEITEN_VERSION = 17;
+const SEITEN_VERSION = 18;
 const $ = id => document.getElementById(id);
 const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const euro = x => x == null || x === "" ? "" : Number(x).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
@@ -244,6 +245,7 @@ function zeichnen() {
     <div class="kopf"><h1 title="Version ${SEITEN_VERSION}">📁 Akte</h1><span class="klein">Belege als Foto oder PDF an den Telegram-Bot schicken (Text „Beleg“ dazu) oder hier hochladen. Fragen per Telegram: „Akte …“, „Steuer ${JAHR}“, „Einreichen“, „Fristen“.</span>
       <input class="suche" id="suche" type="search" placeholder="Suchen: Zahnarzt, Allianz, 2026 …" value="${esc(suche)}">
       <button class="knopf blau gross-knopf" data-a="hochladen">⬆️ Dateien hochladen</button>
+      <button class="knopf gross-knopf" data-a="ordner-hochladen">📁 Ganzen Ordner hochladen</button>
       <button class="knopf gross-knopf" data-a="nebenkosten">🧾 Nebenkosten</button>
       <button class="knopf gross-knopf" data-a="einstellungen">⚙️ Ordner</button></div>
     <div class="filter">${FILTER.map(([w, t, fn]) => `<button data-a="filter" data-w="${esc(w)}" class="${w === filter || (w === "ordner" && filter.startsWith("ordner:")) ? "an" : ""}">${esc(t)}${["alle", "ordner"].includes(w) ? "" : " (" + eintraege.filter(fn).length + ")"}</button>`).join("")}</div>
@@ -308,6 +310,9 @@ document.addEventListener("click", async ev => {
   const w = el.dataset.w;
   switch (el.dataset.a) {
     case "hochladen": $("datei").click(); break;
+    case "ordner-hochladen":
+      if (/iPhone|iPad|Android/i.test(navigator.userAgent)) { toast("Am Handy geht kein ganzer Ordner: in der Dateien-App den Ordner lange drücken → „Komprimieren“ und die ZIP-Datei mit „Dateien hochladen“ oder per Telegram schicken.", 12000); break; }
+      $("ordner-datei").click(); break;
     case "nebenkosten": if (window.nkOeffnen) window.nkOeffnen(); break;
     case "einstellungen": {
       const r = await skript({ was: "einstellungen" });
@@ -492,15 +497,18 @@ document.addEventListener("change", async ev => {
   } catch (e) { toast("Das Bild konnte nicht gelesen werden", 5000); }
 });
 document.addEventListener("change", async ev => {
-  if (ev.target.id !== "datei") return;
-  const dateien = [...ev.target.files]; ev.target.value = "";
-  let geschafft = 0;
+  if (ev.target.id !== "datei" && ev.target.id !== "ordner-datei") return;
+  // aus einem Ordner nur, was die Akte lesen kann (PDF, Fotos, ZIP); der Ordnerpfad geht als Hinweis zum Einsortieren mit
+  const dateien = [...ev.target.files].filter(d => /\.(pdf|jpe?g|png|zip)$/i.test(d.name) && !d.name.startsWith("."));
+  const andere = ev.target.files.length - dateien.length; ev.target.value = "";
+  if (andere) toast(`${andere} Datei${andere === 1 ? "" : "en"} übersprungen (nur PDF, JPG, PNG, ZIP)`, 5000);
+  let geschafft = 0, ausZip = 0;
   for (const [n, d] of dateien.entries()) {
-    if (d.size > 40e6) { toast(d.name + " ist zu groß (höchstens 40 MB)"); continue; }
+    if (d.size > 300e6) { toast(d.name + " ist zu groß (höchstens 300 MB)"); continue; }
     try {
       const b64 = await alsBase64(d), STUECK = 200000;
       const kennung = Array.from(crypto.getRandomValues(new Uint8Array(10)), x => (x % 36).toString(36)).join("");
-      const name = btoa(unescape(encodeURIComponent(d.name))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      const name = btoa(unescape(encodeURIComponent(d.webkitRelativePath || d.name))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
       const teile = Math.max(1, Math.ceil(b64.length / STUECK));
       let ergebnis = null;
       for (let i = 0; i < teile; i++) {
@@ -509,10 +517,12 @@ document.addEventListener("change", async ev => {
           service_data: { kennung, teil: i, name, letzt: i === teile - 1, daten: b64.slice(i * STUECK, (i + 1) * STUECK) } });
         ergebnis = r && r.response && r.response.stdout;
       }
+      const anzahl = (String(ergebnis).match(/"anzahl": (\d+)/) || [])[1];
+      if (anzahl) ausZip += Number(anzahl);
       if (String(ergebnis).includes('"fertig": true')) geschafft++; else toast(d.name + ": " + (String(ergebnis).match(/"fehler": "([^"]+)"/) || [, "hat nicht geklappt (" + String(ergebnis).slice(0, 100) + ")"])[1], 12000);
     } catch (e) { toast(d.name + ": hat nicht geklappt (" + String((e && (e.message || e.code)) || e).slice(0, 120) + ")", 12000); }
   }
-  if (geschafft) toast(`${geschafft} Datei${geschafft === 1 ? "" : "en"} hochgeladen – die Akte liest sie jetzt (dauert je ca. 30 Sek., Meldung per Telegram)`);
+  if (geschafft) toast(`${geschafft} Datei${geschafft === 1 ? "" : "en"} hochgeladen${ausZip ? ` (davon ${ausZip} Dokumente aus ZIP)` : ""} – die Akte liest sie jetzt nacheinander (je ca. 30 Sek., Meldung per Telegram)`, 8000);
   setTimeout(neuLaden, 45000); setTimeout(neuLaden, 120000);
 });
 // Datenschutz: nach 3 Minuten ohne Berührung verdecken (Monitor im Flur)
