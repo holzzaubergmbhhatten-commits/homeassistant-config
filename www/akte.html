@@ -2,6 +2,8 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
+<!-- Emoji-Schrift: der Flur-Monitor hat selbst keine und zeigt sonst Kästchen -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Akte</title>
 <!--
@@ -14,7 +16,7 @@
   :root { --bg: #F2F2F7; --karte: #fff; --text: #1C1C1E; --grau: #8E8E93; --gruen: #34C759; --rot: #FF3B30; --orange: #FF9500; --blau: #007AFF; --lila: #AF52DE; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
-    font-family: -apple-system, "SF Pro Text", Roboto, "Helvetica Neue", system-ui, sans-serif; }
+    font-family: -apple-system, "SF Pro Text", Roboto, "Helvetica Neue", system-ui, sans-serif, "Noto Color Emoji"; }
   body { overflow: auto; touch-action: manipulation; }
   button { font: inherit; border: 0; background: none; color: inherit; cursor: pointer; padding: 0; }
   main { max-width: 1200px; margin: 0 auto; padding: 14px 16px 60px; }
@@ -118,7 +120,7 @@
 <input type="file" id="datei" multiple accept=".pdf,application/pdf,image/jpeg,image/png" hidden>
 <script src="/local/wappen.js?v=1"></script>
 <script>
-const SEITEN_VERSION = 15;
+const SEITEN_VERSION = 16;
 const $ = id => document.getElementById(id);
 const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const euro = x => x == null || x === "" ? "" : Number(x).toLocaleString("de-DE", { style: "currency", currency: "EUR" });

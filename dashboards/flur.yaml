@@ -1568,7 +1568,7 @@ views:
   type: panel
   cards:
   - type: iframe
-    url: /local/ruhe.html?v=2
+    url: /local/ruhe.html?v=3
     aspect_ratio: 53.3%
 - title: Akte
   path: akte
@@ -1576,7 +1576,7 @@ views:
   type: panel
   cards:
   - type: iframe
-    url: /local/akte.html?v=15
+    url: /local/akte.html?v=16
     aspect_ratio: 53.3%
 - title: Infos
   path: infos
