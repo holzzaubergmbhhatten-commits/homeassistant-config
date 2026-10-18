@@ -99,7 +99,8 @@ def brief(pfad, absender, empfaenger, ort_datum, betreff, text, gruss="Mit freun
     t(links, hoehe - 50 * mm, 7, " · ".join(z for z in absender[:3] if z), farbe=GRAU)
     linie(links, hoehe - 51.5 * mm, links + 85 * mm, hoehe - 51.5 * mm, GRAU, 0.3)
     y = hoehe - 57 * mm
-    for z in [z for z in empfaenger if z][:6]:
+    anschrift = [u for z in empfaenger if z for u in _umbrechen(z, 11, 85 * mm)][:7]   # nicht in den Infoblock laufen
+    for z in anschrift:
         t(links, y, 11, z)
         y -= 14
     # Informationsblock rechts
