@@ -11,6 +11,10 @@ views:
   sections:
   - type: grid
     cards:
+    # Begrüßung mit Familienwappen (www/wappen.js)
+    - type: custom:familie-gruss
+      grid_options:
+        columns: full
     # Nachricht von Jarvis / Telegram ("Schreib auf den Monitor: …"), verschwindet von selbst
     - type: conditional
       grid_options:
@@ -1573,7 +1577,7 @@ views:
   type: panel
   cards:
   - type: iframe
-    url: /local/akte.html?v=14
+    url: /local/akte.html?v=15
     aspect_ratio: 53.3%
 - title: Infos
   path: infos

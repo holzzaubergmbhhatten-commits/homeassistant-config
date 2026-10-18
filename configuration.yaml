@@ -16,6 +16,8 @@ frontend:
   # Ruhemodus am Flur-Monitor (nur im Kiosk-Browser): nach 7 Minuten ohne Berührung das Ruhebild
   extra_module_url:
     - /local/ruhemodus.js?v=1
+    # Familienwappen und Begrüßungskarte "custom:familie-gruss" (Startseite Flur-Monitor)
+    - /local/wappen.js?v=1
 
 # Über die Oberfläche erstellte Automationen/Skripte/Szenen bleiben wie bisher.
 automation: !include automations.yaml

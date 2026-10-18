@@ -55,6 +55,8 @@
   .marke.ordner { background: #5856D61F; color: #5856D6; }
   .ruhe { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; background: var(--karte); border-radius: 18px; padding: 22px 26px; margin: 4px 0 18px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
   .ruhe-bild { width: 200px; max-width: 100%; color: var(--text); flex: none; }
+  .ruhe-wappen { height: 150px; width: auto; flex: none; filter: drop-shadow(0 2px 5px rgba(0,0,0,.18)); }
+  .ruhe-gruss { font-family: Georgia, serif; font-style: italic; color: #b8902f; margin-top: 2px; }
   .ruhe-text { flex: 1; min-width: 240px; display: grid; gap: 8px; }
   .ruhe-text h2 { margin: 0; font-size: 26px; }
   .ruhe-zahlen { display: flex; gap: 8px; flex-wrap: wrap; font-size: 14px; }
@@ -114,8 +116,9 @@
 <div class="decke" id="decke" data-a="aufdecken"><b>📁 Akte</b><span class="klein">Zum Öffnen antippen</span></div>
 <div class="toast" id="toast"></div>
 <input type="file" id="datei" multiple accept=".pdf,application/pdf,image/jpeg,image/png" hidden>
+<script src="/local/wappen.js?v=1"></script>
 <script>
-const SEITEN_VERSION = 14;
+const SEITEN_VERSION = 15;
 const $ = id => document.getElementById(id);
 const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const euro = x => x == null || x === "" ? "" : Number(x).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
@@ -181,6 +184,18 @@ function ruhe() {
   const steuerSumme = eintraege.filter(e => steuerJahr(e) === JAHR).reduce((s, e) => s + (Number((e.steuer && e.steuer.betrag) || e.betrag) || 0), 0);
   const fristen = eintraege.flatMap(e => baldFristen(e).map(f => ({ ...f, e }))).sort((a, b) => a.datum.localeCompare(b.datum));
   const n = unterordner("").length;
+  // Mit Familienwappen, sobald eins hinterlegt ist (sonst das Ablage-Bild)
+  let wappen = "";
+  try { wappen = localStorage.getItem("familie-wappen-v1") || ""; } catch (e) { /* ohne Speicher */ }
+  if (!wappen && window.familieWappen && !ruhe.geladen) {
+    ruhe.geladen = true;
+    window.familieWappen(hass()).then(b => { if (b && document.querySelector(".ruhe")) zeichnen(); });
+  }
+  if (wappen) return `<div class="ruhe"><img class="ruhe-wappen" src="${wappen}" alt="Familienwappen">
+    <div class="ruhe-text"><h2>Alles erledigt</h2><div class="ruhe-gruss">Familie Schlag – die Akte ist in Ordnung.</div>
+      <p class="klein">Keine Rückfragen, nichts zu zahlen, nichts einzureichen. Neue Belege einfach per Telegram schicken oder oben hochladen.</p>
+      ${ruheZahlen(steuerSumme, fristen, n)}</div></div>
+    ${n ? `<h3 class="ruhe-titel">Ordner</h3>${ordnerKacheln()}` : ""}`;
   return `<div class="ruhe">
     <svg class="ruhe-bild" viewBox="0 0 220 150" aria-hidden="true">
       <ellipse cx="110" cy="136" rx="82" ry="9" fill="currentColor" opacity=".08"/>
@@ -193,12 +208,15 @@ function ruhe() {
     </svg>
     <div class="ruhe-text"><h2>Alles erledigt</h2>
       <p class="klein">Keine Rückfragen, nichts zu zahlen, nichts einzureichen. Neue Belege einfach per Telegram schicken oder oben hochladen.</p>
-      <div class="ruhe-zahlen">
+      ${ruheZahlen(steuerSumme, fristen, n)}</div></div>
+    ${n ? `<h3 class="ruhe-titel">Ordner</h3>${ordnerKacheln()}` : ""}`;
+}
+function ruheZahlen(steuerSumme, fristen, n) {
+  return `<div class="ruhe-zahlen">
         <span><b>${eintraege.length}</b> Belege</span><span><b>${n}</b> Ordner</span>
         ${steuerSumme ? `<span><b>${euro(steuerSumme)}</b> für die Steuer ${JAHR}</span>` : ""}
         ${fristen.length ? `<span>⏰ nächste Frist <b>${datum(fristen[0].datum)}</b>: ${esc(fristen[0].was)}</span>` : ""}
-      </div></div></div>
-    ${n ? `<h3 class="ruhe-titel">Ordner</h3>${ordnerKacheln()}` : ""}`;
+      </div>`;
 }
 // Ordner mit Unterordnern ("Mirka / Versicherungen"): Kacheln für die nächste Ebene unter "basis"
 const imOrdner = (e, o) => e.ordner === o || (e.ordner || "").startsWith(o + " / ");
