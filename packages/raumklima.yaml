@@ -41,11 +41,12 @@ template:
         allowed_methods: [POST, GET]
         local_only: true
     variables:
-      # Zahlen kommen aus Kurzbefehle je nach Sprache als "21,5", "21.5" oder "21,5 °C"
-      q: "{{ trigger.query if trigger.query is defined and trigger.query else (trigger.json if trigger.json is defined and trigger.json is mapping else {}) }}"
-      raum: "{{ (q.raum | default('') | string | lower | trim).replace('ä','ae').replace('ö','oe').replace('ü','ue').replace('ß','ss').replace(' ','_') }}"
-      t: "{{ ((q.t | default('') | string).replace(',', '.') | regex_findall_index('-?[0-9]+(?:[.][0-9]+)?') if (q.t | default('') | string) is search('[0-9]') else none) }}"
-      h: "{{ ((q.h | default('') | string).replace(',', '.') | regex_findall_index('[0-9]+(?:[.][0-9]+)?') if (q.h | default('') | string) is search('[0-9]') else none) }}"
+      # Werte direkt aus der Adresse lesen (?raum=…&t=…&h=…). Zahlen kommen je nach Sprache als "21,5", "21.5" oder "21,5 °C".
+      raum: "{{ (trigger.query.raum | default('') | string | lower | trim).replace('ä','ae').replace('ö','oe').replace('ü','ue').replace('ß','ss').replace(' ','_') }}"
+      t_text: "{{ (trigger.query.t | default('') | string).replace(',', '.') }}"
+      h_text: "{{ (trigger.query.h | default('') | string).replace(',', '.') }}"
+      t: "{{ (t_text | string | regex_findall_index('-?[0-9]+(?:[.][0-9]+)?')) | float if t_text is search('[0-9]') else none }}"
+      h: "{{ (h_text | string | regex_findall_index('[0-9]+(?:[.][0-9]+)?')) | float if h_text is search('[0-9]') else none }}"
     sensor:
       - name: Raumklima HomePods
         unique_id: raumklima_homepods_letzte
