@@ -1,0 +1,205 @@
+# Raumklima aus den HomePods (Temperatur und Luftfeuchte) – Apple gibt die HomePod-Sensoren nur in der Home-App heraus.
+# Ablauf: Home Assistant schaltet alle 15 Minuten den Schalter "HomePod-Abfrage" ein (über die HomeKit-Bridge in der
+# Home-App sichtbar). Eine Automation in der Home-App ("Wenn HomePod-Abfrage eingeschaltet wird") liest die HomePods und
+# schickt je Raum einen Aufruf an den Webhook unten:
+#   POST http://192.168.0.191:8123/api/webhook/raumklima_homepod?raum=kueche&t=<Temperatur>&h=<Luftfeuchte>
+# Der Webhook ist nur aus dem Heimnetz erreichbar (local_only). Raumnamen: siehe Liste der Sensoren unten; andere Namen
+# landen trotzdem im Sensor "Raumklima HomePods" (Attribut raeume).
+
+input_boolean:
+  homepod_abfrage:
+    name: HomePod-Abfrage
+    icon: mdi:home-thermometer-outline
+
+automation:
+  - id: raumklima_homepod_anstossen
+    alias: "Raumklima: HomePods alle 15 Minuten abfragen"
+    mode: single
+    triggers:
+      - trigger: time_pattern
+        minutes: "/15"
+    actions:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.homepod_abfrage
+      - delay: "00:00:30"
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.homepod_abfrage
+
+template:
+  - triggers:
+      - trigger: webhook
+        webhook_id: raumklima_homepod
+        allowed_methods: [POST, GET]
+        local_only: true
+    variables:
+      # Zahlen kommen aus Kurzbefehle je nach Sprache als "21,5", "21.5" oder "21,5 °C"
+      q: "{{ trigger.query if trigger.query is defined and trigger.query else (trigger.json if trigger.json is defined and trigger.json is mapping else {}) }}"
+      raum: "{{ (q.raum | default('') | string | lower | trim).replace('ä','ae').replace('ö','oe').replace('ü','ue').replace('ß','ss').replace(' ','_') }}"
+      t: "{{ ((q.t | default('') | string).replace(',', '.') | regex_findall_index('-?[0-9]+(?:[.][0-9]+)?') if (q.t | default('') | string) is search('[0-9]') else none) }}"
+      h: "{{ ((q.h | default('') | string).replace(',', '.') | regex_findall_index('[0-9]+(?:[.][0-9]+)?') if (q.h | default('') | string) is search('[0-9]') else none) }}"
+    sensor:
+      - name: Raumklima HomePods
+        unique_id: raumklima_homepods_letzte
+        icon: mdi:home-thermometer
+        device_class: timestamp
+        state: "{{ now().isoformat() }}"
+        attributes:
+          raeume: >-
+            {% set alt = (this.attributes.raeume if this is defined and this.attributes is defined and this.attributes.raeume is mapping else {}) %}
+            {% if raum %}{{ dict(alt.items() | list + [(raum, {'t': t, 'h': h, 'zeit': now().strftime('%H:%M')})]) }}{% else %}{{ alt }}{% endif %}
+      - name: "Temperatur Badezimmer"
+        unique_id: raumklima_badezimmer_temperatur
+        device_class: temperature
+        state_class: measurement
+        unit_of_measurement: "°C"
+        state: "{{ (t | float(0) | round(1)) if raum == 'badezimmer' and t not in (none, '') else (this.state if this is defined else none) }}"
+        availability: "{{ raum == 'badezimmer' or (this is defined and this.state not in ('unknown', 'unavailable', none)) }}"
+      - name: "Luftfeuchte Badezimmer"
+        unique_id: raumklima_badezimmer_feuchte
+        device_class: humidity
+        state_class: measurement
+        unit_of_measurement: "%"
+        state: "{{ (h | float(0) | round(0)) if raum == 'badezimmer' and h not in (none, '') else (this.state if this is defined else none) }}"
+        availability: "{{ raum == 'badezimmer' or (this is defined and this.state not in ('unknown', 'unavailable', none)) }}"
+      - name: "Temperatur Badezimmer 2"
+        unique_id: raumklima_badezimmer_2_temperatur
+        device_class: temperature
+        state_class: measurement
+        unit_of_measurement: "°C"
+        state: "{{ (t | float(0) | round(1)) if raum == 'badezimmer_2' and t not in (none, '') else (this.state if this is defined else none) }}"
+        availability: "{{ raum == 'badezimmer_2' or (this is defined and this.state not in ('unknown', 'unavailable', none)) }}"
+      - name: "Luftfeuchte Badezimmer 2"
+        unique_id: raumklima_badezimmer_2_feuchte
+        device_class: humidity
+        state_class: measurement
+        unit_of_measurement: "%"
+        state: "{{ (h | float(0) | round(0)) if raum == 'badezimmer_2' and h not in (none, '') else (this.state if this is defined else none) }}"
+        availability: "{{ raum == 'badezimmer_2' or (this is defined and this.state not in ('unknown', 'unavailable', none)) }}"
+      - name: "Temperatur Schlafzimmer"
+        unique_id: raumklima_schlafzimmer_temperatur
+        device_class: temperature
+        state_class: measurement
+        unit_of_measurement: "°C"
+        state: "{{ (t | float(0) | round(1)) if raum == 'schlafzimmer' and t not in (none, '') else (this.state if this is defined else none) }}"
+        availability: "{{ raum == 'schlafzimmer' or (this is defined and this.state not in ('unknown', 'unavailable', none)) }}"
+      - name: "Luftfeuchte Schlafzimmer"
+        unique_id: raumklima_schlafzimmer_feuchte
+        device_class: humidity
+        state_class: measurement
+        unit_of_measurement: "%"
+        state: "{{ (h | float(0) | round(0)) if raum == 'schlafzimmer' and h not in (none, '') else (this.state if this is defined else none) }}"
+        availability: "{{ raum == 'schlafzimmer' or (this is defined and this.state not in ('unknown', 'unavailable', none)) }}"
+      - name: "Temperatur Muckis Zimmer"
+        unique_id: raumklima_muckis_zimmer_temperatur
+        device_class: temperature
+        state_class: measurement
+        unit_of_measurement: "°C"
+        state: "{{ (t | float(0) | round(1)) if raum == 'muckis_zimmer' and t not in (none, '') else (this.state if this is defined else none) }}"
+        availability: "{{ raum == 'muckis_zimmer' or (this is defined and this.state not in ('unknown', 'unavailable', none)) }}"
+      - name: "Luftfeuchte Muckis Zimmer"
+        unique_id: raumklima_muckis_zimmer_feuchte
+        device_class: humidity
+        state_class: measurement
+        unit_of_measurement: "%"
+        state: "{{ (h | float(0) | round(0)) if raum == 'muckis_zimmer' and h not in (none, '') else (this.state if this is defined else none) }}"
+        availability: "{{ raum == 'muckis_zimmer' or (this is defined and this.state not in ('unknown', 'unavailable', none)) }}"
+      - name: "Temperatur Küche"
+        unique_id: raumklima_kueche_temperatur
+        device_class: temperature
+        state_class: measurement
+        unit_of_measurement: "°C"
+        state: "{{ (t | float(0) | round(1)) if raum == 'kueche' and t not in (none, '') else (this.state if this is defined else none) }}"
+        availability: "{{ raum == 'kueche' or (this is defined and this.state not in ('unknown', 'unavailable', none)) }}"
+      - name: "Luftfeuchte Küche"
+        unique_id: raumklima_kueche_feuchte
+        device_class: humidity
+        state_class: measurement
+        unit_of_measurement: "%"
+        state: "{{ (h | float(0) | round(0)) if raum == 'kueche' and h not in (none, '') else (this.state if this is defined else none) }}"
+        availability: "{{ raum == 'kueche' or (this is defined and this.state not in ('unknown', 'unavailable', none)) }}"
+      - name: "Temperatur Wohnzimmer"
+        unique_id: raumklima_wohnzimmer_temperatur
+        device_class: temperature
+        state_class: measurement
+        unit_of_measurement: "°C"
+        state: "{{ (t | float(0) | round(1)) if raum == 'wohnzimmer' and t not in (none, '') else (this.state if this is defined else none) }}"
+        availability: "{{ raum == 'wohnzimmer' or (this is defined and this.state not in ('unknown', 'unavailable', none)) }}"
+      - name: "Luftfeuchte Wohnzimmer"
+        unique_id: raumklima_wohnzimmer_feuchte
+        device_class: humidity
+        state_class: measurement
+        unit_of_measurement: "%"
+        state: "{{ (h | float(0) | round(0)) if raum == 'wohnzimmer' and h not in (none, '') else (this.state if this is defined else none) }}"
+        availability: "{{ raum == 'wohnzimmer' or (this is defined and this.state not in ('unknown', 'unavailable', none)) }}"
+      - name: "Temperatur Büro"
+        unique_id: raumklima_buero_temperatur
+        device_class: temperature
+        state_class: measurement
+        unit_of_measurement: "°C"
+        state: "{{ (t | float(0) | round(1)) if raum == 'buero' and t not in (none, '') else (this.state if this is defined else none) }}"
+        availability: "{{ raum == 'buero' or (this is defined and this.state not in ('unknown', 'unavailable', none)) }}"
+      - name: "Luftfeuchte Büro"
+        unique_id: raumklima_buero_feuchte
+        device_class: humidity
+        state_class: measurement
+        unit_of_measurement: "%"
+        state: "{{ (h | float(0) | round(0)) if raum == 'buero' and h not in (none, '') else (this.state if this is defined else none) }}"
+        availability: "{{ raum == 'buero' or (this is defined and this.state not in ('unknown', 'unavailable', none)) }}"
+      - name: "Temperatur Diele"
+        unique_id: raumklima_diele_temperatur
+        device_class: temperature
+        state_class: measurement
+        unit_of_measurement: "°C"
+        state: "{{ (t | float(0) | round(1)) if raum == 'diele' and t not in (none, '') else (this.state if this is defined else none) }}"
+        availability: "{{ raum == 'diele' or (this is defined and this.state not in ('unknown', 'unavailable', none)) }}"
+      - name: "Luftfeuchte Diele"
+        unique_id: raumklima_diele_feuchte
+        device_class: humidity
+        state_class: measurement
+        unit_of_measurement: "%"
+        state: "{{ (h | float(0) | round(0)) if raum == 'diele' and h not in (none, '') else (this.state if this is defined else none) }}"
+        availability: "{{ raum == 'diele' or (this is defined and this.state not in ('unknown', 'unavailable', none)) }}"
+      - name: "Temperatur Flur"
+        unique_id: raumklima_flur_temperatur
+        device_class: temperature
+        state_class: measurement
+        unit_of_measurement: "°C"
+        state: "{{ (t | float(0) | round(1)) if raum == 'flur' and t not in (none, '') else (this.state if this is defined else none) }}"
+        availability: "{{ raum == 'flur' or (this is defined and this.state not in ('unknown', 'unavailable', none)) }}"
+      - name: "Luftfeuchte Flur"
+        unique_id: raumklima_flur_feuchte
+        device_class: humidity
+        state_class: measurement
+        unit_of_measurement: "%"
+        state: "{{ (h | float(0) | round(0)) if raum == 'flur' and h not in (none, '') else (this.state if this is defined else none) }}"
+        availability: "{{ raum == 'flur' or (this is defined and this.state not in ('unknown', 'unavailable', none)) }}"
+      - name: "Temperatur Kind 1"
+        unique_id: raumklima_kind_1_temperatur
+        device_class: temperature
+        state_class: measurement
+        unit_of_measurement: "°C"
+        state: "{{ (t | float(0) | round(1)) if raum == 'kind_1' and t not in (none, '') else (this.state if this is defined else none) }}"
+        availability: "{{ raum == 'kind_1' or (this is defined and this.state not in ('unknown', 'unavailable', none)) }}"
+      - name: "Luftfeuchte Kind 1"
+        unique_id: raumklima_kind_1_feuchte
+        device_class: humidity
+        state_class: measurement
+        unit_of_measurement: "%"
+        state: "{{ (h | float(0) | round(0)) if raum == 'kind_1' and h not in (none, '') else (this.state if this is defined else none) }}"
+        availability: "{{ raum == 'kind_1' or (this is defined and this.state not in ('unknown', 'unavailable', none)) }}"
+      - name: "Temperatur Kind 2"
+        unique_id: raumklima_kind_2_temperatur
+        device_class: temperature
+        state_class: measurement
+        unit_of_measurement: "°C"
+        state: "{{ (t | float(0) | round(1)) if raum == 'kind_2' and t not in (none, '') else (this.state if this is defined else none) }}"
+        availability: "{{ raum == 'kind_2' or (this is defined and this.state not in ('unknown', 'unavailable', none)) }}"
+      - name: "Luftfeuchte Kind 2"
+        unique_id: raumklima_kind_2_feuchte
+        device_class: humidity
+        state_class: measurement
+        unit_of_measurement: "%"
+        state: "{{ (h | float(0) | round(0)) if raum == 'kind_2' and h not in (none, '') else (this.state if this is defined else none) }}"
+        availability: "{{ raum == 'kind_2' or (this is defined and this.state not in ('unknown', 'unavailable', none)) }}"
