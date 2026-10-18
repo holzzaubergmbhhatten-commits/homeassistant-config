@@ -6,6 +6,13 @@
 # Der Webhook ist nur aus dem Heimnetz erreichbar (local_only). Raumnamen: siehe Liste der Sensoren unten; andere Namen
 # landen trotzdem im Sensor "Raumklima HomePods" (Attribut raeume).
 
+# HomeKit-Bridge nur für diesen einen Schalter (Kopplungscode erscheint in Home Assistant unter Benachrichtigungen)
+homekit:
+  - name: HA Raumklima
+    filter:
+      include_entities:
+        - input_boolean.homepod_abfrage
+
 input_boolean:
   homepod_abfrage:
     name: HomePod-Abfrage
