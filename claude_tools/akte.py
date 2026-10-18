@@ -995,6 +995,9 @@ ANSICHT = "/media/akte/_ansicht/"   # kurzzeitige Kopie zum Anzeigen (nur mit Ho
 
 def seite(auftrag):
     was = auftrag.get("was")
+    if str(was).startswith("nk_"):   # Nebenkostenabrechnung (claude_tools/nebenkosten.py)
+        import nebenkosten
+        return nebenkosten.seite(auftrag)
     liste = verzeichnis()
     eintrag = next((e for e in liste if e.get("id") == auftrag.get("id")), None)
     if was == "lesen" and eintrag:
@@ -1225,6 +1228,12 @@ def stueck(argumente):
     if len(roh) > 40_000_000:
         return {"ok": False, "fehler": "Datei zu groß (höchstens 40 MB)"}
     name = base64.urlsafe_b64decode(name_b64 + "=" * (-len(name_b64) % 4)).decode("utf-8", "replace")
+    if name.startswith("nk-zaehler_"):   # Zählerfoto für die Nebenkosten, nicht in die Akte
+        import nebenkosten
+        try:
+            return {"ok": True, "fertig": True, "foto": nebenkosten.foto_speichern(roh, name)}
+        except Exception as fehler:  # noqa: BLE001
+            return {"ok": False, "fehler": f"Foto ging nicht: {str(fehler)[:100]}"}
     endung = name.lower().rsplit(".", 1)[-1] if "." in name else ""
     if roh[:4] == b"%PDF":
         endung = "pdf"

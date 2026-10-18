@@ -82,6 +82,7 @@
   .leer { text-align: center; padding: 50px 10px; color: var(--grau); line-height: 1.6; }
   .pdf { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: none; flex-direction: column; z-index: 20; }
   .pdf.offen { display: flex; }
+  #pdf { z-index: 25; }   /* Belege aus der Nebenkosten-Maske öffnen sich darüber */
   .pdf .leiste { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; color: #fff; gap: 10px; flex-wrap: wrap; }
   .pdf-seiten { flex: 1; overflow: auto; margin: 0 10px 10px; display: flex; flex-direction: column; align-items: center; gap: 12px; touch-action: pan-x pan-y pinch-zoom; }
   .pdf-seiten.gross { align-items: flex-start; }
@@ -120,7 +121,7 @@
 <input type="file" id="datei" multiple accept=".pdf,application/pdf,image/jpeg,image/png" hidden>
 <script src="/local/wappen.js?v=1"></script>
 <script>
-const SEITEN_VERSION = 16;
+const SEITEN_VERSION = 17;
 const $ = id => document.getElementById(id);
 const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const euro = x => x == null || x === "" ? "" : Number(x).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
@@ -243,6 +244,7 @@ function zeichnen() {
     <div class="kopf"><h1 title="Version ${SEITEN_VERSION}">📁 Akte</h1><span class="klein">Belege als Foto oder PDF an den Telegram-Bot schicken (Text „Beleg“ dazu) oder hier hochladen. Fragen per Telegram: „Akte …“, „Steuer ${JAHR}“, „Einreichen“, „Fristen“.</span>
       <input class="suche" id="suche" type="search" placeholder="Suchen: Zahnarzt, Allianz, 2026 …" value="${esc(suche)}">
       <button class="knopf blau gross-knopf" data-a="hochladen">⬆️ Dateien hochladen</button>
+      <button class="knopf gross-knopf" data-a="nebenkosten">🧾 Nebenkosten</button>
       <button class="knopf gross-knopf" data-a="einstellungen">⚙️ Ordner</button></div>
     <div class="filter">${FILTER.map(([w, t, fn]) => `<button data-a="filter" data-w="${esc(w)}" class="${w === filter || (w === "ordner" && filter.startsWith("ordner:")) ? "an" : ""}">${esc(t)}${["alle", "ordner"].includes(w) ? "" : " (" + eintraege.filter(fn).length + ")"}</button>`).join("")}</div>
     ${wartend || log.slice(0, 3).some(l => l.art === "fehler") ? `<div class="status">${wartend ? `<span class="warte">⏳ ${wartend} Datei${wartend === 1 ? "" : "en"} werden gelesen …</span>` : ""}
@@ -306,6 +308,7 @@ document.addEventListener("click", async ev => {
   const w = el.dataset.w;
   switch (el.dataset.a) {
     case "hochladen": $("datei").click(); break;
+    case "nebenkosten": if (window.nkOeffnen) window.nkOeffnen(); break;
     case "einstellungen": {
       const r = await skript({ was: "einstellungen" });
       const e = (r && r.einstellungen) || { ordner: [], hinweise: "" };
@@ -518,6 +521,7 @@ function beruehrt() { zuletzt = Date.now(); }
 setInterval(() => {
   if (Date.now() - zuletzt > 180000 && !$("decke").classList.contains("an")) {
     $("decke").classList.add("an"); $("pdf").classList.remove("offen"); $("einst").classList.remove("offen"); $("pdf-seiten").innerHTML = "";
+    if ($("nk") && $("nk").classList.contains("offen")) $("nk").querySelector('[data-n="zu"]').click();
     suche = ""; filter = "eingang"; zeichnen();
   }
 }, 10000);
@@ -542,5 +546,6 @@ setInterval(async () => {
   } catch (e) { /* später nochmal */ }
 }, 300000);
 </script>
+<script src="nebenkosten.js?v=1"></script>
 </body>
 </html>
