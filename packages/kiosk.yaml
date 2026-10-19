@@ -84,6 +84,17 @@ input_boolean:
     icon: mdi:translate
 
 automation:
+  # Der Kiosk-Browser (WebKit) läuft sonst tagelang und stürzt irgendwann ab ("Web process crashed"),
+  # wenn sein Speicher vollläuft – jede Nacht einmal frisch laden räumt ihn auf.
+  - id: kiosk_naechtlich_neu_laden
+    alias: "Monitor: jede Nacht um 4 Uhr frisch laden"
+    triggers:
+      - trigger: time
+        at: "04:00:00"
+    actions:
+      - action: rest_command.kiosk_dashboard
+        continue_on_error: true
+
   - id: kiosk_nach_start
     alias: "Monitor: nach dem Start das neue Dashboard anzeigen"
     description: >-
