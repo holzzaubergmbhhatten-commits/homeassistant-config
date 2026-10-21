@@ -654,6 +654,74 @@ script:
       - stop: fertig
         response_variable: antwort
 
+  jarvis_aufgabe_erledigt:
+    alias: Jarvis Aufgabe erledigt
+    description: >-
+      Hakt eine Aufgabe auf der Aufgabenliste als erledigt ab ("Müll rausbringen ist erledigt", "hak Rasen mähen ab")
+      oder macht sie wieder offen (wieder_offen = true). Es reicht ein Teil des Namens. Passen mehrere Aufgaben,
+      wird nichts geändert und die passenden kommen zurück – dann kurz nachfragen, welche gemeint ist.
+    icon: mdi:checkbox-marked-circle-outline
+    mode: queued
+    fields:
+      aufgabe:
+        name: Aufgabe
+        description: Name oder Teil des Namens der Aufgabe.
+        required: true
+        selector:
+          text:
+      wieder_offen:
+        name: Wieder offen
+        description: true, um eine erledigte Aufgabe wieder zu öffnen.
+        selector:
+          boolean:
+    sequence:
+      - variables:
+          liste: >-
+            {{ states.todo | selectattr('name', 'search', '(?i)^aufgaben')
+               | map(attribute='entity_id') | first | default('todo.aufgaben', true) }}
+          suche_status: "{{ 'completed' if wieder_offen | default(false) else 'needs_action' }}"
+      - action: todo.get_items
+        target:
+          entity_id: "{{ liste }}"
+        data:
+          status: "{{ suche_status }}"
+        response_variable: inhalt
+      - variables:
+          items: "{{ inhalt[liste]['items'] if inhalt is defined and liste in inhalt else [] }}"
+          such: "{{ aufgabe | lower | trim }}"
+          treffer: >-
+            {%- set genau = items | selectattr('summary', 'match', '(?i)^\\W*' ~ (such | regex_escape) ~ '\\W*$') | list -%}
+            {%- set ns = namespace(l=genau) -%}
+            {%- if not genau -%}
+              {%- for x in items -%}
+                {%- set name = x.summary | lower -%}
+                {%- if such in name or (such.split() | select('in', name) | list | count == such.split() | count) -%}
+                  {%- set ns.l = ns.l + [x] -%}
+                {%- endif -%}
+              {%- endfor -%}
+            {%- endif -%}
+            {{ ns.l }}
+      - if: "{{ treffer | count == 1 }}"
+        then:
+          - action: todo.update_item
+            target:
+              entity_id: "{{ liste }}"
+            data:
+              item: "{{ treffer[0].uid }}"
+              status: "{{ 'needs_action' if wieder_offen | default(false) else 'completed' }}"
+          - variables:
+              antwort:
+                ergebnis: "{{ 'wieder offen' if wieder_offen | default(false) else 'abgehakt' }}"
+                aufgabe: "{{ treffer[0].summary }}"
+        else:
+          - variables:
+              antwort:
+                ergebnis: "{{ 'mehrere passen – bitte nachfragen' if treffer | count > 1 else 'keine passende Aufgabe gefunden' }}"
+                passende: "{{ treffer | map(attribute='summary') | list }}"
+                offene_aufgaben: "{{ items | map(attribute='summary') | list if treffer | count == 0 else [] }}"
+      - stop: fertig
+        response_variable: antwort
+
 automation:
   - id: flur_nachricht_ablaufen
     alias: "Jarvis: Monitor-Nachricht nach Ablauf entfernen"
