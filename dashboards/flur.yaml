@@ -160,22 +160,14 @@ views:
         tap_action:
           action: navigate
           navigation_path: /flur-display/aufgaben
-    # Kompakt: eine Zeile je Aufgabe mit Datum (seit wann sie auf der Liste steht); abhaken im Reiter "Aufgaben"
-    - type: markdown
+    # Abhaken direkt hier: Kreis antippen = erledigt (Erledigtes und Eingabefeld nur im Reiter "Aufgaben")
+    - type: todo-list
+      entity: todo.aufgaben
+      hide_create: true
+      hide_completed: true
+      display_order: none
       grid_options:
         columns: full
-      content: |-
-        {% set l = state_attr('sensor.aufgaben_liste', 'items') or [] %}
-        {% set heute = now().strftime('%Y-%m-%d') %}
-        {% set gestern = (now() - timedelta(days=1)).strftime('%Y-%m-%d') %}
-        {% set faellig = l | selectattr('faellig', 'ne', '') | selectattr('faellig', 'le', heute) | list %}
-        {% set rest = l | reject('in', faellig) | sort(attribute='seit', reverse=true) | list %}
-        {% for x in (faellig + rest)[:10] %}
-        {%- set d = as_datetime(x.seit, none) %}
-        {{ '<br>' if not loop.first }}{% if x in faellig %}<font color="#FF3B30"><ha-icon icon="mdi:alert-circle"></ha-icon></font>{% elif x.seit >= gestern %}<font color="#34C759"><ha-icon icon="mdi:new-box"></ha-icon></font>{% else %}<font color="#8E8E93"><ha-icon icon="mdi:checkbox-blank-outline"></ha-icon></font>{% endif %} {{ x.titel[:60] }}{{ '…' if x.titel | length > 60 }} <font color="#8E8E93">· {{ 'fällig ' ~ x.faellig[8:10] ~ '.' ~ x.faellig[5:7] ~ '.' if x in faellig else ('neu' if x.seit >= gestern else 'seit ' ~ (d.strftime('%d.%m.') if d else x.seit)) }}</font>
-        {%- endfor %}
-        {%- if l | count > 10 %}<br><font color="#8E8E93">+ {{ l | count - 10 }} weitere</font>{% endif %}
-        {%- if not l %}<font color="#34C759"><ha-icon icon="mdi:check-circle"></ha-icon></font> <font color="#8E8E93">Alles erledigt</font>{% endif %}
     - type: heading
       heading: Ferienwohnung & Stellplätze
       heading_style: title
