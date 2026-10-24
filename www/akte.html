@@ -122,7 +122,7 @@
 <input type="file" id="ordner-datei" webkitdirectory multiple hidden>
 <script src="/local/wappen.js?v=1"></script>
 <script>
-const SEITEN_VERSION = 18;
+const SEITEN_VERSION = 19;
 const $ = id => document.getElementById(id);
 const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const euro = x => x == null || x === "" ? "" : Number(x).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
@@ -556,6 +556,6 @@ setInterval(async () => {
   } catch (e) { /* später nochmal */ }
 }, 300000);
 </script>
-<script src="nebenkosten.js?v=1"></script>
+<script src="nebenkosten.js?v=2"></script>
 </body>
 </html>

@@ -1637,7 +1637,7 @@ views:
   type: panel
   cards:
   - type: iframe
-    url: /local/akte.html?v=18
+    url: /local/akte.html?v=19
     aspect_ratio: 53.3%
 - title: Infos
   path: infos

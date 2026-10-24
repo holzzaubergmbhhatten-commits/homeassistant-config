@@ -91,7 +91,8 @@ EG Ferienwohnung, OG). Unten steht die Liste ihrer digitalen Akte. Suche ALLE Be
 Abrechnungszeitraum betreffen könnten: Gas/Erdgas (Jahresrechnung des Versorgers), Heizungswartung, Schornsteinfeger,
 Heizstrom/Allgemeinstrom, Wasser/Abwasser, Niederschlagswasser, Müll/Abfall, Straßenreinigung, Grundsteuer (Bescheid),
 Gebäude-/Haftpflichtversicherung, Gartenpflege, Hausreinigung, Rauchmelder-/Zählermiete, Ablesedienst (OLMESS), Winterdienst –
-und den Mietvertrag der vermieteten Wohnung (für Mieter, Einzug, Vorauszahlungen). Auch Belege, die etwas später kommen (Jahresrechnungen nach Ende des Zeitraums) oder Bescheide für das ganze Jahr.
+und den Mietvertrag der vermieteten Wohnung (für Mieter, Einzug, Vorauszahlungen) sowie ALLE Zählerstand-Protokolle /
+Ablesungen des Hauses, auch aus früheren Jahren (für die Zählerstände). Auch Belege, die etwas später kommen (Jahresrechnungen nach Ende des Zeitraums) oder Bescheide für das ganze Jahr.
 Nicht: Belege eines anderen Objekts (z. B. Hof Fünfhauser Weg), private Belege, reine Abschlagspläne ohne Jahresabrechnung.
 Antworte NUR mit JSON: {"nummern": [Nummern], "fehlt": ["typische Kostenarten, für die kein Beleg in der Liste steht, z. B.
 "Grundsteuerbescheid", "Wasserrechnung"]}"""
@@ -122,6 +123,10 @@ Antworte NUR mit JSON: {"brennstoff": [{"datum": "", "kwh": Zahl, "brutto": Zahl
  "heizneben": [{"art": "", "datum": "", "brutto": Zahl, "mwst": Zahl, "hhdl": Zahl|null, "hhtyp": "3"|"4"|"", "beleg": Nummer, "hinweis": ""}],
  "betrieb": [{"art": "", "bs": "S032", "datum": "", "brutto": Zahl, "mwst": Zahl, "hhdl": Zahl|null, "hhtyp": "", "beleg": Nummer, "hinweis": ""}],
  "wasser_cbm": Zahl|null,
+ "zaehler": [nur aus Ablese-Protokollen oder Zählerfotos: {"name": "kurz, z. B. Warmwasser EG", "art": "Kaltwasser"|"Warmwasser"|
+            "Wärmemenge"|"Gas"|"Strom"|"Hauptwasser"|"Sonstiges", "lage": "EG"|"OG"|"Haus"|"" (laut Beschriftung, sonst leer),
+            "nummer": "Zählernummer", "einheit": "m³"|"kWh", "staende": [{"datum": "JJJJ-MM-TT Ablesedatum", "stand": Zahl,
+            "hinweis": "z. B. Zähler getauscht, unleserlich, Eichfrist abgelaufen (geeicht bis …)"}]}],
  "nutzer": [nur aus einem Mietvertrag: {"lage": "EG"|"OG", "nutzer": "Name der Mieter", "einzug": "JJJJ-MM-TT Mietbeginn",
             "auszug": "JJJJ-MM-TT oder leer", "flaeche": Zahl|null (Wohnfläche laut Vertrag), "personen": Zahl|null,
             "vz_monat": Zahl (monatliche Neben-/Betriebskostenvorauszahlung laut Vertrag), "vz_heizung_monat": Zahl|null (nur wenn
@@ -154,13 +159,17 @@ def auswerten(auftrag):
     liste = akte.verzeichnis()
     von, bis = date.fromisoformat(z["von"]), date.fromisoformat(z["bis"])
     fenster = ((von - timedelta(days=120)).isoformat(), (bis + timedelta(days=300)).isoformat())
+    def ablesung(e):   # Zählerstand-Protokolle zählen unabhängig vom Datum (Stände vor/nach dem Zeitraum braucht man zum Schätzen)
+        t = " ".join([e.get("titel") or "", " ".join(e.get("schlagworte") or []), (e.get("inhalt") or "")[:400]]).lower()
+        return "zählerstand" in t or "zaehlerstand" in t or "ablesung" in t
     kandidaten = [(i + 1, e) for i, e in enumerate(liste)
-                  if not e.get("datum") or fenster[0] <= e["datum"] <= fenster[1] or e.get("typ") in ("Bescheid", "Versicherungspolice", "Vertrag")]
+                  if not e.get("datum") or fenster[0] <= e["datum"] <= fenster[1] or ablesung(e)
+                  or e.get("typ") in ("Bescheid", "Versicherungspolice", "Vertrag")]
     zeilen = "\n".join(f"{nr}. {e.get('titel')} · {e.get('absender')} · {e.get('datum')} · {akte.euro(e.get('betrag'))} · "
                        f"Ordner {e.get('ordner') or '-'} · {e.get('kategorie')} · {(e.get('inhalt') or '')[:250]}" for nr, e in kandidaten)
     wahl = akte.claude(AUSWAHL, [{"type": "text", "text": _zeitraum_text(z) + "\n\nAkte:\n" + (zeilen or "(leer)")}], max_tokens=2000)
     nummern = [n for n in wahl.get("nummern") or [] if isinstance(n, int) and 1 <= n <= len(liste)][:30]
-    ergebnis = {"brennstoff": [], "abgaben": {}, "heizneben": [], "betrieb": [], "wasser_cbm": None, "nutzer": [],
+    ergebnis = {"brennstoff": [], "abgaben": {}, "heizneben": [], "betrieb": [], "wasser_cbm": None, "nutzer": [], "zaehler": [],
                 "hinweise": [f"Kein Beleg gefunden für: {', '.join(wahl['fehlt'])}"] if wahl.get("fehlt") else []}
     for i in range(0, len(nummern), 6):   # höchstens 6 Belege je Anfrage
         bloecke = []
@@ -173,7 +182,7 @@ def auswerten(auftrag):
         if not bloecke:
             continue
         teil = akte.claude(AUSWERTEN, bloecke + [{"type": "text", "text": _zeitraum_text(z)}], max_tokens=6000, effort="medium")
-        for feld in ("brennstoff", "heizneben", "betrieb", "hinweise", "nutzer"):
+        for feld in ("brennstoff", "heizneben", "betrieb", "hinweise", "nutzer", "zaehler"):
             ergebnis[feld] += [x for x in teil.get(feld) or [] if x]
         for k, v in (teil.get("abgaben") or {}).items():
             if zahl(v) is not None:
@@ -199,6 +208,25 @@ def auswerten(auftrag):
     z["abgaben_vorschlag"] = bool(ergebnis["abgaben"])
     if ergebnis["wasser_cbm"] is not None and (not z.get("wasser_cbm") or z.get("wasser_vorschlag")):
         z["wasser_cbm"], z["wasser_vorschlag"] = ergebnis["wasser_cbm"], True
+    # Zählerstände aus Ablese-Protokollen: zum Zähler mit gleicher Nummer, neue Zähler anlegen, gleiche Ablesung nicht doppelt
+    def nr_norm(x):
+        return re.sub(r"[^0-9a-z]", "", str(x or "").lower())
+    for m in ergebnis["zaehler"]:
+        if not isinstance(m, dict) or not m.get("staende"):
+            continue
+        ziel = next((x for x in z["zaehler"] if nr_norm(m.get("nummer")) and nr_norm(x.get("nummer")) == nr_norm(m.get("nummer"))), None)
+        if ziel is None:
+            ziel = {"id": uuid.uuid4().hex[:8], "name": m.get("name") or m.get("art") or "Zähler", "art": m.get("art") or "",
+                    "lage": m.get("lage") or "", "nummer": str(m.get("nummer") or ""), "einheit": m.get("einheit") or "", "staende": []}
+            z["zaehler"].append(ziel)
+        for st in m["staende"]:
+            if zahl(st.get("stand")) is None or not re.match(r"^\d{4}-\d\d-\d\d$", str(st.get("datum") or "")):
+                continue
+            if any(x.get("datum") == st["datum"] for x in ziel.get("staende") or []):
+                continue
+            ziel.setdefault("staende", []).append({"datum": st["datum"], "stand": zahl(st["stand"]), "vorschlag": True,
+                                                   "hinweis": str(st.get("hinweis") or "")[:120], "quelle": "Ablese-Protokoll"})
+        ziel["staende"].sort(key=lambda x: x.get("datum") or "")
     # Nutzerliste aus dem Mietvertrag: nur leere Felder füllen, Vorauszahlungen auf die Monate im Zeitraum hochrechnen
     for n in ergebnis["nutzer"]:
         e = next((x for x in z["einheiten"] if x.get("lage") == n.get("lage")), None)

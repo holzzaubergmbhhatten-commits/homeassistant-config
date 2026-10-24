@@ -138,12 +138,23 @@
   }
   function zaehlerKarte(m, i) {
     const st = (m.staende || []);
-    const verbrauch = (() => { // Stand am nächsten zum Anfang/Ende des Zeitraums
-      if (st.length < 2) return "";
-      const naechster = d => st.reduce((b, s) => Math.abs(new Date(s.datum) - new Date(d)) < Math.abs(new Date(b.datum) - new Date(d)) ? s : b);
-      const a = naechster(nk.von), e = naechster(nk.bis);
-      if (a === e || zahl(roh(a.stand)) == null || zahl(roh(e.stand)) == null) return "";
-      return `Verbrauch ${datum(a.datum)} – ${datum(e.datum)}: <b>${zahlText(zahl(roh(e.stand)) - zahl(roh(a.stand)), 3)} ${esc(m.einheit || "")}</b>`;
+    // Verbrauch im Abrechnungszeitraum: abgelesen, wenn es Stände am Anfang/Ende gibt (±7 Tage), sonst aus den
+    // Ablesungen davor/danach geschätzt (gleichmäßiger Verbrauch angenommen) – Schätzungen sind als solche markiert
+    const verbrauch = (() => {
+      const pkt = st.map(s => ({ t: new Date(s.datum).getTime(), v: zahl(roh(s.stand)) })).filter(p => p.v != null && !isNaN(p.t)).sort((x, y) => x.t - y.t);
+      if (pkt.length < 2) return "";
+      const am = d => {
+        const t = new Date(d).getTime(), nah = pkt.find(p => Math.abs(p.t - t) <= 7 * 864e5);
+        if (nah) return { v: nah.v, art: "abgelesen" };
+        let i = pkt.findIndex(p => p.t > t);
+        const art = i > 0 ? "geschätzt" : "hochgerechnet";
+        if (i <= 0) i = i === 0 ? 1 : pkt.length - 1;   // davor: erste zwei, danach: letzte zwei Ablesungen
+        const p0 = pkt[i - 1], p1 = pkt[i];
+        return { v: p0.v + (p1.v - p0.v) * (t - p0.t) / (p1.t - p0.t), art };
+      };
+      const a = am(nk.von), e = am(nk.bis), diff = e.v - a.v;
+      const art = a.art === "abgelesen" && e.art === "abgelesen" ? "abgelesen" : a.art === "hochgerechnet" || e.art === "hochgerechnet" ? "hochgerechnet – ungenau" : "geschätzt aus den Ablesungen";
+      return `Verbrauch ${datum(nk.von)} – ${datum(nk.bis)}: <b>${a.art === "abgelesen" && e.art === "abgelesen" ? "" : "≈ "}${zahlText(diff, 1)} ${esc(m.einheit || "")}</b> (${art})`;
     })();
     return `<div class="nk-zeile"><b style="width:100%;display:flex;justify-content:space-between">${esc(m.name || "Zähler")}<button class="nk-x" data-n="zaehler-weg" data-w="${i}">✕</button></b>
       ${feld(`zaehler.${i}.name`, m.name, "Bezeichnung", "", "l")}${feld(`zaehler.${i}.art`, m.art, "Art", "", "m")}

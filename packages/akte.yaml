@@ -14,6 +14,36 @@ shell_command:
   akte_stueck: python3 /config/claude_tools/akte.py stueck {{ kennung }} {{ teil }} {{ name }} {{ letzt }} {{ daten }}
 
 automation:
+  # Nebenkosten Nadorster Str.: Zähler jedes Jahr zum Ende des Abrechnungszeitraums (31.10.) ablesen –
+  # eine Woche vorher als Aufgabe + Telegram, am Stichtag nochmal per Telegram
+  - id: nebenkosten_zaehler_ablesen
+    alias: "Nebenkosten: Zähler Nadorster Str. ablesen (Stichtag 31.10.)"
+    triggers:
+      - trigger: time
+        at: "09:05:00"
+    conditions:
+      - condition: template
+        value_template: "{{ now().month == 10 and now().day in [24, 31] }}"
+    actions:
+      - if: "{{ now().day == 24 }}"
+        then:
+          - action: todo.add_item
+            continue_on_error: true
+            target:
+              entity_id: todo.aufgaben
+            data:
+              item: "Zähler Nadorster Str. ablesen (Stichtag 31.10.)"
+              due_date: "{{ now().strftime('%Y') }}-10-31"
+              description: "Alle Zähler fotografieren (Nummer + Stand gut lesbar): Gas, Hauptwasser, 3× Kaltwasser, 2× Warmwasser, 3 Wärmezähler, Strom Allgemein. Fotos in der Akte unter Nebenkosten → Zählerfoto hochladen."
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
+          message: >-
+            {{ '🔢 In einer Woche (31.10.) Zähler in der Nadorster Str. ablesen' if now().day == 24 else '🔢 Heute Stichtag: Zähler in der Nadorster Str. ablesen' }}
+            – alle Zähler fotografieren (Nummer und Stand lesbar) und in der Akte unter 🧾 Nebenkosten → 📷 Zählerfoto hochladen.
+            Am besten mit der Mieterin zusammen oder ihr eine Kopie geben.
+
   - id: telegram_akte_datei
     alias: "Akte: PDF, ZIP oder Beleg-Foto aus Telegram ablegen"
     mode: queued
