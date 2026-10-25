@@ -859,17 +859,49 @@ def _weg(pfad):
 
 # ---------- Befehle ----------
 
+def normal(s):
+    """Für die Suche: klein, ohne Umlaute/ß (ä = ae = a), damit "Ovelgonne", "Ovelgoenne" und "Ovelgönne" gleich sind."""
+    s = str(s or "").lower().replace("ß", "ss")
+    for a, b in (("ä", "a"), ("ö", "o"), ("ü", "u"), ("ae", "a"), ("oe", "o"), ("ue", "u")):
+        s = s.replace(a, b)
+    return s
+
+
+def suchwoerter(e):
+    """Alle Wörter eines Eintrags (auch aus dem ganzen gelesenen Text), einmal und normalisiert – für die Suche am Monitor."""
+    text = " ".join(str(e.get(k) or "") for k in ("titel", "typ", "kategorie", "absender", "person", "notiz", "ordner",
+                                                    "rechnungsnummer", "herkunft", "inhalt"))
+    text += " " + " ".join(e.get("schlagworte") or []) + " " + " ".join(
+        str(b.get(k) or "") for b in e.get("belege") or [] for k in ("titel", "absender", "inhalt"))
+    return " ".join(dict.fromkeys(re.findall(r"[a-z0-9]{2,}", normal(text))))[:6000]
+
+
+def wort_passt(w, woerter, text):
+    """Wort kommt vor – auch als Teil eines Wortes, zusammengeschrieben oder mit einem kleinen Tippfehler."""
+    import difflib
+    if w in text or w in text.replace(" ", ""):
+        return True
+    if len(w) < 5:
+        return False
+    grenze = 0.8 if len(w) < 8 else 0.75
+    return any(difflib.SequenceMatcher(None, w, t[:len(w) + 1]).ratio() >= grenze for t in woerter if len(t) >= len(w) - 2)
+
+
 def suchen(liste, frage, anzahl=40):
-    woerter = [w for w in re.findall(r"[a-zäöüß0-9]{3,}", frage.lower())
+    woerter = [normal(w) for w in re.findall(r"[a-zäöüß0-9]{3,}", frage.lower())
                if w not in {"akte", "beleg", "belege", "was", "wie", "wer", "wann", "der", "die", "das", "und", "mir", "uns",
                             "unsere", "unser", "schick", "schicke", "bitte", "von", "vom", "für", "bei", "mit", "zum", "zur"}]
     jahre = re.findall(r"\b(20\d\d)\b", frage)
     bewertet = []
+    zusammen = "".join(woerter) if len(woerter) > 1 else ""   # "Ovel Gönne" → "ovelgonne"
     for i, e in enumerate(liste):
-        text = " ".join(str(e.get(k, "")) for k in ("titel", "typ", "kategorie", "absender", "person", "datum", "notiz")).lower()
-        text += " " + " ".join(e.get("schlagworte") or []).lower()
-        inhalt = (e.get("inhalt") or "").lower()
-        p = sum(3 for w in woerter if w in text) + sum(1 for w in woerter if w in inhalt)
+        text = normal(" ".join(str(e.get(k, "")) for k in ("titel", "typ", "kategorie", "absender", "person", "datum", "notiz", "ordner")))
+        text += " " + normal(" ".join(e.get("schlagworte") or []))
+        inhalt = suchwoerter(e)
+        alle = inhalt.split()
+        p = sum(3 for w in woerter if w in text) + sum(1 for w in woerter if w not in text and wort_passt(w, alle, inhalt))
+        if zusammen and wort_passt(zusammen, alle, inhalt):
+            p += 3
         if jahre and any(j in (e.get("datum") or "") for j in jahre):
             p += 2
         if e.get("typ") == "Versicherungspolice":
@@ -1404,7 +1436,7 @@ def seite(auftrag):
         json_schreiben(VERZEICHNIS, liste)
     felder = ("id", "titel", "typ", "kategorie", "absender", "datum", "betrag", "person", "steuer", "einreichen", "fristen",
               "schlagworte", "von", "eingang", "notiz", "zahlung", "mahnung", "rechnungsnummer", "ordner", "frage", "vorschlaege")
-    aus = [dict({k: e.get(k) for k in felder}, kurz=(e.get("inhalt") or "")[:500]) for e in liste]
+    aus = [dict({k: e.get(k) for k in felder}, kurz=(e.get("inhalt") or "")[:500], such=suchwoerter(e)) for e in liste]
     aus.sort(key=lambda e: (e.get("datum") or "", e.get("eingang") or ""), reverse=True)
     wartend = 0
     for d in (EINGANG, ORDNER, UPLOAD):

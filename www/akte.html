@@ -122,7 +122,7 @@
 <input type="file" id="ordner-datei" webkitdirectory multiple hidden>
 <script src="/local/wappen.js?v=1"></script>
 <script>
-const SEITEN_VERSION = 19;
+const SEITEN_VERSION = 20;
 const $ = id => document.getElementById(id);
 const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const euro = x => x == null || x === "" ? "" : Number(x).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
@@ -177,11 +177,47 @@ function alleFilter() {
   if (filter.startsWith("ordner:") && !f.some(x => x[0] === filter)) f.push([filter, "", e => e.ordner === filter.slice(7)]);
   return f;
 }
+// Suche: immer in ALLEN Dokumenten (nicht nur im gewählten Filter), im ganzen gelesenen Text, Umlaute/Leerzeichen egal
+// ("Ovel Gönne", "ovelgoenne"), kleine Tippfehler werden verziehen ("Ovelgonde")
+function normal(s) {
+  return String(s || "").toLowerCase().replace(/ß/g, "ss").replace(/ä/g, "a").replace(/ö/g, "o").replace(/ü/g, "u")
+    .replace(/ae/g, "a").replace(/oe/g, "o").replace(/ue/g, "u");
+}
+const suchCache = new WeakMap();
+function suchText(e) {
+  let c = suchCache.get(e);
+  if (!c) {
+    const text = normal([e.titel, e.typ, e.kategorie, e.absender, e.person, e.datum, datum(e.datum), e.kurz, e.notiz, e.ordner,
+      e.rechnungsnummer, (e.schlagworte || []).join(" "), e.such].join(" "));
+    c = { text, kompakt: text.replace(/[^a-z0-9]/g, ""), woerter: [...new Set(text.match(/[a-z0-9]{2,}/g) || [])] };
+    suchCache.set(e, c);
+  }
+  return c;
+}
+function aehnlich(a, b) {   // Anteil gleicher Zeichen (Levenshtein), 1 = gleich
+  const m = a.length, n = b.length; if (!m || !n) return 0;
+  let v = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const w = [i];
+    for (let j = 1; j <= n; j++) w[j] = Math.min(v[j] + 1, w[j - 1] + 1, v[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    v = w;
+  }
+  return 1 - v[n] / Math.max(m, n);
+}
+function wortPasst(w, c) {
+  if (c.text.includes(w) || c.kompakt.includes(w)) return true;
+  if (w.length < 5) return false;
+  const grenze = w.length < 8 ? 0.8 : 0.75;
+  return c.woerter.some(t => t.length >= w.length - 2 && (aehnlich(w, t.slice(0, w.length)) >= grenze || aehnlich(w, t) >= grenze));
+}
+function suchtreffer(e) {
+  const c = suchText(e), woerter = normal(suche).split(/[^a-z0-9]+/).filter(Boolean);
+  if (!woerter.length) return true;
+  return woerter.every(w => wortPasst(w, c)) || (woerter.length > 1 && wortPasst(woerter.join(""), c));
+}
 function passt(e) {
-  const f = alleFilter().find(x => x[0] === filter); if (f && !f[2](e)) return false;
-  if (!suche) return true;
-  const text = [e.titel, e.typ, e.kategorie, e.absender, e.person, e.datum, datum(e.datum), e.kurz, e.notiz, e.rechnungsnummer, (e.schlagworte || []).join(" ")].join(" ").toLowerCase();
-  return suche.toLowerCase().split(/\s+/).every(w => text.includes(w));
+  if (suche) return suchtreffer(e);
+  const f = alleFilter().find(x => x[0] === filter); return !f || f[2](e);
 }
 // Ruhe-Ansicht, wenn vorne nichts zu tun ist: freundliches Bild, kurzer Überblick, darunter die Ordner
 function ruhe() {
@@ -257,7 +293,7 @@ function zeichnen() {
       ${teile.map((t, i) => i < teile.length - 1 ? `<button class="knopf" data-a="filter" data-w="${esc("ordner:" + teile.slice(0, i + 1).join(" / "))}">📂 ${esc(t)}</button> ›`
         : `<b>📂 ${esc(t)}</b>`).join(" ")}
       <button class="knopf" data-a="umbenennen" data-w="${esc(o)}">✏️ Umbenennen</button></div>${ordnerKacheln(o)}`; })() : ""}
-    ${filter === "ordner" && !suche ? "" : filter === "eingang" && !suche && !sicht.length && eintraege.length ? ruhe() : sicht.length ? `<p class="summe">${sicht.length} Dokument${sicht.length === 1 ? "" : "e"}${summe ? " · zusammen " + euro(summe) : ""}</p>
+    ${filter === "ordner" && !suche ? "" : filter === "eingang" && !suche && !sicht.length && eintraege.length ? ruhe() : sicht.length ? `<p class="summe">${sicht.length} Dokument${sicht.length === 1 ? "" : "e"}${suche ? " gefunden (in allen Ordnern)" : ""}${summe ? " · zusammen " + euro(summe) : ""}</p>
     <div class="liste">${sicht.map(e => `
       <div class="eintrag ${e.frage ? "fragt" : ""}">
         <div class="zeile"><b>${esc(e.titel || e.typ)}</b><span class="betrag">${euro(e.betrag)}</span></div>
