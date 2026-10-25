@@ -37,6 +37,7 @@ EXPORT = "/media/akte/_export/"        # nur kurz: ZIP für die Steuer
 ALT = "/media/akte/"                   # frühere Ablage, wird einmalig umgezogen
 VERZEICHNIS = "/config/akte.json"
 ZUSTAND = "/config/akte_zustand.json"   # letzte Liste je Chat (für "eingereicht 1 3")
+RUECKFRAGEN = "/config/akte_rueckfragen.json"   # offene Rückfrage je Chat – die nächste Antwort ("Ja") geht an die Akte
 LOGBUCH = "/config/akte_log.json"       # letzte Aktivitäten (für die Monitor-Seite)
 WAPPEN = "/config/akte_wappen.jpg"          # Familienwappen für den Briefkopf (nur lokal)
 EINSTELLUNGEN = "/config/akte_einstellungen.json"   # Ordner und Hinweise der Familie (nur lokal, über die Akte-Seite)
@@ -148,9 +149,12 @@ SAMMELN = (r"geh(ö|oe)r\w*\s.{0,40}zusammen|kosten\s*-?\s*aufstellung|zusammen\
 VORGANG_WAEHLEN = """Die Familie möchte mehrere Belege aus ihrer digitalen Akte zu EINEM Vorgang zusammenfassen (z. B. ein Schaden, der
 reguliert werden soll, mit Kostenaufstellung). Unten die zuletzt abgelegten Einträge (neueste zuerst) mit Eingangszeit,
 Sendung (Fotos, die kurz nacheinander geschickt wurden, haben dieselbe Sendung) und Notiz. Wähle die Einträge, die gemeint
-sind – meist alle aus derselben Sendung bzw. die kurz nacheinander gekommenen zum genannten Anlass. Antworte NUR mit JSON:
+sind – meist alle aus derselben Sendung bzw. die kurz nacheinander gekommenen zum genannten Anlass, auch wenn sie in
+verschiedenen Ordnern gelandet sind (Material, Angebote, Lieferscheine, Notizen gehören meist dazu). Lieber einen Beleg zu viel
+nehmen als nachfragen – die Kostenaufstellung zeigt jeden Beleg einzeln. Steht unten schon eine Antwort der Familie auf eine
+Rückfrage, frag nicht noch einmal. Antworte NUR mit JSON:
 {"nummern": [Nummern], "titel": "kurzer Name des Vorgangs, z. B. Schaden Fußboden – Regulierung", "rueckfrage": "nur wenn
-wirklich unklar ist, welche gemeint sind, sonst leer"}"""
+wirklich unklar ist, welche gemeint sind (als Ja/Nein-Frage; noch ist NICHTS zusammengefasst), sonst leer"}"""
 
 VORGANG = """Du erstellst für eine Familie eine Kostenaufstellung zu einem Vorgang (z. B. ein Schaden, der reguliert werden soll).
 Angehängt sind alle Belege (Fotos/PDFs, Beleg 1, 2, …), dazu was beim Ablegen erkannt wurde und der Auftrag der Familie.
@@ -568,7 +572,8 @@ def ablegen(auftrag):
     if neu_eintrag.get("frage") and not sammeln:
         zeilen.append(f"❓ Rückfrage: {neu_eintrag['frage']}"
                       + (f" ({' / '.join(neu_eintrag['vorschlaege'])})" if neu_eintrag.get("vorschlaege") else "")
-                      + "\nAntwort im Reiter Akte (gelbe Blase) oder hier: „Akte …“ mit der Antwort.")
+                      + "\n↩️ Antworte einfach hier – oder im Reiter Akte (gelbe Blase).")
+        rueckfrage_merken(chat, "beleg", neu_eintrag["frage"], id=neu_eintrag["id"])
     if sammeln:
         vorhanden = [x for x in liste if x.get("sendung") == neu_eintrag["sendung"]]
         zeilen.append(f"🧮 Beleg {len(vorhanden)} dieser Sendung. Sobald alle da sind, fasse ich sie zu einem Vorgang zusammen "
@@ -994,6 +999,42 @@ def fristen_text(liste, tage=60):
     return bald
 
 
+# ---------- Rückfragen: die nächste Antwort im Chat ("Ja", "Ferienwohnung") gehört zur Akte ----------
+
+def rueckfrage_merken(chat, art, frage, **daten):
+    d = json_laden(RUECKFRAGEN, {})
+    d[str(chat)] = dict(daten, art=art, frage=frage, zeit=datetime.now().isoformat(timespec="seconds"))
+    json_schreiben(RUECKFRAGEN, d)
+
+
+def rueckfrage_offen(chat, loeschen=False):
+    d = json_laden(RUECKFRAGEN, {})
+    r = d.get(str(chat))
+    if loeschen and r:
+        d.pop(str(chat))
+        json_schreiben(RUECKFRAGEN, d)
+    if r and r.get("zeit", "") >= (datetime.now() - timedelta(minutes=20)).isoformat():
+        return r
+    return None
+
+
+def rueckfrage_beantworten(chat, text, r, liste):
+    if r.get("art") == "vorgang":
+        vorgang_befehl(chat, f"{r.get('text')}\nRückfrage der Akte: {r.get('frage')}\nAntwort der Familie: {text}", liste,
+                       nachfragen=False)
+        return
+    e = next((x for x in liste if x.get("id") == r.get("id")), None)
+    if not e:
+        senden(chat, "ℹ️ Den Beleg zur Rückfrage finde ich nicht mehr.")
+        return
+    e["notiz"] = (((e.get("notiz") or "") + " · ") if e.get("notiz") else "") + f"{r.get('frage')} → {text}"[:300]
+    e.update({"frage": "", "vorschlaege": [], "beantwortet": True})
+    json_schreiben(VERZEICHNIS, liste)
+    neu_lesen({"id": e["id"]})
+    e = next((x for x in verzeichnis() if x.get("id") == r.get("id")), e)
+    senden(chat, f"📝 Danke, gemerkt: „{e.get('titel')}“ liegt jetzt in {e.get('ordner') or 'Unsortiert'}.")
+
+
 # ---------- Vorgang: mehrere Belege → eine Kostenaufstellung als ein PDF ----------
 
 def sendung_abschliessen(auftrag):
@@ -1010,7 +1051,7 @@ def sendung_abschliessen(auftrag):
     vorgang_bilden(auftrag.get("chat"), liste, gruppe, e.get("sendung_text") or "", von=auftrag.get("von", ""))
 
 
-def vorgang_befehl(chat, text, liste):
+def vorgang_befehl(chat, text, liste, nachfragen=True):
     """Per Nachricht: Claude sucht die gemeinten Einträge (meist die letzte Sendung) und bildet daraus einen Vorgang."""
     kandidaten = sorted(range(len(liste)), key=lambda i: liste[i].get("eingang", ""), reverse=True)[:40]
     if not kandidaten:
@@ -1035,9 +1076,10 @@ def vorgang_befehl(chat, text, liste):
             continue
         if e not in gewaehlt:
             gewaehlt.append(e)
-    if a.get("rueckfrage") or len(gewaehlt) < 2:
-        senden(chat, "🧮 " + (a.get("rueckfrage") or "Ich finde nicht mindestens zwei passende Belege. Welche gehören zusammen? "
-                                                   "Z. B. „Akte die Belege von heute Vormittag gehören zusammen“."))
+    if (a.get("rueckfrage") and nachfragen) or len(gewaehlt) < 2:
+        frage = a.get("rueckfrage") or "Ich finde nicht mindestens zwei passende Belege. Welche gehören zusammen?"
+        rueckfrage_merken(chat, "vorgang", frage, text=text)
+        senden(chat, "🧮 " + frage + "\n↩️ Antworte einfach hier (z. B. „Ja“).")
         return
     vorgang_bilden(chat, liste, gewaehlt, text, titel=a.get("titel") or "")
 
@@ -1179,7 +1221,10 @@ def befehl(auftrag):
     text = (auftrag.get("text") or "").strip()
     liste = verzeichnis()
     t = text.lower().lstrip("/")
-    if re.match(r"^(akte|belege?)\s*(hilfe|\?)?\s*$", t):
+    r = rueckfrage_offen(chat, loeschen=True)
+    if r and not re.match(r"^(akte|belege?|steuer|einreichen|eingereicht|fristen|schreiben|brief)\b", t):
+        rueckfrage_beantworten(chat, text, r, liste)
+    elif re.match(r"^(akte|belege?)\s*(hilfe|\?)?\s*$", t):
         senden(chat, HILFE + f"\n\nIn der Akte: {len(liste)} Dokumente.")
     elif re.match(r"^steuer", t):
         j = re.search(r"(20\d\d)", t)
@@ -1580,6 +1625,9 @@ def main():
         print(json.dumps(stueck(sys.argv[2:]), ensure_ascii=False))
         return
     auftrag = json.loads(base64.b64decode(sys.argv[2]).decode("utf-8")) if len(sys.argv) > 2 else {}
+    if aktion == "offen":   # schnell: wartet die Akte in diesem Chat auf eine Antwort?
+        print(json.dumps({"offen": bool(rueckfrage_offen(auftrag.get("chat")))}))
+        return
     for d in (ABLAGE, EINGANG, SEITEN):
         os.makedirs(d, exist_ok=True)
     umziehen()

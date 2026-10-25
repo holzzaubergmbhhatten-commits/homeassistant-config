@@ -45,6 +45,21 @@ automation:
     value_template: >-
       {{ not (trigger.event.data.text | default('') | string) is search('(geh(ö|oe)r\w*\s.{0,40}zusammen|kosten\s*-?\s*aufstellung|(belege|rechnungen|quittungen|kosten|fotos|bilder)\b.{0,60}(zusammen|addier|summier)|zusammen\s*(zu\s*)?(fass|führ|fuehr)\w*\s.{0,40}(pdf|belege?|rechnung))', ignorecase=True) }}
   actions:
+  # Wartet die Akte gerade auf eine Antwort (Rückfrage zu einem Beleg/Vorgang)? Dann geht "Ja" & Co. dorthin, nicht an Claude.
+  - action: shell_command.akte
+    continue_on_error: true
+    data:
+      aktion: offen
+      wert: "{{ {'chat': trigger.event.data.chat_id} | to_json | base64_encode }}"
+    response_variable: akte_offen
+  - if: "{{ akte_offen is defined and akte_offen is mapping and '\"offen\": true' in (akte_offen.stdout | default('') | string) }}"
+    then:
+    - action: shell_command.akte
+      continue_on_error: true
+      data:
+        aktion: befehl
+        wert: "{{ {'text': trigger.event.data.text, 'chat': trigger.event.data.chat_id} | to_json | base64_encode }}"
+    - stop: Antwort auf eine Rückfrage der Akte
   - variables:
       text: '{{ trigger.event.data.text }}'
       chat: '{{ trigger.event.data.chat_id }}'
