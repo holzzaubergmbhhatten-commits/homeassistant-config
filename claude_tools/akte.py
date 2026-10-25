@@ -72,8 +72,11 @@ JSON-Objekt:
             „Gesundheit“, „Bank & Verträge“, „Steuer“, „Oberwohnung“, „Ferienwohnung“, „Haus allgemein“). Persönliche Dokumente
             (an eine Person gerichtet: Versicherung, Rente, Arzt, Gehalt) gehören zur Person, Dokumente zu Gebäude/Wohnung zum Objekt.
             Vorhandene Ordner bevorzugen (siehe unten), sonst passend neu anlegen; bei echter Unsicherheit leer lassen und nachfragen",
- "fortsetzung": true, wenn dieses Bild nur eine weitere Seite des unten genannten vorherigen Dokuments ist (gleicher Absender,
-                "Seite 2 von …", kein eigener Briefkopf/Betreff), sonst false,
+ "fortsetzung": true NUR, wenn dieses Bild eindeutig eine weitere Seite des unten genannten vorherigen Dokuments ist
+                ("Seite 2 von …", Fortsetzung eines Textes/einer Tabelle, kein eigener Briefkopf). false, sobald das Bild einen eigenen
+                Briefkopf mit Anschrift, Betreff oder Datum hat oder ein anderes Kassenzeichen/Aktenzeichen/Rechnungs-/Vertragsnummer,
+                Flurstück, Objekt oder Betrag – auch wenn Absender und Datum gleich sind (z. B. zwei Bescheide derselben Gemeinde).
+                Im Zweifel false,
  "frage": "nur wenn du dir bei Ordner, Person, Zweck oder Steuer NICHT sicher bist: eine kurze Rückfrage an die Familie
            (z. B. „Für welche Wohnung war diese Handwerkerrechnung?“), sonst leer",
  "vorschlaege": ["2–4 kurze Antwortmöglichkeiten zur Frage, möglichst Ordnernamen"] oder [],
@@ -105,6 +108,8 @@ Unten stehen passende Einträge aus dem Verzeichnis, die wichtigsten Dokumente s
 konkret, nenne die Quelle (Titel + Datum). Steht die Antwort nicht drin, sag das ehrlich. Keine Rechts- oder Steuerberatung
 erfinden. Antworte NUR mit JSON: {"antwort": "Text für Telegram", "senden": [Nummern der Einträge, die als Datei mitgeschickt
 werden sollen – nur wenn danach gefragt wird ("schick mir …") oder es klar hilft, höchstens 5],
+ "trennen": true nur wenn die Nachricht sagt, dass ein Eintrag/Vorgang eigentlich mehrere Dokumente sind und getrennt
+             werden soll ("gehören nicht zusammen"), sonst false,
  "vorgang": true nur wenn die Nachricht mehrere Belege zu einem Vorgang/einer Kostenaufstellung/einem PDF zusammenfassen will
              (das erledigt dann die Akte selbst, "antwort" bleibt leer), sonst false,
  "aenderungen": [nur wenn die Nachricht etwas über einen Eintrag MITTEILT, z. B. "die Rechnung vom Fliesenleger ist bezahlt"
@@ -145,6 +150,19 @@ was auffällt und was zu tun ist; leer lassen, wenn nichts Wichtiges"}"""
 # "die gehören alle zusammen", "Kosten Aufstellung", "als eine PDF zusammenfassen" → mehrere Belege zu einem Vorgang bündeln
 SAMMELN = (r"geh(ö|oe)r\w*\s.{0,40}zusammen|kosten\s*-?\s*aufstellung|zusammen\s*(zu\s*)?(fass|führ|fuehr|rechn|stell|addier)"
            r"|(alle|die)\s+kosten\s.{0,30}(addier|summ|zusammen)|(eine?|1)\s+pdf\b|als\s+(einen?\s+)?vorgang")
+
+# "gehören nicht zusammen", "bitte trennen", "auseinandernehmen" → einen Eintrag wieder in einzelne Dokumente aufteilen
+TRENNEN = r"nicht\s+(mehr\s+)?zusammen|\btrenn|auseinander|getrennt|aufl(ö|oe)s|einzeln\s+(ab)?leg|jede\s+seite\s+einzeln"
+
+TRENNEN_WAEHLEN = """Die Familie sagt, dass ein Eintrag in ihrer digitalen Akte in Wahrheit mehrere Dokumente enthält (z. B. zwei Bescheide,
+die als Seiten EINES Eintrags abgelegt wurden) oder dass ein Vorgang wieder aufgelöst werden soll. Unten die zuletzt
+abgelegten Einträge (neueste zuerst), die man trennen kann. Wähle den gemeinten. Antworte NUR mit JSON:
+{"nr": Nummer, "rueckfrage": "nur wenn wirklich unklar (Ja/Nein-Frage), sonst leer"}"""
+
+AUFTEILEN = """Die angehängten Seiten (Seite 1, 2, …) liegen in der digitalen Akte als EIN Dokument, die Familie sagt aber, es sind mehrere.
+Teile sie in die einzelnen Schreiben auf: ein neues Schreiben beginnt mit eigenem Briefkopf/Anschrift/Betreff/Datum oder
+einem anderen Kassen-/Aktenzeichen, Rechnungs- oder Vertragsnummer, Flurstück oder Objekt. Folgeseiten ("Seite 2 von 2")
+gehören zu ihrem Schreiben. Antworte NUR mit JSON: {"gruppen": [[Seitennummern des 1. Schreibens], [ … ]]}"""
 
 VORGANG_WAEHLEN = """Die Familie möchte mehrere Belege aus ihrer digitalen Akte zu EINEM Vorgang zusammenfassen (z. B. ein Schaden, der
 reguliert werden soll, mit Kostenaufstellung). Unten die zuletzt abgelegten Einträge (neueste zuerst) mit Eingangszeit,
@@ -448,7 +466,7 @@ def ablegen(auftrag):
     if davor is not None:
         davor["sendung"] = sendung
     sendung_text = text or (davor.get("sendung_text") or "" if davor else "")
-    sammeln = bool(re.search(SAMMELN, sendung_text, re.I))
+    sammeln = bool(re.search(SAMMELN, sendung_text, re.I)) and not re.search(TRENNEN, sendung_text, re.I)
 
     # weitere Seite zum letzten Foto-Beleg dieses Chats?
     eintrag = None
@@ -492,7 +510,8 @@ def ablegen(auftrag):
         kontext = familien_kontext()
         if vorher is not None and eintrag is None:
             kontext += (f"\nVorheriges Dokument in diesem Chat (vor wenigen Minuten): {vorher.get('titel')} von "
-                        f"{vorher.get('absender')}, {vorher.get('datum')}, {len(vorher.get('seiten') or [])} Seite(n).")
+                        f"{vorher.get('absender')}, {vorher.get('datum')}, Nr. {vorher.get('rechnungsnummer') or '-'}, "
+                        f"{len(vorher.get('seiten') or [])} Seite(n).")
         if auftrag.get("herkunft"):
             kontext += f"\nLag vorher im Ordner: {auftrag['herkunft']}"
         if not text and sendung_text:
@@ -505,7 +524,8 @@ def ablegen(auftrag):
         e = lesen([dokument_block(quelle)])
     else:
         e = lesen([dokument_block(s) for s in seiten])
-        if vorher is not None and e.get("fortsetzung"):
+        nr_neu, nr_alt = re.sub(r"\W", "", str(e.get("rechnungsnummer") or "")), re.sub(r"\W", "", str(vorher.get("rechnungsnummer") or "")) if vorher else ""
+        if vorher is not None and e.get("fortsetzung") and not (nr_neu and nr_alt and nr_neu != nr_alt):
             # doch nur die nächste Seite: an den vorherigen Beleg hängen und alles zusammen neu lesen
             eintrag = vorher
             eintrag["seiten"].append(os.path.basename(seite))
@@ -929,6 +949,9 @@ def frage_beantworten(chat, frage, liste):
             inhalt.append(dokument_block(pfad))
     inhalt.append({"type": "text", "text": f"Heute: {date.today().isoformat()}\nVerzeichnis (Auszug):\n{verz}\n\nFrage: {frage}"})
     a = claude(FRAGE, inhalt, max_tokens=2000, effort="medium")
+    if a.get("trennen") is True:
+        trennen_befehl(chat, frage, liste)
+        return
     if a.get("vorgang") is True:
         vorgang_befehl(chat, frage, liste)
         return
@@ -1051,6 +1074,9 @@ def rueckfrage_offen(chat, loeschen=False):
 
 
 def rueckfrage_beantworten(chat, text, r, liste):
+    if r.get("art") == "trennen":
+        trennen_befehl(chat, f"{r.get('text')}\nRückfrage der Akte: {r.get('frage')}\nAntwort der Familie: {text}", liste)
+        return
     if r.get("art") == "vorgang":
         vorgang_befehl(chat, f"{r.get('text')}\nRückfrage der Akte: {r.get('frage')}\nAntwort der Familie: {text}", liste,
                        nachfragen=False)
@@ -1248,13 +1274,104 @@ def vorgang_bilden(chat, liste, eintraege, auftrag_text, titel="", von=""):
             datei_senden(chat, os.path.join(ABLAGE, x), f"Anlage zu „{titel}“")
 
 
+# ---------- Trennen: ein Eintrag mit mehreren Schreiben (oder ein Vorgang) wieder in einzelne Einträge ----------
+
+def seiten_neu_ablegen(liste, seiten, vorlage, notiz=""):
+    """Fotoseiten als eigenen Eintrag ablegen (lesen, PDF in den passenden Ordner)."""
+    bloecke = [dokument_block(os.path.join(SEITEN, s_)) for s_ in seiten]
+    bloecke.append({"type": "text", "text": f"Heute: {date.today().isoformat()}\nNotiz der Familie: {notiz or '(keine)'}\n{familien_kontext()}"})
+    e = claude(LESEN, bloecke, max_tokens=4000)
+    neu = {"id": datetime.now().strftime("%Y%m%d%H%M%S") + uuid.uuid4().hex[:4], "eingang": vorlage.get("eingang") or datetime.now().isoformat(timespec="seconds"),
+           "chat": vorlage.get("chat"), "von": vorlage.get("von", ""), "seiten": list(seiten), "getrennt": True}
+    if notiz:
+        neu["notiz"] = notiz
+    felder_setzen(neu, e)
+    jahr = (neu.get("datum") or "")[:4] if re.match(r"^\d{4}-\d\d-\d\d$", neu.get("datum") or "") else str(date.today().year)
+    ordner = os.path.join(ordner_pfad(neu.get("ordner")), jahr)
+    os.makedirs(os.path.join(ABLAGE, ordner), exist_ok=True)
+    name = "_".join([neu.get("datum") or date.today().isoformat(), sicherer_name(neu.get("typ"), 25), sicherer_name(neu.get("absender"))])
+    ziel = os.path.join(ordner, name + ".pdf")
+    n = 2
+    while os.path.exists(os.path.join(ABLAGE, ziel)):
+        ziel = os.path.join(ordner, f"{name}_{n}.pdf")
+        n += 1
+    seiten_zu_pdf([os.path.join(SEITEN, s_) for s_ in seiten], os.path.join(ABLAGE, ziel))
+    neu["datei"] = ziel
+    liste.append(neu)
+    return neu
+
+
+def trennen_befehl(chat, text, liste):
+    kandidaten = [i for i in sorted(range(len(liste)), key=lambda i: liste[i].get("eingang", ""), reverse=True)
+                  if len(liste[i].get("seiten") or []) > 1 or liste[i].get("belege")][:30]
+    if not kandidaten:
+        senden(chat, "✂️ Es ist nichts zusammengefasst – alle Einträge sind schon einzeln (keiner hat mehrere Seiten oder Belege).")
+        return
+    zeilen = [f"[{n}] {zeile(n, liste[i])} | Ordner {liste[i].get('ordner') or '-'} | "
+              + (f"Vorgang mit {len(liste[i]['belege'])} Belegen" if liste[i].get("belege") else f"{len(liste[i]['seiten'])} Seiten")
+              + f" | Eingang {(liste[i].get('eingang') or '')[:16].replace('T', ' ')} | {(liste[i].get('inhalt') or '')[:200]}"
+              for n, i in enumerate(kandidaten, 1)]
+    a = claude(TRENNEN_WAEHLEN, [{"type": "text", "text": "Einträge:\n" + "\n".join(zeilen) + f"\n\nNachricht der Familie: {text}"}], max_tokens=500)
+    try:
+        e = liste[kandidaten[int(a.get("nr")) - 1]]
+    except (TypeError, ValueError, IndexError):
+        e = None
+    if e is None or a.get("rueckfrage"):
+        frage = a.get("rueckfrage") or "Welchen Eintrag soll ich trennen? (z. B. „den Grundsteuerbescheid vom Fünfhauser Weg“)"
+        rueckfrage_merken(chat, "trennen", frage, text=text)
+        senden(chat, "✂️ " + frage + "\n↩️ Antworte einfach hier.")
+        return
+    trennen(chat, liste, e, jede_seite=bool(re.search(r"jede\s+seite", text, re.I)))
+
+
+def trennen(chat, liste, e, jede_seite=False):
+    neue = []
+    if e.get("belege"):   # Vorgang auflösen: jeder Beleg wird wieder ein eigener Eintrag
+        for b in e["belege"]:
+            if b.get("seiten"):
+                neue.append(seiten_neu_ablegen(liste, b["seiten"], e, b.get("notiz") or ""))
+            elif b.get("datei"):
+                neu = dict(b, id=datetime.now().strftime("%Y%m%d%H%M%S") + uuid.uuid4().hex[:4], seiten=[], chat=e.get("chat"))
+                liste.append(neu)
+                neue.append(neu)
+    else:
+        seiten = e["seiten"]
+        if jede_seite:
+            gruppen = [[n] for n in range(1, len(seiten) + 1)]
+        else:
+            bloecke = []
+            for n, s_ in enumerate(seiten, 1):
+                bloecke += [{"type": "text", "text": f"Seite {n}:"}, dokument_block(os.path.join(SEITEN, s_))]
+            gruppen = claude(AUFTEILEN, bloecke, max_tokens=500).get("gruppen") or []
+            gruppen = [[int(n) for n in g if str(n).isdigit() and 0 < int(n) <= len(seiten)] for g in gruppen if isinstance(g, list)]
+            gruppen = [g for g in gruppen if g]
+            vergeben = {n for g in gruppen for n in g}
+            gruppen += [[n] for n in range(1, len(seiten) + 1) if n not in vergeben]   # nichts darf verloren gehen
+        if len(gruppen) < 2:
+            senden(chat, f"✂️ Für mich sind die {len(seiten)} Seiten von „{e.get('titel')}“ ein Schreiben. Wenn doch nicht: "
+                         "„Akte jede Seite einzeln ablegen“ schreiben.")
+            return
+        for g in gruppen:
+            neue.append(seiten_neu_ablegen(liste, [seiten[n - 1] for n in g], e, e.get("notiz") or ""))
+    if not neue:
+        return
+    _weg(os.path.join(ABLAGE, e.get("datei") or ""))
+    liste.remove(e)
+    json_schreiben(VERZEICHNIS, liste)
+    logbuch(f"Getrennt: {e.get('titel')} → {len(neue)} Einträge")
+    senden(chat, f"✂️ „{e.get('titel')}“ ist jetzt getrennt – {len(neue)} eigene Einträge:\n"
+                 + "\n".join(zeile(n, x) + f" · {x.get('ordner') or 'Unsortiert'}" for n, x in enumerate(neue, 1)))
+
+
 def befehl(auftrag):
     chat = auftrag.get("chat")
     text = (auftrag.get("text") or "").strip()
     liste = verzeichnis()
     t = text.lower().lstrip("/")
     r = rueckfrage_offen(chat, loeschen=True)
-    if r and not re.match(r"^(akte|belege?|steuer|einreichen|eingereicht|fristen|schreiben|brief)\b", t):
+    if re.search(TRENNEN, t, re.I) and not (r and r.get("art") == "beleg"):
+        trennen_befehl(chat, text + (f"\n(vorher: {r.get('text')})" if r and r.get("art") == "trennen" else ""), liste)
+    elif r and not re.match(r"^(akte|belege?|steuer|einreichen|eingereicht|fristen|schreiben|brief)\b", t):
         rueckfrage_beantworten(chat, text, r, liste)
     elif re.match(r"^(akte|belege?)\s*(hilfe|\?)?\s*$", t):
         senden(chat, HILFE + f"\n\nIn der Akte: {len(liste)} Dokumente.")
