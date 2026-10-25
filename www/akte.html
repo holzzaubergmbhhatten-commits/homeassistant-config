@@ -122,7 +122,7 @@
 <input type="file" id="ordner-datei" webkitdirectory multiple hidden>
 <script src="/local/wappen.js?v=1"></script>
 <script>
-const SEITEN_VERSION = 20;
+const SEITEN_VERSION = 21;
 const $ = id => document.getElementById(id);
 const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const euro = x => x == null || x === "" ? "" : Number(x).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
@@ -130,7 +130,7 @@ const datum = iso => /^\d{4}-\d\d-\d\d$/.test(iso || "") ? iso.slice(8, 10) + ".
 function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
 function toast(t, dauer) { const m = $("toast"); m.textContent = t; m.style.display = "block"; clearTimeout(toast.t); toast.t = setTimeout(() => m.style.display = "none", dauer || 4000); }
 
-let pdfAktuell = null, schreibenOffen = "", ordnerWahl = "", ordnerListe = [], eintraege = [], filter = "eingang", suche = "", letzter = "", wartend = 0, log = [], notizOffen = "";
+let pdfAktuell = null, schreibenOffen = "", ordnerWahl = "", ordnerListe = [], eintraege = [], filter = "eingang", suche = "", verbinden = [], letzter = "", wartend = 0, log = [], notizOffen = "";
 const JAHR = new Date().getFullYear();
 async function skript(daten) {
   const r = await hass().callWS({ type: "call_service", domain: "script", service: "akte_aktion", service_data: daten, return_response: true });
@@ -287,6 +287,11 @@ function zeichnen() {
     <div class="filter">${FILTER.map(([w, t, fn]) => `<button data-a="filter" data-w="${esc(w)}" class="${w === filter || (w === "ordner" && filter.startsWith("ordner:")) ? "an" : ""}">${esc(t)}${["alle", "ordner"].includes(w) ? "" : " (" + eintraege.filter(fn).length + ")"}</button>`).join("")}</div>
     ${wartend || log.slice(0, 3).some(l => l.art === "fehler") ? `<div class="status">${wartend ? `<span class="warte">⏳ ${wartend} Datei${wartend === 1 ? "" : "en"} werden gelesen …</span>` : ""}
       ${(wartend ? log.slice(0, 2) : log.slice(0, 3).filter(l => l.art === "fehler")).map(l => `<span class="${l.art === "fehler" ? "fehler" : ""}">${esc(l.zeit)}: ${esc(l.text)}</span>`).join(" · ")}</div>` : ""}
+    ${verbinden.length ? `<div class="frage"><b>🔗 Zusammenfügen: ${verbinden.length} ausgewählt</b> – weitere Einträge mit „+ Dazunehmen“ wählen
+      (bei Seiten in der richtigen Reihenfolge; die Suche hilft beim Finden).
+      <div class="aktionen"><button class="knopf gruen" data-a="verbinden-los" data-w="heften" ${verbinden.length < 2 ? "disabled" : ""}>Als ein Dokument (Seiten)</button>
+      <button class="knopf gruen" data-a="verbinden-los" data-w="vorgang" ${verbinden.length < 2 ? "disabled" : ""}>Als Vorgang mit Kostenaufstellung</button>
+      <button class="knopf" data-a="verbinden-ende">Abbrechen</button></div></div>` : ""}
     ${filter === "ordner" && !suche ? ordnerKacheln() : ""}
     ${filter.startsWith("ordner:") ? (() => { const o = filter.slice(7), teile = o.split(" / ");
       return `<div class="ordner-kopf"><button class="knopf" data-a="filter" data-w="ordner">← Alle Ordner</button>
@@ -329,6 +334,10 @@ function zeichnen() {
             : e.zahlung === "bezahlt" ? `<button class="knopf" data-a="unbezahlt" data-w="${esc(e.id)}">Doch offen</button>` : ""}
           ${e.einreichen && e.einreichen.noetig ? (offen(e) ? `<button class="knopf gruen" data-a="eingereicht" data-w="${esc(e.id)}">Eingereicht</button>`
             : `<button class="knopf" data-a="offen" data-w="${esc(e.id)}">Wieder offen</button>`) : ""}
+          ${verbinden.length ? (verbinden.includes(e.id) ? `<button class="knopf gruen" data-a="verbinden-weg" data-w="${esc(e.id)}">✔️ Ausgewählt (${verbinden.indexOf(e.id) + 1})</button>`
+              : `<button class="knopf blau" data-a="verbinden-dazu" data-w="${esc(e.id)}">+ Dazunehmen</button>`)
+            : `<button class="knopf" data-a="verbinden-start" data-w="${esc(e.id)}">🔗 Zusammenfügen</button>`}
+          ${e.teile > 1 ? `<button class="knopf" data-a="trennen" data-w="${esc(e.id)}">✂️ ${e.vorgang ? "Vorgang auflösen" : "Trennen"}</button>` : ""}
           <button class="knopf rot" data-a="loeschen" data-w="${esc(e.id)}">Löschen</button>
         </div></div>`).join("")}</div>`
       : `<div class="leer">${!eintraege.length ? "Die Akte ist noch leer.<br>Einfach ein Foto oder PDF an den Telegram-Bot schicken oder hier hochladen."
@@ -469,6 +478,23 @@ document.addEventListener("click", async ev => {
       if (a && Array.isArray(a.eintraege)) eintraege = a.eintraege;
       ordnerListe = ordnerListe.filter(o => o !== w).concat(neu.trim()); filter = "ordner:" + neu.trim();
       toast("Umbenannt"); zeichnen(); break;
+    }
+    case "verbinden-start": verbinden = [w]; zeichnen(); break;
+    case "verbinden-dazu": verbinden.push(w); zeichnen(); break;
+    case "verbinden-weg": verbinden = verbinden.filter(x => x !== w); zeichnen(); break;
+    case "verbinden-ende": verbinden = []; zeichnen(); break;
+    case "verbinden-los": {
+      if (verbinden.length < 2) return;
+      await skript({ was: "verbinden", text: verbinden.join(","), ordner: w });
+      verbinden = []; suche = "";
+      toast(w === "vorgang" ? "Wird zum Vorgang zusammengefasst – Ergebnis kommt auch per Telegram" : "Wird zusammengefügt und neu gelesen – einen Moment …");
+      zeichnen(); setTimeout(neuLaden, 45000); break;
+    }
+    case "trennen": {
+      const e = eintraege.find(x => x.id === w) || {};
+      if (el.dataset.scharf !== "1") { el.dataset.scharf = "1"; el.classList.add("scharf"); el.textContent = e.vorgang ? "Wirklich auflösen?" : "Wirklich trennen?"; return; }
+      await skript({ was: "trennen", id: w });
+      toast("Wird getrennt und neu gelesen – Ergebnis kommt auch per Telegram"); zeichnen(); setTimeout(neuLaden, 45000); break;
     }
     case "bezahlt": await aktion("bezahlt", w); toast("Als bezahlt markiert"); zeichnen(); break;
     case "unbezahlt": await aktion("unbezahlt", w); zeichnen(); break;

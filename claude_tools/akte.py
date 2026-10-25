@@ -148,9 +148,10 @@ Antworte NUR mit JSON: {"aenderungen": [{"nr": Nummer, "notiz": "…", "zahlung"
 was auffällt und was zu tun ist; leer lassen, wenn nichts Wichtiges"}"""
 
 # "die gehören alle zusammen", "Kosten Aufstellung", "als eine PDF zusammenfassen" → mehrere Belege zu einem Vorgang bündeln
-SAMMELN = (r"geh(ö|oe)r\w*\s.{0,40}zusammen|kosten\s*-?\s*aufstellung|zusammen\s*(zu\s*)?(fass|führ|fuehr|rechn|stell|addier)"
+SAMMELN = (r"geh(ö|oe)r\w*\s.{0,40}zusammen|zusammen\s*(zu\s*)?(ge)?(füg|fueg|heft)|\bein(e|en)?\s+(dokument|schreiben|datei)\b|kosten\s*-?\s*aufstellung|zusammen\s*(zu\s*)?(fass|führ|fuehr|rechn|stell|addier)"
            r"|(alle|die)\s+kosten\s.{0,30}(addier|summ|zusammen)|(eine?|1)\s+pdf\b|als\s+(einen?\s+)?vorgang")
 
+HEFTEN = r"zusammen\s*(zu\s*)?(ge)?(füg|fueg|heft)|\bein(e|en)?\s+(dokument|schreiben|datei)\b|\bseiten\b"
 # "gehören nicht zusammen", "bitte trennen", "auseinandernehmen" → einen Eintrag wieder in einzelne Dokumente aufteilen
 TRENNEN = r"nicht\s+(mehr\s+)?zusammen|\btrenn|auseinander|getrennt|aufl(ö|oe)s|einzeln\s+(ab)?leg|jede\s+seite\s+einzeln"
 
@@ -171,7 +172,10 @@ sind – meist alle aus derselben Sendung bzw. die kurz nacheinander gekommenen 
 verschiedenen Ordnern gelandet sind (Material, Angebote, Lieferscheine, Notizen gehören meist dazu). Lieber einen Beleg zu viel
 nehmen als nachfragen – die Kostenaufstellung zeigt jeden Beleg einzeln. Steht unten schon eine Antwort der Familie auf eine
 Rückfrage, frag nicht noch einmal. Antworte NUR mit JSON:
-{"nummern": [Nummern], "titel": "kurzer Name des Vorgangs, z. B. Schaden Fußboden – Regulierung", "rueckfrage": "nur wenn
+{"art": "heften" – wenn es Seiten EINES Schreibens sind, die getrennt abgelegt wurden (gleicher Absender, gleiches
+         Aktenzeichen/Kassenzeichen/Vertragsnummer, Folgeseite) oder die Familie "zusammenfügen/heften/ist ein Dokument" sagt –
+         oder "vorgang" – wenn es verschiedene Belege zu einem Anlass sind (Schaden, Kosten addieren, Kostenaufstellung),
+ "nummern": [Nummern – bei "heften" in Seitenreihenfolge], "titel": "kurzer Name des Vorgangs, z. B. Schaden Fußboden – Regulierung", "rueckfrage": "nur wenn
 wirklich unklar ist, welche gemeint sind (als Ja/Nein-Frage; noch ist NICHTS zusammengefasst), sonst leer"}"""
 
 VORGANG = """Du erstellst für eine Familie eine Kostenaufstellung zu einem Vorgang (z. B. ein Schaden, der reguliert werden soll).
@@ -195,6 +199,8 @@ HILFE = """📁 Digitale Akte – so geht's
 • Beleg ablegen: Foto oder PDF an den Bot schicken. Rechnungen, Arztrechnungen, Versicherungsbriefe usw. erkennt er selbst;
   sicherheitshalber „Beleg“ als Text zum Foto schreiben.
 • Mehrseitig: weitere Seiten mit dem Text „+“ hinterherschicken (innerhalb einer Stunde).
+• Falsch getrennt? „Akte Die beiden Seiten vom Grundsteuerbescheid gehören zusammen, bitte zusammenfügen“ (wird ein Dokument).
+  Falsch zusammen? „Akte Der Grundsteuerbescheid gehört nicht zusammen, bitte trennen“. Geht auch am Monitor (🔗 / ✂️).
 • Mehrere Belege zu einem Vorgang (z. B. Schaden mit Kostenaufstellung): alle Fotos auf einmal schicken und zum ersten
   schreiben „gehören zusammen, bitte Kostenaufstellung“ – oder danach „Akte Die Belege vom Schaden gehören zusammen“.
   Ergebnis: ein PDF mit Kostenaufstellung, Summe und allen Belegen.
@@ -1116,7 +1122,10 @@ def sendung_abschliessen(auftrag):
     neuester = max(gruppe, key=lambda x: x.get("eingang", ""))
     if neuester is not e:   # danach kam noch ein Foto – dessen Durchlauf bildet den Vorgang
         return
-    vorgang_bilden(auftrag.get("chat"), liste, gruppe, e.get("sendung_text") or "", von=auftrag.get("von", ""))
+    if re.search(HEFTEN, e.get("sendung_text") or "", re.I):   # "ist ein Dokument" → Seiten zusammenfügen, keine Kostenaufstellung
+        heften(auftrag.get("chat"), liste, sorted(gruppe, key=lambda x: x.get("eingang", "")))
+    else:
+        vorgang_bilden(auftrag.get("chat"), liste, gruppe, e.get("sendung_text") or "", von=auftrag.get("von", ""))
 
 
 def vorgang_befehl(chat, text, liste, nachfragen=True):
@@ -1149,7 +1158,69 @@ def vorgang_befehl(chat, text, liste, nachfragen=True):
         rueckfrage_merken(chat, "vorgang", frage, text=text)
         senden(chat, "🧮 " + frage + "\n↩️ Antworte einfach hier (z. B. „Ja“).")
         return
-    vorgang_bilden(chat, liste, gewaehlt, text, titel=a.get("titel") or "")
+    if a.get("art") == "heften":
+        heften(chat, liste, gewaehlt)
+    else:
+        vorgang_bilden(chat, liste, gewaehlt, text, titel=a.get("titel") or "")
+
+
+def heften(chat, liste, eintraege):
+    """Getrennt abgelegte Seiten EINES Schreibens wieder zu einem Eintrag zusammenfügen (Reihenfolge wie übergeben)."""
+    if any(e.get("belege") for e in eintraege):
+        vorgang_bilden(chat, liste, eintraege, "")
+        return
+    if all(e.get("seiten") for e in eintraege):
+        haupt = zusammenfuehren(liste, eintraege)
+    else:   # PDFs dabei: Seiten aneinanderhängen (Fotos vorher zu PDF)
+        try:
+            from pypdf import PdfWriter
+        except ImportError:
+            senden(chat, "⚠️ PDF-Dateien kann ich hier noch nicht zusammenheften (nur Fotos). Als Vorgang zusammenfassen geht: "
+                         "„Akte … gehören zusammen, bitte Kostenaufstellung“.")
+            return
+        haupt, w = eintraege[0], PdfWriter()
+        for e in eintraege:
+            w.append(os.path.join(ABLAGE, e.get("datei") or ""))
+        ziel = os.path.join(ABLAGE, haupt.get("datei") or "")
+        with open(ziel + ".neu", "wb") as f:
+            w.write(f)
+        for e in eintraege[1:]:
+            _weg(os.path.join(ABLAGE, e.get("datei") or ""))
+            if e.get("notiz"):
+                haupt["notiz"] = ((haupt.get("notiz") or "") + " · " + e["notiz"]).strip(" ·")
+            liste.remove(e)
+        os.replace(ziel + ".neu", ziel)
+        haupt["seiten"] = []
+        felder_setzen(haupt, claude(LESEN, [dokument_block(ziel), {"type": "text", "text": f"Heute: {date.today().isoformat()}\n"
+                                            f"Notiz der Familie: {haupt.get('notiz') or '(keine)'}\n{familien_kontext()}"}], max_tokens=4000))
+        datei_einordnen(haupt)
+    if not haupt:
+        senden(chat, "ℹ️ Da war nichts zusammenzufügen.")
+        return
+    json_schreiben(VERZEICHNIS, liste)
+    logbuch(f"Zusammengefügt: {haupt.get('titel')} ({len(eintraege)} Teile)")
+    senden(chat, f"🔗 Zusammengefügt zu einem Dokument: {zeile(1, haupt)[3:]} · {haupt.get('ordner') or 'Unsortiert'}"
+                 + (f" · {len(haupt['seiten'])} Seiten" if haupt.get("seiten") else ""))
+
+
+def verbinden_seite(auftrag):
+    """Vom Monitor: ausgewählte Einträge als ein Dokument heften oder als Vorgang mit Kostenaufstellung bündeln."""
+    liste = verzeichnis()
+    ids = [i for i in str(auftrag.get("text") or "").split(",") if i]
+    es = [e for i in ids for e in liste if e.get("id") == i]
+    if len(es) < 2:
+        return
+    if auftrag.get("ordner") == "vorgang":
+        vorgang_bilden(auftrag.get("chat"), liste, es, "")
+    else:
+        heften(auftrag.get("chat"), liste, es)
+
+
+def trennen_seite(auftrag):
+    liste = verzeichnis()
+    e = next((x for x in liste if x.get("id") == auftrag.get("id")), None)
+    if e:
+        trennen(auftrag.get("chat"), liste, e, jede_seite=auftrag.get("ordner") == "jede")
 
 
 def vorgang_bilden(chat, liste, eintraege, auftrag_text, titel="", von=""):
@@ -1507,6 +1578,12 @@ def seite(auftrag):
     if was == "schreiben":
         im_hintergrund(schreiben, auftrag)
         return {"ok": True}
+    if was == "verbinden":
+        im_hintergrund(verbinden_seite, auftrag)
+        return {"ok": True}
+    if was == "trennen" and eintrag:
+        im_hintergrund(trennen_seite, auftrag)
+        return {"ok": True}
     if was == "ordner_setzen" and eintrag:
         eintrag["ordner"], eintrag["ordner_fest"] = ordner_name(auftrag.get("ordner")), True
         if eintrag.get("frage"):
@@ -1563,7 +1640,8 @@ def seite(auftrag):
         json_schreiben(VERZEICHNIS, liste)
     felder = ("id", "titel", "typ", "kategorie", "absender", "datum", "betrag", "person", "steuer", "einreichen", "fristen",
               "schlagworte", "von", "eingang", "notiz", "zahlung", "mahnung", "rechnungsnummer", "ordner", "frage", "vorschlaege")
-    aus = [dict({k: e.get(k) for k in felder}, kurz=(e.get("inhalt") or "")[:500], such=suchwoerter(e)) for e in liste]
+    aus = [dict({k: e.get(k) for k in felder}, kurz=(e.get("inhalt") or "")[:500], such=suchwoerter(e),
+                 teile=len(e.get("belege") or []) or len(e.get("seiten") or []), vorgang=bool(e.get("belege"))) for e in liste]
     aus.sort(key=lambda e: (e.get("datum") or "", e.get("eingang") or ""), reverse=True)
     wartend = 0
     for d in (EINGANG, ORDNER, UPLOAD):

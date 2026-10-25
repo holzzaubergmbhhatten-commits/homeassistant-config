@@ -97,7 +97,7 @@ automation:
         value_template: >-
           {% set t = trigger.event.data.text | default('') | string %}
           {{ t is match('^\s*/?(akte|belege?|steuer\s*(20\d\d)?\s*$|einreichen|eingereicht|fristen|schreiben|brief)\b', ignorecase=True)
-             or t is search('(geh(ö|oe)r\w*\s.{0,40}zusammen|kosten\s*-?\s*aufstellung|(belege|rechnungen|quittungen|kosten|fotos|bilder)\b.{0,60}(zusammen|addier|summier)|zusammen\s*(zu\s*)?(fass|führ|fuehr)\w*\s.{0,40}(pdf|belege?|rechnung)|nicht\s+(mehr\s+)?zusammen|auseinander\s*(nehmen|machen)|\btrennen\b|(getrennt|einzeln)\s+ablegen)', ignorecase=True) }}
+             or t is search('(geh(ö|oe)r\w*\s.{0,40}zusammen|kosten\s*-?\s*aufstellung|(belege|rechnungen|quittungen|kosten|fotos|bilder)\b.{0,60}(zusammen|addier|summier)|zusammen\s*(zu\s*)?(fass|führ|fuehr)\w*\s.{0,40}(pdf|belege?|rechnung)|nicht\s+(mehr\s+)?zusammen|zusammen\s*(zu\s*)?(ge)?(füg|fueg|heft)|auseinander\s*(nehmen|machen)|\btrennen\b|(getrennt|einzeln)\s+ablegen)', ignorecase=True) }}
     actions:
       - action: shell_command.akte
         continue_on_error: true
@@ -223,7 +223,7 @@ script:
         data:
           aktion: seite
           wert: >-
-            {{ {'was': was if was in ['liste', 'lesen', 'eingereicht', 'offen', 'loeschen', 'notiz', 'bezahlt', 'unbezahlt', 'einstellungen', 'einstellungen_speichern', 'alle_neu', 'antwort', 'ordner_setzen', 'ordner_umbenennen', 'teilen', 'schreiben', 'wappen', 'wappen_lesen', 'nk_lesen', 'nk_speichern', 'nk_neu', 'nk_auswerten', 'nk_zaehler', 'nk_pdf', 'nk_foto'] else 'liste',
+            {{ {'was': was if was in ['liste', 'lesen', 'eingereicht', 'offen', 'loeschen', 'notiz', 'bezahlt', 'unbezahlt', 'einstellungen', 'einstellungen_speichern', 'alle_neu', 'antwort', 'ordner_setzen', 'ordner_umbenennen', 'teilen', 'schreiben', 'wappen', 'wappen_lesen', 'nk_lesen', 'nk_speichern', 'nk_neu', 'nk_auswerten', 'nk_zaehler', 'nk_pdf', 'nk_foto', 'verbinden', 'trennen'] else 'liste',
                 'id': id | default('', true), 'ab': ab | default(0) | int(0), 'text': text | default('', true), 'ordner': ordner | default('', true), 'chat': (states('input_text.telegram_empfaenger') | string).split(';') | first | trim,
                 'chats': (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | list, 'wer': wer | default('', true)} | to_json | base64_encode }}
         response_variable: ergebnis
