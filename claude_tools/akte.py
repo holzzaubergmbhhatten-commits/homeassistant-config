@@ -523,7 +523,17 @@ def ablegen(auftrag):
     if ist_pdf:
         e = lesen([dokument_block(quelle)])
     else:
-        e = lesen([dokument_block(s) for s in seiten])
+        if vorher is not None:
+            # zum Vergleich das vorherige Dokument mit ansehen (erste + letzte Seite) – sonst sehen zwei Bescheide derselben
+            # Gemeinde vom selben Tag in der Kurzbeschreibung gleich aus
+            alt_seiten = [os.path.join(SEITEN, x) for x in dict.fromkeys([vorher["seiten"][0], vorher["seiten"][-1]])]
+            vergleich = [{"type": "text", "text": "ZUM VERGLEICH – vorheriges Dokument (schon abgelegt, NICHT auslesen):"}]
+            vergleich += [dokument_block(x) for x in alt_seiten if os.path.exists(x)]
+            vergleich.append({"type": "text", "text": "NEUES FOTO – nur dieses auslesen und entscheiden, ob es eine Folgeseite des "
+                                                      "vorherigen ist (Kassenzeichen, Aktenzeichen, Objekt, Briefkopf vergleichen):"})
+            e = lesen(vergleich + [dokument_block(s) for s in seiten])
+        else:
+            e = lesen([dokument_block(s) for s in seiten])
         nr_neu, nr_alt = re.sub(r"\W", "", str(e.get("rechnungsnummer") or "")), re.sub(r"\W", "", str(vorher.get("rechnungsnummer") or "")) if vorher else ""
         if vorher is not None and e.get("fortsetzung") and not (nr_neu and nr_alt and nr_neu != nr_alt):
             # doch nur die nächste Seite: an den vorherigen Beleg hängen und alles zusammen neu lesen
