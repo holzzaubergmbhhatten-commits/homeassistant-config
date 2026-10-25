@@ -41,6 +41,9 @@ automation:
     value_template: >-
       {{ not (trigger.event.data.text | default('') | string)
          is match('^\s*/?(akte|belege?|steuer\s*(20\d\d)?\s*$|einreichen|eingereicht|fristen|schreiben|brief)\b', ignorecase=True) }}
+  - condition: template
+    value_template: >-
+      {{ not (trigger.event.data.text | default('') | string) is search('(geh(ö|oe)r\w*\s.{0,40}zusammen|kosten\s*-?\s*aufstellung|(belege|rechnungen|quittungen|kosten|fotos|bilder)\b.{0,60}(zusammen|addier|summier)|zusammen\s*(zu\s*)?(fass|führ|fuehr)\w*\s.{0,40}(pdf|belege?|rechnung))', ignorecase=True) }}
   actions:
   - variables:
       text: '{{ trigger.event.data.text }}'

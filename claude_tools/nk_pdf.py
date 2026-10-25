@@ -34,8 +34,10 @@ def _wert(x):
 
 
 class Blatt:
-    def __init__(self, kopf):
+    def __init__(self, kopf, hochformat=False):
+        self.W, self.H = (HOEHE, BREITE) if hochformat else (BREITE, HOEHE)
         self.seiten, self.b, self.kopf = [], [], kopf
+        self.bilder = []   # je Seite: JPEG-Bytes eines Fotos oder None
         self.y = 0
         self.neue_seite()
 
@@ -54,15 +56,16 @@ class Blatt:
         if self.b:
             self.fuss()
             self.seiten.append(self.b)
+            self.bilder.append(None)
         self.b = []
         titel, unter = self.kopf
-        self.t(RAND, HOEHE - RAND - 6, 15, titel, fett=True)
-        self.t(RAND, HOEHE - RAND - 19, 8.5, unter, farbe=GRAU)
-        self.linie(RAND, HOEHE - RAND - 25, BREITE - RAND, HOEHE - RAND - 25, AKZENT, 1)
-        self.y = HOEHE - RAND - 42
+        self.t(RAND, self.H - RAND - 6, 15, titel, fett=True)
+        self.t(RAND, self.H - RAND - 19, 8.5, unter, farbe=GRAU)
+        self.linie(RAND, self.H - RAND - 25, self.W - RAND, self.H - RAND - 25, AKZENT, 1)
+        self.y = self.H - RAND - 42
 
     def fuss(self):
-        self.t(BREITE - RAND, 8 * MM, 7, f"Seite {len(self.seiten) + 1} · erstellt {date.today().strftime('%d.%m.%Y')}",
+        self.t(self.W - RAND, 8 * MM, 7, f"Seite {len(self.seiten) + 1} · erstellt {date.today().strftime('%d.%m.%Y')}",
                farbe=GRAU, rechts=True)
 
     def platz(self, hoehe):
@@ -71,7 +74,7 @@ class Blatt:
 
     def ueberschrift(self, text, unter=""):
         self.platz(70)
-        if self.y < HOEHE - RAND - 50:
+        if self.y < self.H - RAND - 50:
             self.y -= 8
         self.t(RAND, self.y, 12, text, fett=True, farbe=AKZENT)
         if unter:
@@ -79,7 +82,7 @@ class Blatt:
         self.y -= 16
 
     def absatz(self, text, groesse=8.5, farbe=DUNKEL):
-        for z in _umbrechen(text, groesse, BREITE - 2 * RAND):
+        for z in _umbrechen(text, groesse, self.W - 2 * RAND):
             self.platz(12)
             self.t(RAND, self.y, groesse, z, farbe=farbe)
             self.y -= groesse + 3.5
@@ -112,9 +115,34 @@ class Blatt:
             self.linie(RAND, self.y + 7, RAND + sum(s[1] for s in spalten) * MM, self.y + 7, "0.85 0.85 0.85", 0.3)
         self.y -= 8
 
-    def speichern(self, pfad):
+    def bild_seite(self, jpeg, unterschrift=""):
+        """Ganze Seite mit einem Foto (z. B. Beleg), oben eine Zeile dazu."""
+        from brief_pdf import _jpeg_groesse
+        b_px, h_px = _jpeg_groesse(jpeg)
+        if not (b_px and h_px):
+            return
+        if self.b:
+            self.fuss()
+            self.seiten.append(self.b)
+            self.bilder.append(None)
+        self.b = []
+        oben = self.H - RAND - (16 if unterschrift else 0)
+        if unterschrift:
+            self.t(RAND, self.H - RAND - 6, 9, unterschrift[:120], fett=True)
+        frei_b, frei_h = self.W - 2 * RAND, oben - 14 * MM
+        f = min(frei_b / b_px, frei_h / h_px)
+        w, h = b_px * f, h_px * f
+        self.b.append(f"q {w:.1f} 0 0 {h:.1f} {(self.W - w) / 2:.1f} {oben - h:.1f} cm /Bild Do Q")
         self.fuss()
         self.seiten.append(self.b)
+        self.bilder.append(jpeg)
+        self.b = []   # nach Fotoseiten nur noch weitere Fotos oder speichern()
+
+    def speichern(self, pfad):
+        if self.b:
+            self.fuss()
+            self.seiten.append(self.b)
+            self.bilder.append(None)
         objekte = []
 
         def obj(inhalt):
@@ -122,13 +150,20 @@ class Blatt:
             return len(objekte)
         f1 = obj(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
         f2 = obj(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>")
-        seiten_id = len(objekte) + 1 + 2 * len(self.seiten)
+        from brief_pdf import _jpeg_groesse
+        seiten_id = len(objekte) + 1 + 2 * len(self.seiten) + sum(1 for x in self.bilder if x)
         kinder = []
-        for bf in self.seiten:
+        for bf, jpeg in zip(self.seiten, self.bilder):
+            bild = ""
+            if jpeg:
+                b_px, h_px = _jpeg_groesse(jpeg)
+                nr = obj(f"<< /Type /XObject /Subtype /Image /Width {b_px} /Height {h_px} /ColorSpace /DeviceRGB /BitsPerComponent 8 "
+                         f"/Filter /DCTDecode /Length {len(jpeg)} >>\nstream\n".encode() + jpeg + b"\nendstream")
+                bild = f" /XObject << /Bild {nr} 0 R >>"
             daten = zlib.compress("\n".join(bf).encode("cp1252", "replace"))
             inhalt = obj(f"<< /Length {len(daten)} /Filter /FlateDecode >>\nstream\n".encode() + daten + b"\nendstream")
-            kinder.append(obj((f"<< /Type /Page /Parent {seiten_id} 0 R /MediaBox [0 0 {BREITE:.2f} {HOEHE:.2f}] /Contents {inhalt} 0 R "
-                               f"/Resources << /Font << /F1 {f1} 0 R /F2 {f2} 0 R >> >> >>").encode()))
+            kinder.append(obj((f"<< /Type /Page /Parent {seiten_id} 0 R /MediaBox [0 0 {self.W:.2f} {self.H:.2f}] /Contents {inhalt} 0 R "
+                               f"/Resources << /Font << /F1 {f1} 0 R /F2 {f2} 0 R >>{bild} >> >>").encode()))
         obj(f"<< /Type /Pages /Kids [{' '.join(f'{k} 0 R' for k in kinder)}] /Count {len(kinder)} >>".encode())
         katalog = obj(f"<< /Type /Catalog /Pages {seiten_id} 0 R >>".encode())
         aus = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")

@@ -2,6 +2,8 @@
 # - PDF an den Bot → Akte. Foto mit Text "Beleg"/"Akte" → Akte; "+"/"weiter"/"Seite 2" → weitere Seite zum letzten Beleg.
 #   Fotos ohne solchen Text erkennt packages/eingang.yaml (Rechnung & Co. → hierher, Pflanze → Garten, Haus → Eingang).
 # - Text: "Akte <Frage>", "Steuer 2026", "Einreichen", "Eingereicht [1 3]", "Fristen", "Akte Hilfe".
+# - Mehrere Belege → ein Vorgang (Kostenaufstellung mit Summe, ein PDF mit allen Belegen): Fotos als Album schicken und zum
+#   ersten "gehören zusammen, bitte Kostenaufstellung" schreiben – oder danach "Die gehören alle zusammen …".
 # - Ohne Telegram: Dateien in Home Assistant → Medien → Lokale Medien → Ordner "Akte-Eingang" hochladen.
 # - Notizen ("ist bezahlt") per Telegram oder am Monitor; Mahnungen werden mit der Rechnung abgeglichen;
 #   sonntags prüft Claude die ganze Akte und meldet Auffälliges.
@@ -91,9 +93,11 @@ automation:
         event_type: telegram_text
     conditions:
       - condition: template
+        # auch "Die gehören alle zusammen, bitte Kosten addieren …" (mehrere Belege → ein Vorgang mit Kostenaufstellung)
         value_template: >-
-          {{ (trigger.event.data.text | default('') | string)
-             is match('^\s*/?(akte|belege?|steuer\s*(20\d\d)?\s*$|einreichen|eingereicht|fristen|schreiben|brief)\b', ignorecase=True) }}
+          {% set t = trigger.event.data.text | default('') | string %}
+          {{ t is match('^\s*/?(akte|belege?|steuer\s*(20\d\d)?\s*$|einreichen|eingereicht|fristen|schreiben|brief)\b', ignorecase=True)
+             or t is search('(geh(ö|oe)r\w*\s.{0,40}zusammen|kosten\s*-?\s*aufstellung|(belege|rechnungen|quittungen|kosten|fotos|bilder)\b.{0,60}(zusammen|addier|summier)|zusammen\s*(zu\s*)?(fass|führ|fuehr)\w*\s.{0,40}(pdf|belege?|rechnung))', ignorecase=True) }}
     actions:
       - action: shell_command.akte
         continue_on_error: true

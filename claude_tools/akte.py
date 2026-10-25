@@ -94,13 +94,18 @@ sie, wo es Sinn macht (z. B. "Scans 2019/Allianz" → "Marco / Versicherungen").
 Frage lieber nach, als falsch einzusortieren – aber nur, wenn es wirklich unklar ist. Steht eine Antwort der Familie in der
 Notiz, nicht noch einmal fragen. Steht beim Text dazu eine Notiz der Familie (z. B. "ist schon bezahlt", "gehört zur Ferienwohnung"), gilt sie vorrangig.
 Fristen nur, wenn sie wirklich im Dokument stehen oder sich klar ergeben (Einspruch: 1 Monat nach Bescheid-Datum).
-Wenn etwas unleserlich ist, lieber leer lassen als raten."""
+Wenn etwas unleserlich ist, lieber leer lassen als raten.
+Bittet die Familie, mehrere Belege zusammenzufassen, zu addieren oder als ein PDF zu bündeln: Lies trotzdem nur DIESES Dokument –
+das Zusammenfassen (Kostenaufstellung mit Summe als ein PDF) macht die Akte danach selbst. Behaupte nie, du könntest kein PDF
+erstellen, und frage dazu nichts nach."""
 
 FRAGE = """Du beantwortest Fragen zur digitalen Akte einer Familie (Belege, Versicherungen, Verträge, Bescheide).
 Unten stehen passende Einträge aus dem Verzeichnis, die wichtigsten Dokumente sind angehängt. Antworte auf Deutsch, kurz und
 konkret, nenne die Quelle (Titel + Datum). Steht die Antwort nicht drin, sag das ehrlich. Keine Rechts- oder Steuerberatung
 erfinden. Antworte NUR mit JSON: {"antwort": "Text für Telegram", "senden": [Nummern der Einträge, die als Datei mitgeschickt
 werden sollen – nur wenn danach gefragt wird ("schick mir …") oder es klar hilft, höchstens 5],
+ "vorgang": true nur wenn die Nachricht mehrere Belege zu einem Vorgang/einer Kostenaufstellung/einem PDF zusammenfassen will
+             (das erledigt dann die Akte selbst, "antwort" bleibt leer), sonst false,
  "aenderungen": [nur wenn die Nachricht etwas über einen Eintrag MITTEILT, z. B. "die Rechnung vom Fliesenleger ist bezahlt"
                  oder "das gehört zur Ferienwohnung": {"nr": Nummer, "notiz": "kurze Notiz", "zahlung": "bezahlt"|"offen",
                  "kategorie": "…", "steuer_art": "…", "eingereicht": true}] – nur die Felder, die sich ändern}"""
@@ -136,11 +141,41 @@ Antworte NUR mit JSON: {"aenderungen": [{"nr": Nummer, "notiz": "…", "zahlung"
 "steuer_art": "…", "ordner": "…"} – nur sichere Korrekturen, nur geänderte Felder], "zusammenfuehren": [[Nummern], …], "bericht": "kurzer Überblick für Telegram (max. 10 Zeilen):
 was auffällt und was zu tun ist; leer lassen, wenn nichts Wichtiges"}"""
 
+# "die gehören alle zusammen", "Kosten Aufstellung", "als eine PDF zusammenfassen" → mehrere Belege zu einem Vorgang bündeln
+SAMMELN = (r"geh(ö|oe)r\w*\s.{0,40}zusammen|kosten\s*-?\s*aufstellung|zusammen\s*(zu\s*)?(fass|führ|fuehr|rechn|stell|addier)"
+           r"|(alle|die)\s+kosten\s.{0,30}(addier|summ|zusammen)|(eine?|1)\s+pdf\b|als\s+(einen?\s+)?vorgang")
+
+VORGANG_WAEHLEN = """Die Familie möchte mehrere Belege aus ihrer digitalen Akte zu EINEM Vorgang zusammenfassen (z. B. ein Schaden, der
+reguliert werden soll, mit Kostenaufstellung). Unten die zuletzt abgelegten Einträge (neueste zuerst) mit Eingangszeit,
+Sendung (Fotos, die kurz nacheinander geschickt wurden, haben dieselbe Sendung) und Notiz. Wähle die Einträge, die gemeint
+sind – meist alle aus derselben Sendung bzw. die kurz nacheinander gekommenen zum genannten Anlass. Antworte NUR mit JSON:
+{"nummern": [Nummern], "titel": "kurzer Name des Vorgangs, z. B. Schaden Fußboden – Regulierung", "rueckfrage": "nur wenn
+wirklich unklar ist, welche gemeint sind, sonst leer"}"""
+
+VORGANG = """Du erstellst für eine Familie eine Kostenaufstellung zu einem Vorgang (z. B. ein Schaden, der reguliert werden soll).
+Angehängt sind alle Belege (Fotos/PDFs, Beleg 1, 2, …), dazu was beim Ablegen erkannt wurde und der Auftrag der Familie.
+Lies jeden Beleg selbst nach, vor allem die Beträge (Endbetrag inkl. MwSt.; handschriftliche Beträge genau lesen).
+Achte auf Doppelte (dieselbe Rechnung zweimal fotografiert, Seite 2 eines Belegs) – die zählen nur einmal. Angebote,
+Lieferscheine und Notizen zählen mit, wenn sie die einzigen Nachweise der Kosten sind; sonst nur die Rechnung.
+Antworte NUR mit JSON:
+{"titel": "Name des Vorgangs", "anlass": "1–2 Sätze, worum es geht (aus dem Auftrag)",
+ "ordner": "Ordnerpfad „Hauptordner / Unterordner“ – vorhandene bevorzugen", "kategorie": "Haus|Familie|Versicherung|Sonstiges|…",
+ "positionen": [{"beleg": Nummer, "text": "was (kurz)", "absender": "Firma", "datum": "JJJJ-MM-TT oder leer",
+                 "art": "Rechnung|Angebot|Lieferschein|Kassenbon|Online-Bestellung|Notiz", "betrag": Zahl oder null,
+                 "zaehlt": true/false, "hinweis": "z. B. doppelt mit Beleg 2 / Betrag schlecht lesbar / nur Angebot, leer wenn nichts"}],
+ "hinweise": ["kurze Hinweise für die Regulierung, z. B. was noch fehlt (Rechnung statt Angebot, Arbeitskosten)"],
+ "schlagworte": ["5–10 Suchwörter"],
+ "antwort": "1–2 Sätze für den Chat"}
+Erfinde keine Beträge: unleserlich → null und Hinweis."""
+
 HILFE = """📁 Digitale Akte – so geht's
 • Ohne Telegram: in Home Assistant unter Medien → Lokale Medien → Ordner „Akte-Eingang“ Dateien hochladen.
 • Beleg ablegen: Foto oder PDF an den Bot schicken. Rechnungen, Arztrechnungen, Versicherungsbriefe usw. erkennt er selbst;
   sicherheitshalber „Beleg“ als Text zum Foto schreiben.
 • Mehrseitig: weitere Seiten mit dem Text „+“ hinterherschicken (innerhalb einer Stunde).
+• Mehrere Belege zu einem Vorgang (z. B. Schaden mit Kostenaufstellung): alle Fotos auf einmal schicken und zum ersten
+  schreiben „gehören zusammen, bitte Kostenaufstellung“ – oder danach „Akte Die Belege vom Schaden gehören zusammen“.
+  Ergebnis: ein PDF mit Kostenaufstellung, Summe und allen Belegen.
 • Suchen/fragen: „Akte Was zahlt die Zahnzusatz bei Implantaten?“, „Akte schick mir die Rechnung vom Elektriker“
 • Steuer: „Steuer 2026“ – Übersicht mit Summen + ZIP mit allen Belegen
 • Arztrechnungen: „Einreichen“ – offene Belege als Dateien; danach „Eingereicht“ (alle) oder „Eingereicht 1 3“
@@ -401,6 +436,16 @@ def ablegen(auftrag):
     liste = verzeichnis()
     os.makedirs(SEITEN, exist_ok=True)
 
+    # Sendung: Fotos/PDFs, die kurz nacheinander aus diesem Chat kommen (z. B. ein Telegram-Album – dort steht der Text nur
+    # beim ersten Foto). Der Text gilt für die ganze Sendung.
+    grenze = (datetime.now() - timedelta(minutes=3)).isoformat()
+    davor = next((x for x in reversed(liste) if str(x.get("chat")) == str(chat) and x.get("eingang", "") >= grenze), None)
+    sendung = (davor.get("sendung") or davor["id"]) if davor else datetime.now().strftime("%Y%m%d%H%M%S") + uuid.uuid4().hex[:4]
+    if davor is not None:
+        davor["sendung"] = sendung
+    sendung_text = text or (davor.get("sendung_text") or "" if davor else "")
+    sammeln = bool(re.search(SAMMELN, sendung_text, re.I))
+
     # weitere Seite zum letzten Foto-Beleg dieses Chats?
     eintrag = None
     if not ist_pdf and re.match(r"^\s*(\+|(weiter|seite\s*\d*|rückseite|rueckseite)\b)", text, re.I):
@@ -446,6 +491,8 @@ def ablegen(auftrag):
                         f"{vorher.get('absender')}, {vorher.get('datum')}, {len(vorher.get('seiten') or [])} Seite(n).")
         if auftrag.get("herkunft"):
             kontext += f"\nLag vorher im Ordner: {auftrag['herkunft']}"
+        if not text and sendung_text:
+            kontext += f"\nText zur ganzen Sendung (stand beim ersten Foto): {sendung_text}"
         return claude(LESEN, bloecke_ + [{"type": "text", "text": f"Heute: {date.today().isoformat()}\nVon: {auftrag.get('von', '')}\n"
                                                                     f"Text dazu: {text or '(keiner)'}\n{kontext}"}], max_tokens=4000)
 
@@ -490,6 +537,9 @@ def ablegen(auftrag):
     neu_eintrag["datei"] = ziel_rel
     if auftrag.get("herkunft"):
         neu_eintrag["herkunft"] = auftrag["herkunft"][:200]
+    neu_eintrag.setdefault("sendung", sendung)
+    if sendung_text:
+        neu_eintrag["sendung_text"] = sendung_text[:500]
     if text and not re.match(r"^\s*(\+|beleg|akte|weiter|seite\s*\d*|rückseite|rueckseite)\s*$", text, re.I):
         neu_eintrag["notiz"] = text
     if eintrag is None:
@@ -515,10 +565,16 @@ def ablegen(auftrag):
         zeilen.append(hinweis_mahnung)
     if neu_eintrag.get("notiz"):
         zeilen.append(f"📝 Notiz: {neu_eintrag['notiz']}")
-    if neu_eintrag.get("frage"):
+    if neu_eintrag.get("frage") and not sammeln:
         zeilen.append(f"❓ Rückfrage: {neu_eintrag['frage']}"
                       + (f" ({' / '.join(neu_eintrag['vorschlaege'])})" if neu_eintrag.get("vorschlaege") else "")
                       + "\nAntwort im Reiter Akte (gelbe Blase) oder hier: „Akte …“ mit der Antwort.")
+    if sammeln:
+        vorhanden = [x for x in liste if x.get("sendung") == neu_eintrag["sendung"]]
+        zeilen.append(f"🧮 Beleg {len(vorhanden)} dieser Sendung. Sobald alle da sind, fasse ich sie zu einem Vorgang zusammen "
+                      "und schicke die Kostenaufstellung mit Summe als ein PDF.")
+        # etwas warten: kommen keine weiteren Fotos mehr, wird der Vorgang gebildet (kommt später noch eins, wird er ergänzt)
+        im_hintergrund(sendung_abschliessen, {"chat": chat, "id": neu_eintrag["id"], "von": auftrag.get("von", "")}, warten=150)
     senden(chat, "\n".join(zeilen))
 
 
@@ -639,7 +695,7 @@ def neu_lesen(auftrag):
     """Einen Eintrag mit Notiz neu einordnen lassen (z. B. nach "gehört zur Ferienwohnung")."""
     liste = verzeichnis()
     e = next((x for x in liste if x.get("id") == auftrag.get("id")), None)
-    if not e:
+    if not e or e.get("belege"):   # Vorgang (Kostenaufstellung) nicht wie einen einzelnen Beleg neu lesen
         return
     pfad = os.path.join(ABLAGE, e.get("datei", ""))
     bloecke = [dokument_block(pfad), {"type": "text", "text": f"Heute: {date.today().isoformat()}\nNotiz der Familie: {e.get('notiz') or '(keine)'}\n{familien_kontext()}"}]
@@ -836,6 +892,9 @@ def frage_beantworten(chat, frage, liste):
             inhalt.append(dokument_block(pfad))
     inhalt.append({"type": "text", "text": f"Heute: {date.today().isoformat()}\nVerzeichnis (Auszug):\n{verz}\n\nFrage: {frage}"})
     a = claude(FRAGE, inhalt, max_tokens=2000, effort="medium")
+    if a.get("vorgang") is True:
+        vorgang_befehl(chat, frage, liste)
+        return
     geaendert = aenderungen_anwenden(liste, a.get("aenderungen"))
     if geaendert:
         json_schreiben(VERZEICHNIS, liste)
@@ -935,6 +994,186 @@ def fristen_text(liste, tage=60):
     return bald
 
 
+# ---------- Vorgang: mehrere Belege → eine Kostenaufstellung als ein PDF ----------
+
+def sendung_abschliessen(auftrag):
+    """Läuft gut zwei Minuten nach jedem Foto einer Sammel-Sendung. Nur das zuletzt gekommene bildet den Vorgang."""
+    liste = verzeichnis()
+    e = next((x for x in liste if x.get("id") == auftrag.get("id")), None)
+    if not e:
+        return   # schon in einem Vorgang
+    sendung = e.get("sendung")
+    gruppe = [x for x in liste if sendung and x.get("sendung") == sendung]
+    neuester = max(gruppe, key=lambda x: x.get("eingang", ""))
+    if neuester is not e:   # danach kam noch ein Foto – dessen Durchlauf bildet den Vorgang
+        return
+    vorgang_bilden(auftrag.get("chat"), liste, gruppe, e.get("sendung_text") or "", von=auftrag.get("von", ""))
+
+
+def vorgang_befehl(chat, text, liste):
+    """Per Nachricht: Claude sucht die gemeinten Einträge (meist die letzte Sendung) und bildet daraus einen Vorgang."""
+    kandidaten = sorted(range(len(liste)), key=lambda i: liste[i].get("eingang", ""), reverse=True)[:40]
+    if not kandidaten:
+        senden(chat, "📁 Die Akte ist noch leer.")
+        return
+    sendungen = {}
+    zeilen = []
+    for n, i in enumerate(kandidaten, 1):
+        e = liste[i]
+        s_nr = sendungen.setdefault(e.get("sendung") or e.get("id"), len(sendungen) + 1)
+        zeilen.append(f"[{n}] {zeile(n, e)} | {e.get('typ')} | Eingang {(e.get('eingang') or '')[:16].replace('T', ' ')} | Sendung {s_nr}"
+                      f" | Ordner {e.get('ordner') or '-'} | Notiz: {e.get('notiz') or e.get('sendung_text') or '-'}"
+                      + (" | (schon ein Vorgang)" if e.get("belege") else ""))
+    a = claude(VORGANG_WAEHLEN, [{"type": "text", "text": f"Jetzt: {datetime.now().isoformat(timespec='minutes')}\n"
+                                                           f"Einträge:\n" + "\n".join(zeilen) + f"\n\nNachricht der Familie: {text}"}],
+               max_tokens=800)
+    gewaehlt = []
+    for nr in a.get("nummern") or []:
+        try:
+            e = liste[kandidaten[int(nr) - 1]]
+        except (TypeError, ValueError, IndexError):
+            continue
+        if e not in gewaehlt:
+            gewaehlt.append(e)
+    if a.get("rueckfrage") or len(gewaehlt) < 2:
+        senden(chat, "🧮 " + (a.get("rueckfrage") or "Ich finde nicht mindestens zwei passende Belege. Welche gehören zusammen? "
+                                                   "Z. B. „Akte die Belege von heute Vormittag gehören zusammen“."))
+        return
+    vorgang_bilden(chat, liste, gewaehlt, text, titel=a.get("titel") or "")
+
+
+def vorgang_bilden(chat, liste, eintraege, auftrag_text, titel="", von=""):
+    """Belege (auch einen schon bestehenden Vorgang, der ergänzt wird) zu einem Eintrag mit Kostenaufstellung bündeln."""
+    import nk_pdf
+    belege, alt = [], None
+    for e in sorted(eintraege, key=lambda x: x.get("eingang", "")):
+        if e.get("belege"):
+            alt = alt or e
+            belege += e["belege"]
+            continue
+        b = {k: e.get(k) for k in ("id", "titel", "typ", "absender", "datum", "betrag", "rechnungsnummer", "notiz", "ordner", "eingang")}
+        b["inhalt"] = (e.get("inhalt") or "")[:1500]
+        if e.get("seiten"):
+            b["seiten"] = list(e["seiten"])
+        else:
+            b["datei"] = e.get("datei")   # PDF-Beleg: bleibt als eigene Datei (Anlage)
+        belege.append(b)
+    if alt is not None:
+        auftrag_text = (alt.get("notiz") or "") + (" · " + auftrag_text if auftrag_text else "")
+
+    # Claude liest alle Belege nochmal zusammen nach (Beträge, Doppelte) und stellt die Kosten auf
+    bloecke, groesse = [], 0
+    for n, b in enumerate(belege, 1):
+        bloecke.append({"type": "text", "text": f"Beleg {n}: beim Ablegen erkannt: {b.get('typ')} · {b.get('absender')} · "
+                                                f"{b.get('datum')} · Betrag {b.get('betrag')} · Notiz {b.get('notiz') or '-'}\n{b.get('inhalt')}"})
+        pfade = [os.path.join(SEITEN, s) for s in b.get("seiten") or []] or [os.path.join(ABLAGE, b.get("datei") or "")]
+        for p_ in pfade:
+            if os.path.exists(p_) and groesse + os.path.getsize(p_) < 25_000_000:
+                groesse += os.path.getsize(p_)
+                bloecke.append(dokument_block(p_))
+    bloecke.append({"type": "text", "text": f"Heute: {date.today().isoformat()}\nAuftrag der Familie: {auftrag_text or '(keiner)'}\n"
+                                            f"Vorschlag für den Namen: {titel or (alt or {}).get('titel') or '-'}\n{familien_kontext()}"})
+    a = claude(VORGANG, bloecke, max_tokens=6000, effort="medium")
+    positionen = [p_ for p_ in a.get("positionen") or [] if isinstance(p_, dict)]
+    if not positionen:   # Notlösung: was beim Ablegen erkannt wurde
+        positionen = [{"beleg": n, "text": b.get("titel"), "absender": b.get("absender"), "datum": b.get("datum"),
+                       "art": b.get("typ"), "betrag": b.get("betrag"), "zaehlt": True, "hinweis": ""} for n, b in enumerate(belege, 1)]
+
+    def zahl(x):
+        try:
+            return float(x)
+        except (TypeError, ValueError):
+            return None
+    summe = round(sum(zahl(p_.get("betrag")) or 0 for p_ in positionen if p_.get("zaehlt") is not False), 2)
+    titel = (a.get("titel") or titel or (alt or {}).get("titel") or "Vorgang").strip()[:80]
+    ordner = (alt or {}).get("ordner") if (alt or {}).get("ordner_fest") else ordner_name(a.get("ordner") or eintraege[0].get("ordner"))
+    hinweise = [str(h) for h in a.get("hinweise") or [] if h]
+
+    # PDF: Kostenaufstellung vorne, danach jede Belegseite
+    blatt = nk_pdf.Blatt((f"Kostenaufstellung: {titel}", f"Stand {date.today().strftime('%d.%m.%Y')} · {len(belege)} Belege"
+                          f" · Summe {euro(summe)}"), hochformat=True)
+    if a.get("anlass"):
+        blatt.absatz(str(a["anlass"]), 9.5)
+    zeilen_pdf = []
+    for p_ in positionen:
+        betrag = euro(zahl(p_.get("betrag"))) if zahl(p_.get("betrag")) is not None else ("–" if p_.get("zaehlt") is False else "unleserlich")
+        art = str(p_.get("art") or "")
+        if p_.get("zaehlt") is False:
+            betrag, art = f"({betrag})", art + " – nicht mitgezählt"
+        zeilen_pdf.append([str(p_.get("beleg") or ""), de_datum(p_.get("datum")), str(p_.get("text") or "")
+                           + (f" – {p_['hinweis']}" if p_.get("hinweis") else ""), str(p_.get("absender") or ""), art, betrag])
+    blatt.tabelle([("Beleg", 12, False), ("Datum", 21, False), ("Position", 68, False), ("Absender", 36, False),
+                   ("Art", 22, False), ("Betrag", 23, True)], zeilen_pdf, ["", "", "Summe", "", "", euro(summe)])
+    if hinweise:
+        blatt.ueberschrift("Hinweise")
+        for h in hinweise:
+            blatt.absatz("– " + h)
+    anlagen = [b["datei"] for b in belege if b.get("datei")]
+    if anlagen:
+        blatt.absatz("Als eigene Datei(en) beigefügt: " + ", ".join(os.path.basename(x) for x in anlagen), 8.5, nk_pdf.GRAU)
+    nach_beleg = {str(p_.get("beleg")): p_ for p_ in positionen}
+    for n, b in enumerate(belege, 1):
+        seiten = b.get("seiten") or []
+        p_ = nach_beleg.get(str(n)) or {}
+        for k, s_ in enumerate(seiten, 1):
+            pfad = os.path.join(SEITEN, s_)
+            if not os.path.exists(pfad):
+                continue
+            with open(pfad, "rb") as f:
+                jpeg = f.read()
+            kopf = " · ".join(t for t in [f"Beleg {n}", p_.get("absender") or b.get("absender") or b.get("titel") or "",
+                                          de_datum(p_.get("datum") or b.get("datum")),
+                                          euro(zahl(p_.get("betrag"))) if zahl(p_.get("betrag")) is not None else ""] if t)
+            blatt.bild_seite(jpeg, kopf + (f" (Seite {k}/{len(seiten)})" if len(seiten) > 1 else ""))
+
+    unterordner = os.path.join(ordner_pfad(ordner), str(date.today().year))
+    os.makedirs(os.path.join(ABLAGE, unterordner), exist_ok=True)
+    ziel_rel = os.path.join(unterordner, f"{date.today().isoformat()}_Kostenaufstellung_{sicherer_name(titel)}.pdf")
+    if alt is None and os.path.exists(os.path.join(ABLAGE, ziel_rel)):
+        ziel_rel = ziel_rel[:-4] + f"_{uuid.uuid4().hex[:4]}.pdf"
+    blatt.speichern(os.path.join(ABLAGE, ziel_rel))
+    if alt is not None and alt.get("datei") and alt["datei"] != ziel_rel:
+        _weg(os.path.join(ABLAGE, alt["datei"]))
+
+    # Einzel-Einträge gehen im Vorgang auf (ihre Fotos bleiben, die Einzel-PDFs werden durch das Sammel-PDF ersetzt)
+    for e in eintraege:
+        if e is alt or e not in liste:
+            continue
+        if e.get("seiten"):
+            _weg(os.path.join(ABLAGE, e.get("datei") or ""))
+        liste.remove(e)
+    inhalt = "\n".join(f"Beleg {z[0]}: {z[1]} {z[2]} ({z[3]}, {z[4]}) {z[5]}" for z in zeilen_pdf) + f"\nSumme: {euro(summe)}"
+    v = alt or {"id": datetime.now().strftime("%Y%m%d%H%M%S") + uuid.uuid4().hex[:4], "eingang": datetime.now().isoformat(timespec="seconds"),
+                "chat": chat, "von": von, "seiten": [], "sendung": eintraege[-1].get("sendung"),
+                "sendung_text": eintraege[-1].get("sendung_text") or auftrag_text[:500]}
+    if alt is None:
+        liste.append(v)
+    v.update({"typ": "Sonstiges", "kategorie": a.get("kategorie") or "Sonstiges", "titel": f"Kostenaufstellung {titel}",
+              "absender": "Zusammenstellung", "datum": date.today().isoformat(), "betrag": summe, "person": "",
+              "ordner": ordner, "ordner_fest": True, "rechnungsnummer": "", "bezug": "", "mahnung": False,
+              "zahlung": v.get("zahlung") if v.get("zahlung_fest") else "offen",
+              "steuer": {"relevant": False, "art": "keine", "jahr": None, "betrag": None}, "einreichen": {"noetig": False},
+              "fristen": v.get("fristen") or [], "schlagworte": (a.get("schlagworte") or [])[:10] + ["Vorgang", "Kostenaufstellung"],
+              "inhalt": (str(a.get("anlass") or "") + "\n" + inhalt + "\n" + "\n".join(hinweise))[:6000],
+              "frage": "", "vorschlaege": [], "datei": ziel_rel, "belege": belege, "anlagen": anlagen,
+              "notiz": auftrag_text[:500] if auftrag_text else v.get("notiz", "")})
+    json_schreiben(VERZEICHNIS, liste)
+    logbuch(f"Vorgang: {titel} – {len(belege)} Belege, {euro(summe)}")
+
+    zeilen = [f"🧮 Kostenaufstellung „{titel}“ – {len(belege)} Belege zu einem Vorgang zusammengefasst"
+              + (" (ergänzt)" if alt is not None else "") + ":"]
+    for z, p_ in zip(zeilen_pdf, positionen):
+        zeilen.append(f"{z[0]}. {z[3] or z[2]}{' · ' + z[1] if z[1] else ''}: {z[5]}" + (" (nicht mitgezählt)" if p_.get("zaehlt") is False else ""))
+    zeilen.append(f"Summe: {euro(summe)}")
+    zeilen += [f"ℹ️ {h}" for h in hinweise[:4]]
+    zeilen.append(f"🗂 Ordner: {ordner or 'Unsortiert'} – als ein Eintrag in der Akte (Reiter Akte).")
+    senden(chat, "\n".join(zeilen))
+    datei_senden(chat, os.path.join(ABLAGE, ziel_rel), f"Kostenaufstellung {titel} · Summe {euro(summe)}")
+    for x in anlagen:
+        if os.path.exists(os.path.join(ABLAGE, x)):
+            datei_senden(chat, os.path.join(ABLAGE, x), f"Anlage zu „{titel}“")
+
+
 def befehl(auftrag):
     chat = auftrag.get("chat")
     text = (auftrag.get("text") or "").strip()
@@ -951,6 +1190,8 @@ def befehl(auftrag):
         eingereicht(chat, t, liste)
     elif re.match(r"^(schreiben|brief)\b", t):
         schreiben({"chat": chat, "id": None, "text": re.sub(r"^/?(schreiben|brief)\s*[:,-]?\s*", "", text, flags=re.I)})
+    elif re.search(SAMMELN, t, re.I):
+        vorgang_befehl(chat, text, liste)
     elif re.match(r"^fristen", t):
         bald = fristen_text(liste)
         senden(chat, "⏰ Fristen in den nächsten 8 Wochen:\n" + "\n".join(
@@ -1109,6 +1350,11 @@ def seite(auftrag):
         _weg(os.path.join(ABLAGE, eintrag.get("datei", "")))
         for s in eintrag.get("seiten") or []:
             _weg(os.path.join(SEITEN, s))
+        for b in eintrag.get("belege") or []:
+            for s in b.get("seiten") or []:
+                _weg(os.path.join(SEITEN, s))
+            if b.get("datei"):
+                _weg(os.path.join(ABLAGE, b["datei"]))
         liste.remove(eintrag)
         json_schreiben(VERZEICHNIS, liste)
     felder = ("id", "titel", "typ", "kategorie", "absender", "datum", "betrag", "person", "steuer", "einreichen", "fristen",
@@ -1137,7 +1383,7 @@ def ankuendigen(auftrag):
 
 # ---------- Start (lange Arbeit im Hintergrund) ----------
 
-def im_hintergrund(funktion, auftrag):
+def im_hintergrund(funktion, auftrag, warten=0):
     if os.fork() > 0:
         return
     os.setsid()
@@ -1146,6 +1392,7 @@ def im_hintergrund(funktion, auftrag):
     fd = os.open(os.devnull, os.O_RDWR)
     for s in (0, 1, 2):
         os.dup2(fd, s)
+    time.sleep(warten)
     try:
         with Sperre():
             funktion(auftrag)
