@@ -244,6 +244,7 @@ async function ladeStat() {
       return a; };
     STAT = { schluessel, b, pv: reihe(E.pvGesamt || E.pvTag), bezug: reihe(E.bezug), einsp: reihe(E.einsp),
       laden: reihe(E.laden), entladen: reihe(E.entladen), wp: reihe(E.wpTag), wasser: reihe(EW.gesamt), temp: t };
+    histFuellen(STAT);
   } catch (e) { STAT = { schluessel, b, fehler: String(e.message || e) }; }
   zeichnen();
 }
@@ -443,6 +444,7 @@ function auswahlText() {
 }
 function zeitraumHinweis(s) {
   const b = STAT.b;
+  if (STAT.importiert && !s.leer) return `<div class="klein" style="margin-top:6px">Enthält Werte aus dem Viessmann-Energieportal (eingelesene CSV).</div>`;
   if (s.leer) return `<div class="hinweis">Für diesen Zeitraum hat Home Assistant noch nichts aufgezeichnet${ERSTER ? ` (Aufzeichnung seit ${ERSTER.toLocaleDateString("de-DE")})` : ""}.
     Ältere Verläufe gibt Viessmann über den Zugang leider nicht heraus. Ab jetzt wird alles gespeichert und bleibt.</div>`;
   if (ERSTER && ERSTER > b.von) return `<div class="klein" style="margin-top:6px">Aufzeichnung in Home Assistant seit ${ERSTER.toLocaleDateString("de-DE")}, davor fehlen die Säulen.
@@ -471,6 +473,8 @@ async function ladeRueck(holen) {
     if (holen) await h.callWS({ type: "call_service", domain: "script", service: "energie_verlauf", service_data: { aktion: "holen" }, return_response: true });
     const r = await h.callWS({ type: "call_service", domain: "script", service: "energie_verlauf", service_data: { aktion: "lesen" }, return_response: true });
     RUECK = (r && r.response) || { ok: false, fehler: "keine Antwort" };
+    HIST = RUECK.historie || null;
+    if (HIST && STAT && STAT.pv) histFuellen(STAT);
   } catch (e) { RUECK = { ok: false, fehler: String(e.message || e) }; }
   RUECK_LAEDT = false; zeichnen();
 }
@@ -523,6 +527,85 @@ function rueckblick(nurWp) {
     <div style="margin-top:8px">${knopf}</div></div>`;
 }
 
+/* ---------- Export aus dem Viessmann-Energieportal (gridX, CSV) einlesen ---------- */
+let HIST = null, IMPORT_TEXT = "";
+const pad2 = n => String(n).padStart(2, "0");
+const tagKey = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+function histFuellen(st) {      // dort, wo Home Assistant noch nichts hat, die Werte aus dem Portal einsetzen
+  if (!HIST || !st || !st.pv) return;
+  const quelle = art === "jahr" ? HIST.monat : (art === "woche" || art === "monat") ? HIST.tag : null;
+  st.importiert = false;
+  if (!quelle) return;
+  for (let i = 0; i < st.b.n; i++) {
+    let k;
+    if (art === "jahr") k = `${st.b.von.getFullYear()}-${pad2(i + 1)}`;
+    else { const d = new Date(st.b.von); d.setDate(d.getDate() + i); k = tagKey(d); }
+    const h = quelle[k]; if (!h) continue;
+    if (["pv", "bezug", "einsp"].some(f => (st[f][i] || 0) > 0.05)) continue;
+    ["pv", "bezug", "einsp", "laden", "entladen", "wp"].forEach(f => { if (h[f] != null) st[f][i] = h[f]; });
+    st.importiert = true;
+  }
+}
+function csvZeilen(text) {
+  return text.split(/\r?\n/).filter(z => z.trim()).map(z => {
+    const teile = []; let feld = "", inQ = false;
+    for (const c of z) { if (c === '"') inQ = !inQ; else if (c === "," && !inQ) { teile.push(feld); feld = ""; } else feld += c; }
+    teile.push(feld); return teile.map(x => x.trim());
+  });
+}
+function csvLesen(text) {
+  const z = csvZeilen(text); if (z.length < 2) throw new Error("Datei ist leer");
+  const kopf = z[0].map(x => x.toLowerCase());
+  const spalte = re => kopf.findIndex(k => re.test(k));
+  const sp = { pv: spalte(/^pv/), bezug: spalte(/netzbezug|bezug/), einsp: spalte(/einspeis/), laden: spalte(/batterieladung|ladung/),
+    entladen: spalte(/entladung/), wp: spalte(/w(ä|ae)rmepumpe/), haus: spalte(/haushalt/) };
+  const zeitSp = spalte(/measured|zeit|date|datum/);
+  if (zeitSp < 0 || sp.pv < 0) throw new Error("Das sieht nicht wie ein Export aus dem Energieportal aus (Spalten PV, Netzbezug … fehlen).");
+  const faktor = i => /\(kwh\)/.test(kopf[i]) ? 1 : /\(mwh\)/.test(kopf[i]) ? 1000 : 0.001;   // Wh → kWh
+  const zeilen = z.slice(1).map(r => ({ t: new Date(r[zeitSp]), r })).filter(x => !isNaN(x.t)).sort((a, b) => a.t - b.t);
+  const schritt = zeilen.length > 1 ? (zeilen[1].t - zeilen[0].t) / 3600e3 : 24;
+  const art = schritt >= 24 * 27 ? "monat" : "tag";
+  const erg = { monat: {}, tag: {} };
+  zeilen.forEach(({ t, r }) => {
+    const k = art === "monat" ? `${t.getFullYear()}-${pad2(t.getMonth() + 1)}` : tagKey(t);   // Zeitpunkt = Beginn des Zeitraums
+    const ziel = erg[art][k] = erg[art][k] || {};
+    let leer = true;
+    Object.entries(sp).forEach(([f, i]) => { if (i < 0) return; const roh = String(r[i] || ""), v = parseFloat(roh.includes(",") ? roh.replace(/\./g, "").replace(",", ".") : roh);
+      if (isFinite(v)) { ziel[f] = (ziel[f] || 0) + v * faktor(i); leer = false; } });
+    if (leer) delete erg[art][k];
+  });
+  if (art === "tag") Object.entries(erg.tag).forEach(([k, w]) => {     // Tageswerte auch zu Monaten zusammenzählen
+    const m = k.slice(0, 7), z = erg.monat[m] = erg.monat[m] || {};
+    Object.entries(w).forEach(([f, v]) => { z[f] = (z[f] || 0) + v; });
+  });
+  return { erg, art, anzahl: Object.keys(erg[art]).length };
+}
+async function importDatei(datei) {
+  IMPORT_TEXT = "Lese Datei …"; zeichnen();
+  try {
+    const { erg, art: a, anzahl } = csvLesen(await datei.text());
+    if (!anzahl) throw new Error("Keine Werte in der Datei gefunden.");
+    const r = await hass().callWS({ type: "call_service", domain: "script", service: "energie_verlauf",
+      service_data: { aktion: "import", daten: JSON.stringify(erg) }, return_response: true });
+    const res = (r && r.response) || {};
+    if (!res.ok) throw new Error(res.fehler || "Speichern hat nicht geklappt");
+    IMPORT_TEXT = `Eingelesen: ${anzahl} ${a === "monat" ? "Monate" : "Tage"}. Zum Ansehen oben „Monat“ oder „Jahr“ wählen und zurückblättern.`;
+    RUECK_LAEDT = false; await ladeRueck(false);
+  } catch (e) { IMPORT_TEXT = "Hat nicht geklappt: " + (e.message || e); }
+  zeichnen();
+}
+function importKarte() {
+  const m = HIST ? Object.keys(HIST.monat || {}).sort() : [], t = HIST ? Object.keys(HIST.tag || {}).sort() : [];
+  const bestand = m.length ? `Schon eingelesen: ${m.length} Monate (${MONATE[+m[0].slice(5) - 1]} ${m[0].slice(0, 4)} bis ${MONATE[+m[m.length - 1].slice(5) - 1]} ${m[m.length - 1].slice(0, 4)})${t.length ? `, ${t.length} Tage` : ""}.` : "Noch nichts eingelesen.";
+  return `<div class="karte"><h2>Ältere Werte aus dem Viessmann-Energieportal</h2>
+    <div class="klein">Im Portal unter Verlauf die Daten als CSV exportieren (Monat oder Tag) und hier auswählen. Die Werte erscheinen dann in den Säulen
+      für die Zeit, bevor Home Assistant aufgezeichnet hat. ${esc(bestand)}</div>
+    <label class="heute" style="display:inline-block;margin-top:8px;cursor:pointer">CSV-Datei auswählen
+      <input type="file" id="csvdatei" accept=".csv,text/csv" style="display:none"></label>
+    ${IMPORT_TEXT ? `<div class="auswahl">${esc(IMPORT_TEXT)}</div>` : ""}</div>`;
+}
+document.addEventListener("change", ev => { if (ev.target && ev.target.id === "csvdatei" && ev.target.files[0]) importDatei(ev.target.files[0]); });
+
 function uebersicht() {
   const b = bereich();
   let unten = `<div class="leer">Lade Verlauf …</div>`;
@@ -558,7 +641,7 @@ function uebersicht() {
         ${kachel(gradT(E.warmwasser), "Warmwasser")}${kachel(gradT(E.vorlauf), "Vorlauf")}
       </div></div>
     </div>
-    <div class="karte">${navi()}${unten}</div>${rueckblick(false)}`;
+    <div class="karte">${navi()}${unten}</div>${rueckblick(false)}${importKarte()}`;
 }
 
 function waermepumpe() {

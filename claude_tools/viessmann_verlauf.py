@@ -7,7 +7,12 @@ So gibt es Monate und Jahre schon vor der Einrichtung, und das Archiv wächst ü
 Anmeldung: nutzt nur den Zugang, den die Viessmann-Integration ohnehin hat (wird nur gelesen, nie erneuert oder
 ausgegeben). Ist er gerade abgelaufen, wird es beim nächsten Mal versucht.
 
-Aufruf: viessmann_verlauf.py holen | lesen   → JSON auf stdout"""
+Dazu kommen eingelesene Exporte aus dem Viessmann-Energieportal (gridX, CSV): Monats- und Tageswerte für PV, Netz,
+Speicher, Wärmepumpe und Haushalt (/config/energie_historie.json, nur lokal). Die Energie-Seite liest die CSV, schickt
+die Werte als JSON (base64, in Stücken) und zeigt sie dort, wo Home Assistant selbst noch nichts aufgezeichnet hat.
+
+Aufruf: viessmann_verlauf.py holen | lesen | import <base64-Stücke …>   → JSON auf stdout"""
+import base64
 import datetime
 import json
 import sys
@@ -17,6 +22,8 @@ import urllib.request
 API = "https://api.viessmann-climatesolutions.com/iot/v2"
 EINTRAEGE = "/config/.storage/core.config_entries"
 ARCHIV = "/config/viessmann_verlauf.json"
+HISTORIE = "/config/energie_historie.json"
+FELDER = ("pv", "bezug", "einsp", "laden", "entladen", "wp", "haus")
 EINHEIT = {"kilowattHour": ("kWh", 1), "wattHour": ("kWh", 0.001), "kWh": ("kWh", 1), "Wh": ("kWh", 0.001),
            "cubicMeter": ("m³", 1), "liter": ("l", 1)}
 
@@ -132,12 +139,42 @@ def holen():
     return {"ok": True, "stand": daten["stand"], "merkmale": len(archiv)}
 
 
+def historie_laden():
+    try:
+        with open(HISTORIE, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {"monat": {}, "tag": {}}
+
+
+def importieren(stuecke):
+    neu = json.loads(base64.b64decode("".join(stuecke)).decode("utf-8"))
+    h = historie_laden()
+    zahl = 0
+    for art in ("monat", "tag"):
+        for k, werte in (neu.get(art) or {}).items():
+            if not isinstance(werte, dict):
+                continue
+            sauber = {f: round(float(werte[f]), 3) for f in FELDER if isinstance(werte.get(f), (int, float))}
+            if sauber:
+                h.setdefault(art, {})[str(k)[:10]] = sauber
+                zahl += 1
+    h["tag"] = dict(sorted(h.get("tag", {}).items())[-1500:])
+    h["stand"] = datetime.datetime.now().isoformat(timespec="minutes")
+    with open(HISTORIE, "w", encoding="utf-8") as f:
+        json.dump(h, f, ensure_ascii=False)
+    return {"ok": True, "eingelesen": zahl, "monate": len(h.get("monat", {})), "tage": len(h.get("tag", {}))}
+
+
 def main():
     aktion = sys.argv[1] if len(sys.argv) > 1 else "lesen"
     if aktion == "holen":
         print(json.dumps(holen(), ensure_ascii=False))
+    elif aktion == "import":
+        print(json.dumps(importieren(sys.argv[2:]), ensure_ascii=False))
     else:
         d = laden()
+        d["historie"] = historie_laden()
         d["ok"] = True
         print(json.dumps(d, ensure_ascii=False, separators=(",", ":")))
 

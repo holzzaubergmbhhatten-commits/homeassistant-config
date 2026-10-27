@@ -2,7 +2,7 @@
 # die Tages-, Monats- und Jahreslisten der Anlage (Strom und Wärme der Wärmepumpe …) und archiviert sie in
 # /config/viessmann_verlauf.json. So zeigt die Seite auch Monate vor der Einrichtung.
 shell_command:
-  viessmann_verlauf: python3 /config/claude_tools/viessmann_verlauf.py {{ aktion }}
+  viessmann_verlauf: python3 /config/claude_tools/viessmann_verlauf.py {{ aktion }} {{ daten | default('') }}
 
 script:
   energie_verlauf:
@@ -11,12 +11,17 @@ script:
     mode: queued
     fields:
       aktion:
-        description: "lesen (Archiv) oder holen (jetzt bei Viessmann abrufen)"
+        description: "lesen (Archiv), holen (jetzt bei Viessmann abrufen) oder import (Export aus dem Energieportal)"
+      daten:
+        description: "nur bei import: Werte als JSON-Text {monat: {JJJJ-MM: {pv, bezug, …}}, tag: {…}}"
     sequence:
       - action: shell_command.viessmann_verlauf
         continue_on_error: true
         data:
-          aktion: "{{ 'holen' if aktion | default('lesen') == 'holen' else 'lesen' }}"
+          aktion: "{{ aktion | default('lesen') if aktion | default('lesen') in ['holen', 'import'] else 'lesen' }}"
+          daten: >-
+            {% if aktion | default('') == 'import' %}{% set s = (daten if daten is string else (daten | to_json)) | base64_encode %}
+            {% for i in range(0, s | length, 100000) %}{{ s[i:i + 100000] }} {% endfor %}{% endif %}
         response_variable: antwort
       - variables:
           ergebnis: >-
