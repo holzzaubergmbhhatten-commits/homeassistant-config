@@ -133,6 +133,11 @@ template:
         device_class: timestamp
         state: "{{ now().isoformat() }}"
         attributes:
+          # So kam der letzte Aufruf an (zum Nachsehen, ob jeder Raum seinen eigenen Wert schickt)
+          letzte_anfrage: >-
+            {% set ns = namespace(t=[]) %}
+            {% for k, v in trigger.query.items() %}{% set ns.t = ns.t + [k ~ '=' ~ v] %}{% endfor %}
+            {{ ns.t | join('&') }}
           raeume: >-
             {% set alt = (this.attributes.raeume if this is defined and this.attributes is defined and this.attributes.raeume is mapping else {}) %}
             {% set ns = namespace(d=alt) %}
