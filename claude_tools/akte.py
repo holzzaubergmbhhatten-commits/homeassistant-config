@@ -166,7 +166,7 @@ SCHREIBEN_WUNSCH = (r"\b(mach|erstell|setz|schreib|formulier|entw[iu]rf|verfass|
                     r"\b(schreiben|brief|kündigung|kuendigung|widerspruch|antrag|anschreiben|beschwerde)\b"
                     r"|^\s*(kündigung|kuendigung|widerspruch)\b")
 # "Schick Mirka: …", "Sag Mirka, dass …", "Schreib Marco bitte …" → Nachricht an ein anderes Familienmitglied weiterleiten
-_NACHRICHT = r"(?:eine?\s+)?(?:kurze\s+)?(?:test-?)?(?:nachricht|info|mitteilung)"
+_NACHRICHT = r"(?:eine?\s+)?(?:kurze\s+)?(?:test[-\s]?)?(?:nachricht|info|mitteilung)"
 WEITERLEITEN = (r"^\s*(schick|schicke|sende|sag|sage|schreib|schreibe|richte)\s+(?:bitte\s+)?(?:" + _NACHRICHT + r"\s+)?(?:an\s+)?"
                 r"(?!(?:mir|mich|uns|mal|bitte|ein|eine|einen|was|das|den|die|der|alle|nachricht|testnachricht)\b)([a-zäöüß]{2,20})"
                 r"(?:\s+bitte)?(?:\s+" + _NACHRICHT + r"(?:\s+vo[nm]\s+\w+)?)?\s*(?:[:,]|\s+dass\b|\s+aus\b|\s+bescheid\b|$)")
