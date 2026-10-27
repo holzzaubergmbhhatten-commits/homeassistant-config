@@ -33,7 +33,8 @@ import garten_ki  # noqa: E402  – Anthropic-Schlüssel und Modell
 ABLAGE = "/config/akte_ablage/"
 SEITEN = "/config/akte_ablage/_seiten/"
 FOTOS = "/config/akte_ablage/_fotos/"    # angehängte Fotos (z. B. Schadensfotos), kommen hinten ins PDF des Eintrags
-FOTO_ZIEL = "/config/akte_foto_ziel.json"   # je Chat: woran die letzten Fotos gehängt wurden (für weitere Fotos ohne Text)
+FOTO_ZIEL = "/config/akte_foto_ziel.json"
+NAMEN = "/config/akte_namen.json"         # je Telegram-Chat der Vorname, wie er beim Schreiben ankommt (für „Schick Mirka …“)   # je Chat: woran die letzten Fotos gehängt wurden (für weitere Fotos ohne Text)
 DATEI_FELDER = ("datei", "original", "uebersicht", "brief", "word", "fotos_pdf")   # alle Dateien eines Eintrags
 EINGANG = "/media/akte/_eingang/"      # nur kurz: Download aus Telegram
 EXPORT = "/media/akte/_export/"        # nur kurz: ZIP für die Steuer
@@ -1346,24 +1347,57 @@ kurz und natürlich als direkte Mitteilung an die Empfängerin bzw. den Empfäng
 z. B. "Sag Mirka, dass ich später komme" → "Ich komme später."). Nichts hinzuerfinden. Antworte NUR mit JSON: {"text": "…"}"""
 
 
-def empfaenger_finden(name, chats, ausser=None):
-    """Telegram-Chat zu einem Vornamen (aus den Empfängern, über getChat) – (chat, Vorname) oder (None, None)."""
-    name = (name or "").strip().lower()
-    for c in [c for c in chats or [] if str(c).lstrip("-").isdigit() and str(c) != str(ausser)]:
+def name_merken(chat, von):
+    """Vorname zum Chat merken (kommt bei jeder Telegram-Nachricht mit) – so findet „Schick Mirka …“ den richtigen Chat."""
+    if not chat or not von:
+        return
+    d = json_laden(NAMEN, {})
+    if d.get(str(chat)) != von:
+        d[str(chat)] = str(von)[:40]
         try:
-            vorname = telegram("getChat", {"chat_id": c})["result"].get("first_name") or ""
+            json_schreiben(NAMEN, d)
+        except OSError:
+            pass
+
+
+def chat_namen(chats):
+    """{chat: [Namen]} – gemerkter Vorname plus Vor-/Nachname und Benutzername aus Telegram."""
+    gemerkt = json_laden(NAMEN, {})
+    alle = {}
+    for c in [str(c) for c in chats or [] if str(c).lstrip("-").isdigit()]:
+        namen = [gemerkt.get(c, "")]
+        try:
+            r = telegram("getChat", {"chat_id": c})["result"]
+            namen += [r.get("first_name") or "", r.get("last_name") or "", r.get("username") or ""]
         except Exception:  # noqa: BLE001
+            pass
+        alle[c] = [n for n in namen if n]
+    return alle
+
+
+def empfaenger_finden(name, chats, ausser=None):
+    """Telegram-Chat zu einem Vornamen – (chat, Vorname) oder (None, None)."""
+    name = (name or "").strip().lower()
+    for c, namen in chat_namen(chats).items():
+        if c == str(ausser) or not name:
             continue
-        if name and (vorname.lower().startswith(name) or name.startswith(vorname.lower()[:4])):
-            return c, vorname
+        for n in namen:
+            n_ = n.lower()
+            if n_.startswith(name) or name.startswith(n_[:4]) or name in n_.split():
+                return c, namen[0]
     return None, None
+
+
+def bekannte_namen(chats, ausser=None):
+    return ", ".join(n[0] for c, n in chat_namen(chats).items() if n and c != str(ausser)) or "(niemand)"
 
 
 def nachricht_an(name, text, von, chats, ausser=None):
     """Nachricht an ein Familienmitglied schicken. Ergebnis für Jarvis/Telegram: {"ok", "an"} oder {"ok": False, "fehler"}."""
     empfaenger, vorname = empfaenger_finden(name, chats, ausser)
     if empfaenger is None:
-        return {"ok": False, "fehler": f"„{name}“ ist nicht unter den Telegram-Empfängern (muss dem Bot einmal geschrieben haben)"}
+        return {"ok": False, "fehler": f"„{name}“ finde ich nicht unter den Telegram-Empfängern (bekannt: {bekannte_namen(chats, ausser)}) – "
+                                       "sie/er muss dem Bot einmal etwas schreiben"}
     senden(empfaenger, f"📨 Nachricht von {von or 'der Familie'}:\n{text}")
     logbuch(f"Nachricht weitergeleitet an {vorname}")
     return {"ok": True, "an": vorname}
@@ -1403,7 +1437,8 @@ def familie_senden(chat, text, von, chats, liste):
         return
     empfaenger, vorname = empfaenger_finden(a["an"], chats, ausser=chat)
     if empfaenger is None:
-        senden(chat, f"📨 „{a['an']}“ ist nicht unter den Telegram-Empfängern – sie/er muss dem Bot einmal schreiben.")
+        senden(chat, f"📨 „{a['an']}“ finde ich nicht unter den Telegram-Empfängern (bekannt: {bekannte_namen(chats, chat)}) – "
+                     "sie/er muss dem Bot einmal etwas schreiben.")
         return
     erledigt = []
     for was in a.get("senden") or []:
@@ -2380,6 +2415,7 @@ def main():
     if aktion == "foto_folge":   # schnell: gehört ein Foto ohne Text zu „Foto zu …“ von eben?
         print(json.dumps({"ziel": foto_folge(auftrag.get("chat")) or ""}))
         return
+    name_merken(auftrag.get("chat"), auftrag.get("von"))
     if aktion == "offen":   # schnell: wartet die Akte in diesem Chat auf eine Antwort?
         print(json.dumps({"offen": bool(rueckfrage_offen(auftrag.get("chat")))}))
         return

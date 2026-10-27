@@ -57,7 +57,7 @@ automation:
     continue_on_error: true
     data:
       aktion: offen
-      wert: "{{ {'chat': trigger.event.data.chat_id} | to_json | base64_encode }}"
+      wert: "{{ {'chat': trigger.event.data.chat_id, 'von': trigger.event.data.from_first | default('', true)} | to_json | base64_encode }}"
     response_variable: akte_offen
   - if: "{{ akte_offen is defined and akte_offen is mapping and '\"offen\": true' in (akte_offen.stdout | default('') | string) }}"
     then:
