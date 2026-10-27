@@ -58,7 +58,7 @@ automation:
         value_template: >-
           {% set m = trigger.event.data.file_mime_type | default('') %}
           {{ m in ['application/pdf', 'application/zip', 'application/x-zip-compressed'] or (m.startswith('image/') and (trigger.event.data.text | default('', true))
-             is match('^\s*(\+|beleg|akte|weiter|seite|rückseite|rueckseite|wappen)', ignorecase=True)) }}
+             is match('^\s*(\+|beleg|akte|weiter|seite|rückseite|rueckseite|wappen|(fotos?|bilder?|schadensfotos?)\s+(zu|zum|zur|für|fuer|von|vom)\b|anh(ä|ae)ngen\b|(an|zu|dran)\s.{0,60}h(ä|ae)ngen\b)', ignorecase=True)) }}
     actions:
       - variables:
           chat: "{{ trigger.event.data.chat_id }}"
@@ -223,7 +223,7 @@ script:
         data:
           aktion: seite
           wert: >-
-            {{ {'was': was if was in ['liste', 'lesen', 'eingereicht', 'offen', 'loeschen', 'notiz', 'bezahlt', 'unbezahlt', 'einstellungen', 'einstellungen_speichern', 'alle_neu', 'antwort', 'ordner_setzen', 'ordner_umbenennen', 'teilen', 'schreiben', 'wappen', 'wappen_lesen', 'nk_lesen', 'nk_speichern', 'nk_neu', 'nk_auswerten', 'nk_zaehler', 'nk_pdf', 'nk_foto', 'verbinden', 'trennen', 'fehler_weg'] else 'liste',
+            {{ {'was': was if was in ['liste', 'lesen', 'eingereicht', 'offen', 'loeschen', 'notiz', 'bezahlt', 'unbezahlt', 'einstellungen', 'einstellungen_speichern', 'alle_neu', 'antwort', 'ordner_setzen', 'ordner_umbenennen', 'teilen', 'schreiben', 'wappen', 'wappen_lesen', 'nk_lesen', 'nk_speichern', 'nk_neu', 'nk_auswerten', 'nk_zaehler', 'nk_pdf', 'nk_foto', 'verbinden', 'trennen', 'fehler_weg', 'foto_weg', 'aus_eingang', 'eingang_anhaengen'] else 'liste',
                 'id': id | default('', true), 'ab': ab | default(0) | int(0), 'text': text | default('', true), 'ordner': ordner | default('', true), 'chat': (states('input_text.telegram_empfaenger') | string).split(';') | first | trim,
                 'chats': (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | list, 'wer': wer | default('', true)} | to_json | base64_encode }}
         response_variable: ergebnis

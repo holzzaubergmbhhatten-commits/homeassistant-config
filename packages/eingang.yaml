@@ -42,7 +42,7 @@ automation:
         value_template: >-
           {{ (trigger.event.data.file_mime_type | default('')).startswith('image/')
              and not ((trigger.event.data.text | default('', true))
-                      is match('^\s*(\+|beleg|akte|weiter|seite|rückseite|rueckseite|wappen)', ignorecase=True)) }}
+                      is match('^\s*(\+|beleg|akte|weiter|seite|rückseite|rueckseite|wappen|(fotos?|bilder?|schadensfotos?)\s+(zu|zum|zur|für|fuer|von|vom)\b|anh(ä|ae)ngen\b|(an|zu|dran)\s.{0,60}h(ä|ae)ngen\b)', ignorecase=True)) }}
     actions:
       - variables:
           chat: "{{ trigger.event.data.chat_id }}"
@@ -74,6 +74,27 @@ automation:
                          and 'weather.touchmonitor_home' in vorhersage else [])[:3] %}
             {{ ('jetzt ' ~ w.attributes.temperature ~ ' °C, ' ~ w.state) if w else '' }}{% for d in fc %};
             {{ as_timestamp(d.datetime) | timestamp_custom('%d.%m.') }} {{ d.templow | default('?') }}–{{ d.temperature }} °C, {{ d.precipitation | default(0) }} mm{% endfor %}
+      # 0. Weiteres Foto ohne Text kurz nach „Foto zu …“ (z. B. Telegram-Album)? Dann an denselben Akte-Eintrag hängen
+      - if: "{{ text == '' }}"
+        then:
+          - action: shell_command.akte
+            continue_on_error: true
+            data:
+              aktion: foto_folge
+              wert: "{{ {'chat': chat} | to_json | base64_encode }}"
+            response_variable: folge
+          - variables:
+              foto_ziel: >-
+                {% set a = folge.stdout | default('') if folge is defined and folge is mapping else '' %}
+                {{ (a | from_json).ziel | default('') if (a | string).startswith('{') else '' }}
+          - if: "{{ foto_ziel != '' }}"
+            then:
+              - action: shell_command.akte
+                continue_on_error: true
+                data:
+                  aktion: neu
+                  wert: "{{ {'datei': datei, 'chat': chat, 'von': von, 'text': '', 'foto_ziel': foto_ziel} | to_json | base64_encode }}"
+              - stop: Foto an die Akte gehängt
       # 1. Was ist auf dem Foto? (Haus-Sachen werden dabei gleich im Eingang abgelegt)
       - action: shell_command.eingang_befehl
         continue_on_error: true

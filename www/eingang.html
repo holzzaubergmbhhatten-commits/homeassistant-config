@@ -27,7 +27,7 @@
   .filter button.an { background: var(--text); color: #fff; }
   .liste { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 10px; }
   .eintrag { background: var(--karte); border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.06); display: flex; flex-direction: column; }
-  .eintrag.erledigt { opacity: .6; }
+  .eintrag.erledigt .bild, .eintrag.erledigt .erkannt { opacity: .55; }
   .bild { width: 100%; height: 190px; object-fit: cover; background: #E5E5EA; display: block; }
   .inhalt { padding: 10px 14px 12px; }
   .inhalt b { font-size: 16px; }
@@ -40,6 +40,12 @@
   .knopf.gruen { background: var(--gruen); color: #fff; }
   .knopf.rot { color: var(--rot); }
   .knopf.scharf { background: var(--rot); color: #fff; }
+  .knopf.blau { background: var(--blau); color: #fff; }
+  .wahl { margin-top: 8px; background: #F2F2F7; border-radius: 12px; padding: 8px; }
+  .wahl input { width: 100%; padding: 8px 10px; border-radius: 10px; border: 1px solid #D1D1D6; font: inherit; font-size: 14px; }
+  .wahl button.ziel { display: block; width: 100%; text-align: left; padding: 8px 10px; margin-top: 6px; border-radius: 10px; background: #fff; font-size: 13px; }
+  .wahl button.ziel small { color: var(--grau); }
+  .marke.akte { background: #34C7591A; color: #1E8E3E; }
   .leer { text-align: center; padding: 50px 10px; color: var(--grau); line-height: 1.6; }
   .gross { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: none; align-items: center; justify-content: center; z-index: 20; }
   .gross.offen { display: flex; }
@@ -53,19 +59,36 @@
 <div class="gross" id="gross"><img id="gross-bild" alt=""></div>
 <div class="toast" id="toast"></div>
 <script>
-const SEITEN_VERSION = 2;
+const SEITEN_VERSION = 3;
 const $ = id => document.getElementById(id);
 const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const ICON = {
   haken: "M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z",
   zurueck: "M12.5,8C9.85,8 7.45,9 5.6,10.6L2,7V16H11L7.38,12.38C8.77,11.22 10.54,10.5 12.5,10.5C16.04,10.5 19.05,12.81 20.1,16L22.47,15.22C21.08,11.03 17.15,8 12.5,8Z",
+  ordner: "M10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z",
+  klammer: "M16.5,6V17.5A4,4 0 0,1 12.5,21.5A4,4 0 0,1 8.5,17.5V5A2.5,2.5 0 0,1 11,2.5A2.5,2.5 0 0,1 13.5,5V15.5A1,1 0 0,1 12.5,16.5A1,1 0 0,1 11.5,15.5V6H10V15.5A2.5,2.5 0 0,0 12.5,18A2.5,2.5 0 0,0 15,15.5V5A4,4 0 0,0 11,1A4,4 0 0,0 7,5V17.5A5.5,5.5 0 0,0 12.5,23A5.5,5.5 0 0,0 18,17.5V6H16.5Z",
   muell: "M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z",
 };
 const ic = n => `<svg class="ic" viewBox="0 0 24 24"><path d="${ICON[n]}"/></svg>`;
 function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
 function toast(t) { const m = $("toast"); m.textContent = t; m.style.display = "block"; clearTimeout(toast.t); toast.t = setTimeout(() => m.style.display = "none", 3000); }
 
-let eintraege = [], filter = "neu", bilder = {}, letzter = "";
+let eintraege = [], filter = "neu", bilder = {}, letzter = "", anhaengen = "", akteListe = [], akteSuche = "";
+// Akte (script.akte_aktion): Liste der Einträge zum Anhängen, Foto als Beleg übernehmen oder an einen Eintrag hängen
+async function akte(daten) {
+  const r = await hass().callWS({ type: "call_service", domain: "script", service: "akte_aktion", service_data: daten, return_response: true });
+  let a = r && r.response && r.response.stdout; if (typeof a === "string") { try { a = JSON.parse(a); } catch (e) { a = null; } }
+  return a || {};
+}
+function akteWahl(e) {
+  const w = akteSuche.toLowerCase().split(/\s+/).filter(Boolean);
+  const treffer = akteListe.filter(x => { const t = [x.titel, x.absender, x.ordner, x.datum].join(" ").toLowerCase(); return w.every(v => t.includes(v)); })
+    .sort((a, b) => (b.vorgang ? 1 : 0) - (a.vorgang ? 1 : 0) || String(b.eingang || "").localeCompare(String(a.eingang || ""))).slice(0, 12);
+  return `<div class="wahl"><b>An welchen Akte-Eintrag?</b> <span class="klein">Das Foto kommt hinten ins PDF des Eintrags.</span>
+    <input id="akte-suche" placeholder="Suchen: Brille, Schaden, Kläranlage …" value="${esc(akteSuche)}">
+    ${treffer.map(x => `<button class="ziel" data-a="anhaengen-an" data-w="${esc(e.id)}" data-z="${esc(x.id)}"><b>${esc(x.titel || x.typ)}</b><br><small>${esc([x.absender, x.datum, x.ordner].filter(Boolean).join(" · "))}</small></button>`).join("") || `<div class="klein" style="margin-top:6px">Nichts gefunden.</div>`}
+    <div class="aktionen"><button class="knopf" data-a="anhaengen-zu">Abbrechen</button></div></div>`;
+}
 async function aktion(aktion, id) {
   const h = hass(); if (!h) return null;
   const r = await h.callWS({ type: "call_service", domain: "script", service: "eingang_aktion", service_data: { aktion, id: id || "-" }, return_response: true });
@@ -86,25 +109,33 @@ function zeichnen() {
   const zahl = s => eintraege.filter(e => e.status === s).length;
   const sicht = eintraege.filter(e => filter === "alle" || e.status === filter);
   $("inhalt").innerHTML = `
-    <div class="kopf"><h1>Eingang</h1><span class="klein">Fotos per Telegram an den Bot schicken, gern mit einem Satz dazu („Das ist der Wasserfilter im HWR“). Claude liest die Infos heraus und schlägt vor, wohin sie im Haus-Handbuch gehören. Pflanzenfotos gehen wie bisher in den Garten-Fotocheck.</span></div>
-    <div class="filter">${[["neu", `Neu (${zahl("neu")})`], ["erledigt", `Übernommen (${zahl("erledigt")})`], ["alle", "Alle"]].map(([w, t]) => `<button data-a="filter" data-w="${w}" class="${w === filter ? "an" : ""}">${t}</button>`).join("")}</div>
+    <div class="kopf"><h1>Eingang</h1><span class="klein">Fotos per Telegram an den Bot schicken, gern mit einem Satz dazu („Das ist der Wasserfilter im HWR“). Claude liest die Infos heraus und schlägt vor, wohin sie im Haus-Handbuch gehören. War es doch ein Beleg (Rechnung, Bescheid, Plan): „In die Akte“. Gehört es zu einem Akte-Eintrag (z. B. Schadensfoto): „An Akte-Eintrag hängen“. „Erledigt“ nimmt das Foto nur aus der Liste.</span></div>
+    <div class="filter">${[["neu", `Neu (${zahl("neu")})`], ["akte", `In der Akte (${zahl("akte")})`], ["erledigt", `Erledigt (${zahl("erledigt")})`], ["alle", "Alle"]].map(([w, t]) => `<button data-a="filter" data-w="${w}" class="${w === filter ? "an" : ""}">${t}</button>`).join("")}</div>
     ${sicht.length ? `<div class="liste">${sicht.map(e => `
       <div class="eintrag ${e.status === "erledigt" ? "erledigt" : ""}">
         <img class="bild" data-a="gross" data-w="${esc(e.datei)}" data-bild="${esc(e.datei)}" alt="">
         <div class="inhalt">
-          <b>${esc(e.titel)}</b><br><span class="marke">${esc(e.zuordnung || e.bereich)}</span>
+          <b>${esc(e.titel)}</b><br><span class="marke">${esc(e.zuordnung || e.bereich)}</span>${e.status === "akte" ? ` <span class="marke akte">Akte: ${esc(e.akte || "übernommen")}</span>` : ""}
           <div class="klein">${esc(e.datum)}${e.von ? " · von " + esc(e.von) : ""}</div>
           ${e.text ? `<div class="zitat">„${esc(e.text)}“</div>` : ""}
           ${e.erkannt ? `<div class="erkannt">${esc(e.erkannt)}</div>` : ""}
           ${e.fragen ? `<div class="fragen">Offen: ${esc(e.fragen)}</div>` : ""}
+          ${anhaengen === e.id ? akteWahl(e) : ""}
           <div class="aktionen">
-            ${e.status === "erledigt" ? `<button class="knopf" data-a="offen" data-w="${esc(e.id)}">${ic("zurueck")} Wieder offen</button>`
-              : `<button class="knopf gruen" data-a="erledigt" data-w="${esc(e.id)}">${ic("haken")} Übernommen</button>`}
+            ${e.status !== "akte" ? `<button class="knopf blau" data-a="zur-akte" data-w="${esc(e.id)}">${ic("ordner")} Ist ein Beleg: in die Akte</button>
+              <button class="knopf" data-a="anhaengen" data-w="${esc(e.id)}">${ic("klammer")} An Akte-Eintrag hängen</button>` : ""}
+            ${e.status === "neu" ? `<button class="knopf gruen" data-a="erledigt" data-w="${esc(e.id)}">${ic("haken")} Erledigt</button>`
+              : `<button class="knopf" data-a="offen" data-w="${esc(e.id)}">${ic("zurueck")} Wieder offen</button>`}
             <button class="knopf rot" data-a="loeschen" data-w="${esc(e.id)}">${ic("muell")} Löschen</button>
           </div></div></div>`).join("")}</div>`
       : `<div class="leer">${filter === "neu" ? "Nichts Neues im Eingang." : "Noch nichts da."}<br>Einfach ein Foto an den Telegram-Bot schicken.</div>`}`;
   document.querySelectorAll("[data-bild]").forEach(async img => { const u = await bildUrl(img.dataset.bild); if (u) img.src = u; });
 }
+document.addEventListener("input", ev => {
+  if (ev.target.id !== "akte-suche") return;
+  akteSuche = ev.target.value; clearTimeout(zeichnen.t);
+  zeichnen.t = setTimeout(() => { zeichnen(); const f = $("akte-suche"); if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); } }, 300);
+});
 // Kiosk-Touchscreen: Geister-Klicks und Wischen nicht als Tippen werten
 let letzterTipp = 0, tippStart = null;
 document.addEventListener("pointerdown", ev => { tippStart = { x: ev.clientX, y: ev.clientY }; }, true);
@@ -117,7 +148,24 @@ document.addEventListener("click", async ev => {
   switch (el.dataset.a) {
     case "filter": filter = w; zeichnen(); break;
     case "gross": { const u = await bildUrl(w); if (u) { $("gross-bild").src = u; $("gross").classList.add("offen"); } break; }
-    case "erledigt": await aktion("erledigt", w); toast("Als übernommen markiert"); zeichnen(); break;
+    case "erledigt": await aktion("erledigt", w); toast("Erledigt – aus der Liste genommen"); zeichnen(); break;
+    case "zur-akte": {
+      const a = await akte({ was: "aus_eingang", text: w });
+      if (a.ok === false) { toast(a.fehler || "Ging nicht"); break; }
+      await aktion("liste"); toast("Kommt in die Akte – Claude liest es jetzt (Meldung per Telegram)"); zeichnen(); break;
+    }
+    case "anhaengen": {
+      anhaengen = anhaengen === w ? "" : w; akteSuche = "";
+      if (anhaengen) { const a = await akte({ was: "liste" }); akteListe = Array.isArray(a.eintraege) ? a.eintraege : []; }
+      zeichnen(); { const f = $("akte-suche"); if (f) f.focus(); } break;
+    }
+    case "anhaengen-zu": anhaengen = ""; zeichnen(); break;
+    case "anhaengen-an": {
+      const a = await akte({ was: "eingang_anhaengen", id: el.dataset.z, text: w });
+      if (a.ok === false) { toast(a.fehler || "Ging nicht"); break; }
+      const ziel = akteListe.find(x => x.id === el.dataset.z) || {};
+      anhaengen = ""; await aktion("liste"); toast("Foto hängt jetzt an „" + (ziel.titel || "Eintrag") + "“"); zeichnen(); break;
+    }
     case "offen": await aktion("offen", w); zeichnen(); break;
     case "loeschen":
       if (el.dataset.scharf !== "1") { el.dataset.scharf = "1"; el.classList.add("scharf"); el.textContent = "Wirklich löschen?"; return; }
@@ -125,6 +173,7 @@ document.addEventListener("click", async ev => {
   }
 });
 async function neuLaden() {
+  if (anhaengen) return;   // nicht neu zeichnen, während ein Akte-Eintrag ausgewählt wird
   const a = await aktion("liste");
   const sig = JSON.stringify(eintraege);
   if (a && sig !== letzter) { letzter = sig; zeichnen(); }

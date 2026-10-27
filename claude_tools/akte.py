@@ -32,6 +32,9 @@ import garten_ki  # noqa: E402  – Anthropic-Schlüssel und Modell
 # Ablage im Konfigurationsordner: der ist in jedem Home-Assistant-Backup enthalten (der Medien-Ordner nicht immer)
 ABLAGE = "/config/akte_ablage/"
 SEITEN = "/config/akte_ablage/_seiten/"
+FOTOS = "/config/akte_ablage/_fotos/"    # angehängte Fotos (z. B. Schadensfotos), kommen hinten ins PDF des Eintrags
+FOTO_ZIEL = "/config/akte_foto_ziel.json"   # je Chat: woran die letzten Fotos gehängt wurden (für weitere Fotos ohne Text)
+DATEI_FELDER = ("datei", "original", "uebersicht", "brief", "word", "fotos_pdf")   # alle Dateien eines Eintrags
 EINGANG = "/media/akte/_eingang/"      # nur kurz: Download aus Telegram
 EXPORT = "/media/akte/_export/"        # nur kurz: ZIP für die Steuer
 ALT = "/media/akte/"                   # frühere Ablage, wird einmalig umgezogen
@@ -156,6 +159,9 @@ was auffällt und was zu tun ist; leer lassen, wenn nichts Wichtiges"}"""
 # "die gehören alle zusammen", "Kosten Aufstellung", "als eine PDF zusammenfassen" → mehrere Belege zu einem Vorgang bündeln
 SAMMELN = (r"geh(ö|oe)r\w*\s.{0,40}zusammen|zusammen\s*(zu\s*)?(ge)?(füg|fueg|heft)|\bein(e|en)?\s+(dokument|schreiben|datei)\b|kosten\s*-?\s*aufstellung|zusammen\s*(zu\s*)?(fass|führ|fuehr|rechn|stell|addier)"
            r"|(alle|die)\s+kosten\s.{0,30}(addier|summ|zusammen)|(eine?|1)\s+pdf\b|als\s+(einen?\s+)?vorgang")
+
+# Foto mit Text "Foto zu …"/"Bild zum Schaden …"/"anhängen an …" → an einen bestehenden Eintrag hängen statt neu ablegen
+FOTO_ZU = r"^\s*((fotos?|bilder?|schadensfotos?)\s+(zu|zum|zur|für|fuer|von|vom)\b|(an|zu)\s+.{3,60}\s+(an)?h(ä|ae)ngen\b|anh(ä|ae)ngen\b)"
 
 # "Kostenaufstellung bitte neu erstellen / ändern / ohne Beleg 7" → bestehenden Vorgang mit dem Wunsch neu aufbauen
 NEU_ERSTELLEN = (r"(kosten\s*-?\s*aufstellung|aufstellung|vorgang)\b.{0,80}\b(neu|nochmal|noch\s*mal|überarbeit|ueberarbeit|aktualisier"
@@ -547,6 +553,9 @@ def ablegen(auftrag):
     text = (auftrag.get("text") or "").strip()
     ist_pdf = quelle.lower().endswith(".pdf")
     liste = verzeichnis()
+    if not ist_pdf and (auftrag.get("foto_ziel") or re.match(FOTO_ZU, text, re.I)):
+        foto_zu(auftrag, liste)
+        return
     os.makedirs(SEITEN, exist_ok=True)
 
     # Sendung: Fotos/PDFs, die kurz nacheinander aus diesem Chat kommen (z. B. ein Telegram-Album – dort steht der Text nur
@@ -660,6 +669,11 @@ def ablegen(auftrag):
                               "von": auftrag.get("von", ""), "seiten": [] if ist_pdf else [os.path.basename(seite)]}
     felder_setzen(neu_eintrag, e, jahr)
     neu_eintrag["datei"] = ziel_rel
+    if neu_eintrag.get("fotos") or neu_eintrag.get("brief"):   # Fotos/Schreiben bleiben dran
+        if neu_eintrag.get("original") and neu_eintrag["original"] != ziel_rel:
+            _weg(os.path.join(ABLAGE, neu_eintrag["original"]))
+        neu_eintrag["original"] = ziel_rel
+        dokument_zusammensetzen(neu_eintrag)
     if auftrag.get("herkunft"):
         neu_eintrag["herkunft"] = auftrag["herkunft"][:200]
     neu_eintrag.setdefault("sendung", sendung)
@@ -742,11 +756,16 @@ def datei_einordnen(e):
     if os.path.dirname(alt) == soll or not os.path.exists(os.path.join(ABLAGE, alt)):
         return
     os.makedirs(os.path.join(ABLAGE, soll), exist_ok=True)
-    neu = os.path.join(soll, os.path.basename(alt))
-    if os.path.exists(os.path.join(ABLAGE, neu)):
-        neu = os.path.join(soll, uuid.uuid4().hex[:4] + "_" + os.path.basename(alt))
-    os.replace(os.path.join(ABLAGE, alt), os.path.join(ABLAGE, neu))
-    e["datei"] = neu
+    vorsatz = ""
+    if os.path.exists(os.path.join(ABLAGE, soll, os.path.basename(alt))):
+        vorsatz = uuid.uuid4().hex[:4] + "_"
+    for feld in DATEI_FELDER:   # Haupt-PDF und alle Bestandteile (Original, Übersicht, Schreiben, Fotos) zusammen umziehen
+        x = e.get(feld)
+        if x and os.path.exists(os.path.join(ABLAGE, x)):
+            neu = os.path.join(soll, vorsatz + os.path.basename(x))
+            if neu != x:
+                os.replace(os.path.join(ABLAGE, x), os.path.join(ABLAGE, neu))
+            e[feld] = neu
 
 
 def zusammenfuehren(liste, gruppe):
@@ -761,8 +780,12 @@ def zusammenfuehren(liste, gruppe):
         if e.get("notiz"):
             haupt["notiz"] = ((haupt.get("notiz") or "") + " · " + e["notiz"]).strip(" ·")
         liste.remove(e)
-    pfad = ablage(haupt)
+    pfad = os.path.join(ABLAGE, haupt["original"]) if haupt.get("original") else ablage(haupt)
     seiten_zu_pdf([os.path.join(SEITEN, s) for s in haupt["seiten"]], pfad)
+    for e in es[1:]:   # Fotos der anderen Teile mitnehmen
+        haupt.setdefault("fotos", []).extend(e.get("fotos") or [])
+    if haupt.get("original") or haupt.get("fotos"):
+        dokument_zusammensetzen(haupt)
     bloecke = [dokument_block(os.path.join(SEITEN, s)) for s in haupt["seiten"]]
     bloecke.append({"type": "text", "text": f"Heute: {date.today().isoformat()}\nNotiz der Familie: {haupt.get('notiz') or '(keine)'}\n{familien_kontext()}"})
     felder_setzen(haupt, claude(LESEN, bloecke, max_tokens=4000))
@@ -928,7 +951,7 @@ def schreiben(auftrag):
         if bezug.get("word") and bezug["word"] != word_rel:
             _weg(os.path.join(ABLAGE, bezug["word"]))
         bezug["brief"], bezug["word"] = ziel_rel, word_rel
-        vorgang_zusammensetzen(bezug)
+        dokument_zusammensetzen(bezug)
         bezug["notiz"] = ((bezug.get("notiz") or "") + f" · Schreiben {date.today().strftime('%d.%m.%Y')}: {auftrag.get('text') or ''}")[-500:]
         verzeichnis_schreiben(liste)
         logbuch(f"Schreiben zum Vorgang: {bezug.get('titel')}")
@@ -1299,6 +1322,42 @@ def vorgang_befehl(chat, text, liste, nachfragen=True):
         vorgang_bilden(chat, liste, gewaehlt, text, titel=a.get("titel") or "")
 
 
+def foto_zu(auftrag, liste):
+    """Telegram-Foto an einen bestehenden Eintrag hängen. Ziel: aus dem Text (Suche, Vorgänge bevorzugt) oder – bei weiteren
+    Fotos ohne Text kurz danach – derselbe wie beim letzten Mal."""
+    chat, text, quelle = auftrag.get("chat"), (auftrag.get("text") or "").strip(), auftrag.get("datei", "")
+    ziel = next((x for x in liste if x.get("id") == auftrag.get("foto_ziel")), None)
+    if ziel is None and text:
+        suchtext = re.sub(FOTO_ZU, "", text, flags=re.I)
+        treffer = [liste[i] for i in suchen(liste, suchtext, 40)]
+        ziel = next((x for x in treffer if x.get("belege")), None) if re.search(r"schaden|kosten|vorgang", suchtext, re.I) else None
+        ziel = ziel or (treffer[0] if treffer else None)
+    if ziel is None:
+        senden(chat, "📷 Zu welchem Eintrag gehört das Foto? Schreib z. B. „Foto zur Brillenrechnung“ – oder häng es am Monitor im "
+                     "Eingang mit „An Akte-Eintrag hängen“ an.")
+        return
+    with open(quelle, "rb") as f:
+        roh = f.read()
+    beschreibung = re.sub(FOTO_ZU, "", text, flags=re.I).strip(" :-–") if text else ""
+    foto_anhaengen(ziel, roh, beschreibung if len(beschreibung) < 80 else "")
+    _weg(quelle)
+    verzeichnis_schreiben(liste)
+    merk = json_laden(FOTO_ZIEL, {})
+    merk[str(chat)] = {"id": ziel["id"], "zeit": datetime.now().isoformat(timespec="seconds")}
+    json_schreiben(FOTO_ZIEL, merk)
+    logbuch(f"Foto angehängt: {ziel.get('titel')}")
+    senden(chat, f"📷 Foto {len(ziel['fotos'])} hängt jetzt an „{ziel.get('titel')}“ (hinten im PDF). Weitere Fotos in den nächsten "
+                 "Minuten ohne Text kommen auch dorthin.")
+
+
+def foto_folge(chat):
+    """Kam gerade erst ein „Foto zu …“ aus diesem Chat? Dann gehören weitere Fotos ohne Text (Album) dazu."""
+    r = json_laden(FOTO_ZIEL, {}).get(str(chat))
+    if r and r.get("zeit", "") >= (datetime.now() - timedelta(minutes=3)).isoformat():
+        return r.get("id")
+    return None
+
+
 def vorgang_neu(chat, text, liste):
     """Bestehende Kostenaufstellung neu erstellen – mit dem Wunsch aus der Nachricht (z. B. „ohne Beleg 7“)."""
     vorgaenge = [e for e in liste if e.get("belege")]
@@ -1367,18 +1426,54 @@ def trennen_seite(auftrag):
         trennen(auftrag.get("chat"), liste, e, jede_seite=auftrag.get("ordner") == "jede")
 
 
-def vorgang_zusammensetzen(v):
-    """Ein Dokument für den Vorgang: Schreiben (falls eins aufgesetzt wurde) + Kostenaufstellung + alle Belege."""
+def fotos_pdf(e, basis):
+    """Angehängte Fotos als eigene Seiten („Foto 1: …“); None, wenn keine da sind."""
+    import nk_pdf
+    fotos = [f for f in e.get("fotos") or [] if os.path.exists(os.path.join(FOTOS, f.get("datei", "")))]
+    if not fotos:
+        return None
+    blatt = nk_pdf.Blatt(("", ""), hochformat=True)
+    blatt.b = []   # ohne Kopfseite, nur die Fotos
+    for n, f in enumerate(fotos, 1):
+        with open(os.path.join(FOTOS, f["datei"]), "rb") as d:
+            blatt.bild_seite(d.read(), " · ".join(t for t in [f"Foto {n}", f.get("text") or "", de_datum(f.get("am"))] if t))
+    ziel = basis[:-4] + "_Fotos.pdf"
+    blatt.speichern(os.path.join(ABLAGE, ziel))
+    return ziel
+
+
+def dokument_zusammensetzen(e):
+    """Ein Dokument je Eintrag: Schreiben (falls aufgesetzt) + eigentliches Dokument (bei Vorgängen die Kostenaufstellung mit
+    allen Belegen) + angehängte Fotos. Die Bestandteile bleiben einzeln liegen, damit man jederzeit neu zusammensetzen kann."""
     import pdf_verbinden
-    ueb, brief = v.get("uebersicht") or v.get("datei"), v.get("brief")
-    neu = ueb
-    if brief and ueb and os.path.exists(os.path.join(ABLAGE, brief)) and os.path.exists(os.path.join(ABLAGE, ueb)):
-        neu = ueb[:-4] + "_mit-Schreiben.pdf"
-        pdf_verbinden.verbinden(os.path.join(ABLAGE, neu) + ".neu", [os.path.join(ABLAGE, brief), os.path.join(ABLAGE, ueb)])
+    if not e.get("uebersicht") and not e.get("original") and (e.get("brief") or e.get("fotos")):
+        e["original"] = e.get("datei")
+    basis = e.get("uebersicht") or e.get("original") or e.get("datei")
+    if not basis:
+        return
+    alt_fotos = e.get("fotos_pdf")
+    e["fotos_pdf"] = fotos_pdf(e, basis)
+    if alt_fotos and alt_fotos != e["fotos_pdf"]:
+        _weg(os.path.join(ABLAGE, alt_fotos))
+    teile = [x for x in (e.get("brief"), basis, e.get("fotos_pdf")) if x and os.path.exists(os.path.join(ABLAGE, x))]
+    neu = basis
+    if len(teile) > 1:
+        neu = basis[:-4] + "_komplett.pdf"
+        pdf_verbinden.verbinden(os.path.join(ABLAGE, neu) + ".neu", [os.path.join(ABLAGE, x) for x in teile])
         os.replace(os.path.join(ABLAGE, neu) + ".neu", os.path.join(ABLAGE, neu))
-    if v.get("datei") and v["datei"] not in (neu, ueb, brief):
-        _weg(os.path.join(ABLAGE, v["datei"]))
-    v["datei"], v["uebersicht"] = neu, ueb
+    if e.get("datei") and e["datei"] not in (neu, basis, e.get("brief"), e.get("fotos_pdf")):
+        _weg(os.path.join(ABLAGE, e["datei"]))
+    e["datei"] = neu
+
+
+def foto_anhaengen(e, roh, text=""):
+    """Foto (Bytes) an einen Akte-Eintrag hängen – kommt hinten ins PDF des Eintrags."""
+    os.makedirs(FOTOS, exist_ok=True)
+    name = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}.jpg"
+    foto_verkleinern(io.BytesIO(roh), os.path.join(FOTOS, name))
+    e.setdefault("fotos", []).append({"datei": name, "text": str(text or "")[:120], "am": date.today().isoformat()})
+    dokument_zusammensetzen(e)
+    return name
 
 
 def vorgang_bilden(chat, liste, eintraege, auftrag_text, titel="", von="", still=False):
@@ -1497,8 +1592,8 @@ def vorgang_bilden(chat, liste, eintraege, auftrag_text, titel="", von="", still
               "inhalt": (str(a.get("anlass") or "") + "\n" + inhalt + "\n" + "\n".join(hinweise))[:6000],
               "frage": "", "vorschlaege": [], "uebersicht": ziel_rel, "belege": belege, "anlagen": anlagen,
               "notiz": auftrag_text[-500:] if auftrag_text else v.get("notiz", "")})
-    vorgang_zusammensetzen(v)
-    for x in alte_dateien - {v.get("datei"), v.get("uebersicht"), v.get("brief")}:
+    dokument_zusammensetzen(v)
+    for x in alte_dateien - {v.get(f) for f in DATEI_FELDER}:
         _weg(os.path.join(ABLAGE, x))
     verzeichnis_schreiben(liste)
     logbuch(f"Vorgang: {titel} – {len(belege)} Belege, {euro(summe)}")
@@ -1602,9 +1697,12 @@ def trennen(chat, liste, e, jede_seite=False):
     if not neue:
         return
     _weg(ablage(e))
-    for x in (e.get("brief"), e.get("uebersicht"), e.get("word")):
+    for x in [e.get(f) for f in DATEI_FELDER if f != "datei"]:
         if x:
             _weg(os.path.join(ABLAGE, x))
+    if e.get("fotos"):   # angehängte Fotos wandern zum ersten Teil
+        neue[0]["fotos"] = e["fotos"]
+        dokument_zusammensetzen(neue[0])
     liste.remove(e)
     verzeichnis_schreiben(liste)
     logbuch(f"Getrennt: {e.get('titel')} → {len(neue)} Einträge")
@@ -1748,6 +1846,37 @@ def seite(auftrag):
     if was == "schreiben":
         im_hintergrund(schreiben, auftrag)
         return {"ok": True}
+    if was == "foto_weg" and eintrag:
+        eintrag["fotos"] = [f for f in eintrag.get("fotos") or [] if f.get("datei") != auftrag.get("text")]
+        _weg(os.path.join(FOTOS, os.path.basename(auftrag.get("text") or "-")))
+        dokument_zusammensetzen(eintrag)
+        verzeichnis_schreiben(liste)
+        was = "liste"
+    if was in ("aus_eingang", "eingang_anhaengen"):
+        import foto_eingang
+        import shutil
+        eingang = foto_eingang.laden()
+        fe = next((x for x in eingang if x.get("id") == auftrag.get("text")), None)
+        quelle = os.path.join(foto_eingang.ORDNER, os.path.basename((fe or {}).get("datei") or "-"))
+        if not fe or not os.path.exists(quelle):
+            return {"ok": False, "fehler": "Foto im Eingang nicht gefunden"}
+        if was == "aus_eingang":   # war doch ein Beleg (Rechnung, Bescheid, Plan …) → wie per Telegram in die Akte
+            os.makedirs(EINGANG, exist_ok=True)
+            ziel = os.path.join(EINGANG, f"eingang_{fe['id']}.jpg")
+            shutil.copyfile(quelle, ziel)
+            im_hintergrund(ablegen, {"datei": ziel, "chat": auftrag.get("chat"), "von": fe.get("von", ""),
+                                     "text": " ".join(t for t in [fe.get("text") or "", "(aus dem Eingang übernommen)"] if t)})
+            fe.update({"status": "akte", "akte": "als Beleg in die Akte gelegt"})
+        else:
+            if not eintrag:
+                return {"ok": False, "fehler": "Akte-Eintrag nicht gefunden"}
+            with open(quelle, "rb") as f:
+                foto_anhaengen(eintrag, f.read(), fe.get("titel") or "")
+            verzeichnis_schreiben(liste)
+            fe.update({"status": "akte", "akte": f"an „{eintrag.get('titel')}“ angehängt"})
+            logbuch(f"Foto aus dem Eingang angehängt: {eintrag.get('titel')}")
+        foto_eingang.speichern(eingang)
+        was = "liste"
     if was == "fehler_weg":   # Fehlermeldungen am Monitor als gesehen markieren
         log = json_laden(LOGBUCH, [])
         for l in log if isinstance(log, list) else []:
@@ -1808,9 +1937,11 @@ def seite(auftrag):
         _weg(ablage(eintrag))
         for s in eintrag.get("seiten") or []:
             _weg(os.path.join(SEITEN, s))
-        for x in (eintrag.get("brief"), eintrag.get("uebersicht"), eintrag.get("word")):
+        for x in [eintrag.get(f) for f in DATEI_FELDER]:
             if x:
                 _weg(os.path.join(ABLAGE, x))
+        for f in eintrag.get("fotos") or []:
+            _weg(os.path.join(FOTOS, f.get("datei", "")))
         for b in eintrag.get("belege") or []:
             for s in b.get("seiten") or []:
                 _weg(os.path.join(SEITEN, s))
@@ -1823,7 +1954,8 @@ def seite(auftrag):
     felder = ("id", "titel", "typ", "kategorie", "absender", "datum", "betrag", "person", "steuer", "einreichen", "fristen",
               "schlagworte", "von", "eingang", "notiz", "zahlung", "mahnung", "rechnungsnummer", "ordner", "frage", "vorschlaege")
     aus = [dict({k: e.get(k) for k in felder}, kurz=(e.get("inhalt") or "")[:500], such=suchwoerter(e),
-                 teile=len(e.get("belege") or []) or len(e.get("seiten") or []), vorgang=bool(e.get("belege"))) for e in liste]
+                 teile=len(e.get("belege") or []) or len(e.get("seiten") or []), vorgang=bool(e.get("belege")),
+                 fotos=[{"datei": f.get("datei"), "text": f.get("text", "")} for f in e.get("fotos") or []]) for e in liste]
     aus.sort(key=lambda e: (e.get("datum") or "", e.get("eingang") or ""), reverse=True)
     wartend = 0
     for d in (EINGANG, ORDNER, UPLOAD):
@@ -1988,6 +2120,15 @@ def stueck(argumente):
     if len(roh) > 300_000_000:
         return {"ok": False, "fehler": "Datei zu groß (höchstens 300 MB)"}
     name = base64.urlsafe_b64decode(name_b64 + "=" * (-len(name_b64) % 4)).decode("utf-8", "replace")
+    m_foto = re.match(r"^akte-foto_([A-Za-z0-9]+)_", name)
+    if m_foto:   # Foto an einen Akte-Eintrag hängen (Knopf „Foto anhängen“)
+        liste = verzeichnis()   # ohne die große Sperre (die hält Claude evtl. lange) – beim Speichern wird abgeglichen
+        e = next((x for x in liste if x.get("id") == m_foto.group(1)), None)
+        if not e:
+            return {"ok": False, "fehler": "Eintrag nicht gefunden"}
+        foto_anhaengen(e, roh)
+        verzeichnis_schreiben(liste)
+        return {"ok": True, "fertig": True, "foto": True}
     if name.startswith("nk-zaehler_"):   # Zählerfoto für die Nebenkosten, nicht in die Akte
         import nebenkosten
         try:
@@ -2044,6 +2185,9 @@ def main():
         print(json.dumps(stueck(sys.argv[2:]), ensure_ascii=False))
         return
     auftrag = json.loads(base64.b64decode(sys.argv[2]).decode("utf-8")) if len(sys.argv) > 2 else {}
+    if aktion == "foto_folge":   # schnell: gehört ein Foto ohne Text zu „Foto zu …“ von eben?
+        print(json.dumps({"ziel": foto_folge(auftrag.get("chat")) or ""}))
+        return
     if aktion == "offen":   # schnell: wartet die Akte in diesem Chat auf eine Antwort?
         print(json.dumps({"offen": bool(rueckfrage_offen(auftrag.get("chat")))}))
         return

@@ -1619,7 +1619,7 @@ views:
   type: panel
   cards:
   - type: iframe
-    url: /local/eingang.html?v=2
+    url: /local/eingang.html?v=3
     aspect_ratio: 53.3%
 # Ruhebild (Wappen, Uhr, Wetter) – öffnet sich am Monitor nach 7 Minuten ohne Berührung (www/ruhemodus.js)
 - title: Ruhe
@@ -1637,7 +1637,7 @@ views:
   type: panel
   cards:
   - type: iframe
-    url: /local/akte.html?v=23
+    url: /local/akte.html?v=24
     aspect_ratio: 53.3%
 - title: Infos
   path: infos

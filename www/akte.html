@@ -120,9 +120,10 @@
 <div class="toast" id="toast"></div>
 <input type="file" id="datei" multiple accept=".pdf,application/pdf,image/jpeg,image/png,.zip,application/zip" hidden>
 <input type="file" id="ordner-datei" webkitdirectory multiple hidden>
+<input type="file" id="foto-datei" multiple accept="image/*" hidden>
 <script src="/local/wappen.js?v=1"></script>
 <script>
-const SEITEN_VERSION = 23;
+const SEITEN_VERSION = 24;
 const $ = id => document.getElementById(id);
 const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const euro = x => x == null || x === "" ? "" : Number(x).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
@@ -337,10 +338,13 @@ function zeichnen() {
         ${notizOffen === e.id ? `<textarea class="notiz-feld" id="notiz-${esc(e.id)}" placeholder="z. B. ist schon bezahlt am 05.10. · gehört zur Ferienwohnung · Mahnung erledigt">${esc(e.notiz || "")}</textarea>`
           : e.notiz ? `<div class="notiz">📝 ${esc(e.notiz)}</div>` : ""}
         ${e.kurz ? `<div class="kurz">${esc(e.kurz)}</div>` : ""}
+        ${(e.fotos || []).length ? `<div class="klein">📷 ${e.fotos.length} Foto${e.fotos.length === 1 ? "" : "s"} hinten im PDF:
+          ${e.fotos.map((f, i) => `<span class="marke">Foto ${i + 1}${f.text ? ": " + esc(f.text) : ""} <button data-a="foto-weg" data-w="${esc(e.id)}" data-v="${esc(f.datei)}">✕</button></span>`).join(" ")}</div>` : ""}
         <div class="aktionen">
           <button class="knopf blau" data-a="ansehen" data-w="${esc(e.id)}">PDF ansehen</button>
           <button class="knopf" data-a="ordner-wahl" data-w="${esc(e.id)}">📂 Ordner</button>
           <button class="knopf" data-a="schreiben-oeffnen" data-w="${esc(e.id)}">✍️ Schreiben</button>
+          <button class="knopf" data-a="foto-anhaengen" data-w="${esc(e.id)}">📷 Foto anhängen</button>
           ${notizOffen === e.id ? `<button class="knopf gruen" data-a="notiz-speichern" data-w="${esc(e.id)}">Notiz speichern</button>`
             : `<button class="knopf" data-a="notiz" data-w="${esc(e.id)}">📝 Notiz</button>`}
           ${e.zahlung === "offen" ? `<button class="knopf gruen" data-a="bezahlt" data-w="${esc(e.id)}">Bezahlt</button>`
@@ -500,6 +504,11 @@ document.addEventListener("click", async ev => {
       toast("Umbenannt"); zeichnen(); break;
     }
     case "fehler-weg": { const a = await skript({ was: "fehler_weg" }); if (a && Array.isArray(a.log)) log = a.log; else log = log.map(l => l.art === "fehler" ? { ...l, art: "fehler_gesehen" } : l); zeichnen(); break; }
+    case "foto-anhaengen": fotoZiel = w; $("foto-datei").click(); break;
+    case "foto-weg": {
+      if (el.dataset.scharf !== "1") { el.dataset.scharf = "1"; el.textContent = "wirklich entfernen?"; return; }
+      await skript({ was: "foto_weg", id: w, text: el.dataset.v }); await aktion("liste"); toast("Foto entfernt"); zeichnen(); break;
+    }
     case "verbinden-start": verbinden = [w]; zeichnen(); break;
     case "verbinden-dazu": verbinden.push(w); zeichnen(); break;
     case "verbinden-weg": verbinden = verbinden.filter(x => x !== w); zeichnen(); break;
@@ -607,6 +616,34 @@ document.addEventListener("change", async ev => {
   }
   if (geschafft) toast(`${geschafft} Datei${geschafft === 1 ? "" : "en"} hochgeladen${ausZip ? ` (davon ${ausZip} Dokumente aus ZIP)` : ""} – die Akte liest sie jetzt nacheinander (je ca. 30 Sek., Meldung per Telegram)`, 8000);
   setTimeout(neuLaden, 45000); setTimeout(neuLaden, 120000);
+});
+// Foto an einen Eintrag hängen: im Browser verkleinern (max. 1800 px), dann in Stücken hochladen ("akte-foto_<id>_…")
+let fotoZiel = "";
+document.addEventListener("change", async ev => {
+  if (ev.target.id !== "foto-datei" || !fotoZiel) return;
+  const dateien = [...ev.target.files], ziel = fotoZiel; ev.target.value = "";
+  let geschafft = 0;
+  for (const [n, d] of dateien.entries()) {
+    try {
+      toast(`Foto ${n + 1}/${dateien.length} wird angehängt …`, 20000);
+      const url = URL.createObjectURL(d), img = new Image();
+      await new Promise((ok, f) => { img.onload = ok; img.onerror = f; img.src = url; });
+      const mass = Math.min(1, 1800 / Math.max(img.width, img.height)), c = document.createElement("canvas");
+      c.width = Math.round(img.width * mass); c.height = Math.round(img.height * mass);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+      const b64 = c.toDataURL("image/jpeg", 0.82).split(",")[1], STUECK = 200000, teile = Math.max(1, Math.ceil(b64.length / STUECK));
+      const kennung = Array.from(crypto.getRandomValues(new Uint8Array(10)), x => (x % 36).toString(36)).join("");
+      const name = btoa(unescape(encodeURIComponent("akte-foto_" + ziel + "_" + d.name))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      let ergebnis = "";
+      for (let i = 0; i < teile; i++) {
+        const r = await hass().callWS({ type: "call_service", domain: "script", service: "akte_hochladen", return_response: true,
+          service_data: { kennung, teil: i, name, letzt: i === teile - 1, daten: b64.slice(i * STUECK, (i + 1) * STUECK) } });
+        ergebnis = String(r && r.response && r.response.stdout);
+      }
+      if (ergebnis.includes('"fertig": true')) geschafft++; else toast("Foto ging nicht: " + ((ergebnis.match(/"fehler": "([^"]+)"/) || [, ergebnis.slice(0, 80)])[1]), 8000);
+    } catch (e) { toast("Das Foto konnte nicht gelesen werden", 6000); }
+  }
+  if (geschafft) { await aktion("liste"); zeichnen(); toast(`${geschafft} Foto${geschafft === 1 ? "" : "s"} angehängt – hinten im PDF`, 5000); }
 });
 // Datenschutz: nach 3 Minuten ohne Berührung verdecken (Monitor im Flur)
 let zuletzt = Date.now();
