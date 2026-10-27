@@ -151,6 +151,9 @@ was auffällt und was zu tun ist; leer lassen, wenn nichts Wichtiges"}"""
 SAMMELN = (r"geh(ö|oe)r\w*\s.{0,40}zusammen|zusammen\s*(zu\s*)?(ge)?(füg|fueg|heft)|\bein(e|en)?\s+(dokument|schreiben|datei)\b|kosten\s*-?\s*aufstellung|zusammen\s*(zu\s*)?(fass|führ|fuehr|rechn|stell|addier)"
            r"|(alle|die)\s+kosten\s.{0,30}(addier|summ|zusammen)|(eine?|1)\s+pdf\b|als\s+(einen?\s+)?vorgang")
 
+# "Kostenaufstellung bitte neu erstellen / ändern / ohne Beleg 7" → bestehenden Vorgang mit dem Wunsch neu aufbauen
+NEU_ERSTELLEN = (r"(kosten\s*-?\s*aufstellung|aufstellung|vorgang)\b.{0,80}\b(neu|nochmal|noch\s*mal|überarbeit|ueberarbeit|aktualisier"
+                 r"|änder|aender|korrigier|ohne\s+beleg|weglass|raus)|\b(neu|nochmal|noch\s*mal)\b.{0,40}(kosten\s*-?\s*aufstellung|aufstellung|vorgang)")
 HEFTEN = r"zusammen\s*(zu\s*)?(ge)?(füg|fueg|heft)|\bein(e|en)?\s+(dokument|schreiben|datei)\b|\bseiten\b"
 # "gehören nicht zusammen", "bitte trennen", "auseinandernehmen" → einen Eintrag wieder in einzelne Dokumente aufteilen
 TRENNEN = r"nicht\s+(mehr\s+)?zusammen|\btrenn|auseinander|getrennt|aufl(ö|oe)s|einzeln\s+(ab)?leg|jede\s+seite\s+einzeln"
@@ -192,7 +195,9 @@ Antworte NUR mit JSON:
  "hinweise": ["kurze Hinweise für die Regulierung, z. B. was noch fehlt (Rechnung statt Angebot, Arbeitskosten)"],
  "schlagworte": ["5–10 Suchwörter"],
  "antwort": "1–2 Sätze für den Chat"}
-Erfinde keine Beträge: unleserlich → null und Hinweis."""
+Erfinde keine Beträge: unleserlich → null und Hinweis.
+Steht im Auftrag ein Änderungswunsch zu einer schon erstellten Aufstellung (z. B. Beleg weglassen → "zaehlt": false mit Hinweis,
+anderer Titel, Position anders benennen, Betrag korrigieren), setze ihn um – der neueste Wunsch steht am Ende des Auftrags."""
 
 HILFE = """📁 Digitale Akte – so geht's
 • Ohne Telegram: in Home Assistant unter Medien → Lokale Medien → Ordner „Akte-Eingang“ Dateien hochladen.
@@ -441,6 +446,37 @@ def claude(system, inhalt, max_tokens=3000, effort="low"):
         return json.loads(m.group(0)) if m else {}
     except ValueError:
         return {"antwort": roh.strip()[:3000]}
+
+
+_DATEIEN = None
+
+
+def ablage(e):
+    """Pfad zur PDF eines Eintrags. Liegt sie nicht mehr dort (z. B. verschoben, als ein älterer Stand den neuen Pfad
+    überschrieben hat), wird sie in der Ablage über den Dateinamen gesucht und der Pfad im Eintrag repariert."""
+    global _DATEIEN
+    rel = (e or {}).get("datei") or ""
+    pfad = os.path.join(ABLAGE, rel)
+    if not rel or os.path.exists(pfad):
+        return pfad
+    if _DATEIEN is None:
+        _DATEIEN = {}
+        for wurzel, _, namen in os.walk(ABLAGE):
+            for n in namen:
+                _DATEIEN.setdefault(n, os.path.join(wurzel, n))
+    gefunden = _DATEIEN.get(os.path.basename(rel))
+    if gefunden and os.path.exists(gefunden):
+        e["datei"] = os.path.relpath(gefunden, ABLAGE)
+        return gefunden
+    return pfad
+
+
+def dateien_reparieren(liste):
+    """Einträge, deren PDF verschoben wurde, wieder auf die richtige Datei zeigen lassen (True, wenn etwas repariert wurde)."""
+    alt = [e.get("datei") for e in liste]
+    for e in liste:
+        ablage(e)
+    return alt != [e.get("datei") for e in liste]
 
 
 def dokument_block(pfad):
@@ -715,11 +751,11 @@ def zusammenfuehren(liste, gruppe):
     haupt = es[0]
     for e in es[1:]:
         haupt["seiten"] += e["seiten"]
-        _weg(os.path.join(ABLAGE, e.get("datei", "")))
+        _weg(ablage(e))
         if e.get("notiz"):
             haupt["notiz"] = ((haupt.get("notiz") or "") + " · " + e["notiz"]).strip(" ·")
         liste.remove(e)
-    pfad = os.path.join(ABLAGE, haupt.get("datei", ""))
+    pfad = ablage(haupt)
     seiten_zu_pdf([os.path.join(SEITEN, s) for s in haupt["seiten"]], pfad)
     bloecke = [dokument_block(os.path.join(SEITEN, s)) for s in haupt["seiten"]]
     bloecke.append({"type": "text", "text": f"Heute: {date.today().isoformat()}\nNotiz der Familie: {haupt.get('notiz') or '(keine)'}\n{familien_kontext()}"})
@@ -781,7 +817,10 @@ def neu_lesen(auftrag):
     e = next((x for x in liste if x.get("id") == auftrag.get("id")), None)
     if not e or e.get("belege"):   # Vorgang (Kostenaufstellung) nicht wie einen einzelnen Beleg neu lesen
         return
-    pfad = os.path.join(ABLAGE, e.get("datei", ""))
+    pfad = ablage(e)
+    if not os.path.exists(pfad):
+        logbuch(f"PDF fehlt: {e.get('titel')} – bitte neu hochladen", "fehler")
+        return
     bloecke = [dokument_block(pfad), {"type": "text", "text": f"Heute: {date.today().isoformat()}\nNotiz der Familie: {e.get('notiz') or '(keine)'}\n{familien_kontext()}"}]
     felder_setzen(e, claude(LESEN, bloecke, max_tokens=4000))
     datei_einordnen(e)
@@ -818,7 +857,7 @@ def teilen(auftrag):
     e = next((x for x in verzeichnis() if x.get("id") == auftrag.get("id")), None)
     chat = auftrag.get("chat") or chat_fuer(auftrag.get("wer"), auftrag.get("chats"))
     if e and chat:
-        datei_senden(chat, os.path.join(ABLAGE, e.get("datei", "")), zeile(1, e)[3:])
+        datei_senden(chat, ablage(e), zeile(1, e)[3:])
 
 
 def schreiben(auftrag):
@@ -831,8 +870,8 @@ def schreiben(auftrag):
         treffer = suchen(liste, auftrag.get("text") or "", 1)
         bezug = liste[treffer[0]] if treffer else None
     inhalt = []
-    if bezug is not None:
-        inhalt.append(dokument_block(os.path.join(ABLAGE, bezug.get("datei", ""))))
+    if bezug is not None and os.path.exists(ablage(bezug)):
+        inhalt.append(dokument_block(ablage(bezug)))
     inhalt.append({"type": "text", "text": f"Heute: {date.today().strftime('%d.%m.%Y')}\n{familien_kontext()}\n\n"
                                            f"Auftrag der Familie: {auftrag.get('text') or ''}"})
     b = claude(SCHREIBEN, inhalt, max_tokens=3000, effort="medium")
@@ -1025,7 +1064,7 @@ def frage_beantworten(chat, frage, liste):
             e = liste[int(nr) - 1]
         except (ValueError, IndexError, TypeError):
             continue
-        pfad = os.path.join(ABLAGE, e.get("datei", ""))
+        pfad = ablage(e)
         if os.path.exists(pfad):
             datei_senden(chat, pfad, zeile(int(nr), e))
 
@@ -1059,7 +1098,7 @@ def steuer(chat, jahr, liste):
     with zipfile.ZipFile(zip_pfad, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("Uebersicht.csv", "﻿" + "\n".join(csv))
         for e in auswahl:
-            pfad = os.path.join(ABLAGE, e.get("datei", ""))
+            pfad = ablage(e)
             if os.path.exists(pfad):
                 z.write(pfad, os.path.join(sicherer_name(e["steuer"].get("art"), 30), os.path.basename(pfad)))
     datei_senden(chat, zip_pfad, f"Steuer {jahr}: alle Belege + Übersicht (öffnet sich in Excel)")
@@ -1079,7 +1118,7 @@ def einreichen(chat, liste):
     zeilen.append("\nDie Dateien kommen gleich. Danach „Eingereicht“ schreiben (oder „Eingereicht 1 3“ für einzelne).")
     senden(chat, "\n".join(zeilen))
     for n, (_, e) in enumerate(offen, 1):
-        pfad = os.path.join(ABLAGE, e.get("datei", ""))
+        pfad = ablage(e)
         if os.path.exists(pfad):
             datei_senden(chat, pfad, zeile(n, e))
 
@@ -1207,6 +1246,15 @@ def vorgang_befehl(chat, text, liste, nachfragen=True):
         vorgang_bilden(chat, liste, gewaehlt, text, titel=a.get("titel") or "")
 
 
+def vorgang_neu(chat, text, liste):
+    """Bestehende Kostenaufstellung neu erstellen – mit dem Wunsch aus der Nachricht (z. B. „ohne Beleg 7“)."""
+    vorgaenge = [e for e in liste if e.get("belege")]
+    treffer = [liste[i] for i in suchen(liste, text, 40) if liste[i].get("belege")]
+    v = treffer[0] if treffer and len(vorgaenge) > 1 else max(vorgaenge, key=lambda x: x.get("eingang", ""))
+    senden(chat, f"🧮 Ich erstelle „{v.get('titel')}“ neu – einen Moment …")
+    vorgang_bilden(chat, liste, [v], text)
+
+
 def heften(chat, liste, eintraege):
     """Getrennt abgelegte Seiten EINES Schreibens wieder zu einem Eintrag zusammenfügen (Reihenfolge wie übergeben)."""
     if any(e.get("belege") for e in eintraege):
@@ -1223,12 +1271,12 @@ def heften(chat, liste, eintraege):
             return
         haupt, w = eintraege[0], PdfWriter()
         for e in eintraege:
-            w.append(os.path.join(ABLAGE, e.get("datei") or ""))
-        ziel = os.path.join(ABLAGE, haupt.get("datei") or "")
+            w.append(ablage(e))
+        ziel = ablage(haupt)
         with open(ziel + ".neu", "wb") as f:
             w.write(f)
         for e in eintraege[1:]:
-            _weg(os.path.join(ABLAGE, e.get("datei") or ""))
+            _weg(ablage(e))
             if e.get("notiz"):
                 haupt["notiz"] = ((haupt.get("notiz") or "") + " · " + e["notiz"]).strip(" ·")
             liste.remove(e)
@@ -1283,14 +1331,14 @@ def vorgang_bilden(chat, liste, eintraege, auftrag_text, titel="", von=""):
             b["datei"] = e.get("datei")   # PDF-Beleg: bleibt als eigene Datei (Anlage)
         belege.append(b)
     if alt is not None:
-        auftrag_text = (alt.get("notiz") or "") + (" · " + auftrag_text if auftrag_text else "")
+        auftrag_text = (alt.get("notiz") or "") + (" · Neuer Wunsch: " + auftrag_text if auftrag_text else "")
 
     # Claude liest alle Belege nochmal zusammen nach (Beträge, Doppelte) und stellt die Kosten auf
     bloecke, groesse = [], 0
     for n, b in enumerate(belege, 1):
         bloecke.append({"type": "text", "text": f"Beleg {n}: beim Ablegen erkannt: {b.get('typ')} · {b.get('absender')} · "
                                                 f"{b.get('datum')} · Betrag {b.get('betrag')} · Notiz {b.get('notiz') or '-'}\n{b.get('inhalt')}"})
-        pfade = [os.path.join(SEITEN, s) for s in b.get("seiten") or []] or [os.path.join(ABLAGE, b.get("datei") or "")]
+        pfade = [os.path.join(SEITEN, s) for s in b.get("seiten") or []] or [ablage(b)]
         for p_ in pfade:
             if os.path.exists(p_) and groesse + os.path.getsize(p_) < 25_000_000:
                 groesse += os.path.getsize(p_)
@@ -1309,7 +1357,9 @@ def vorgang_bilden(chat, liste, eintraege, auftrag_text, titel="", von=""):
         except (TypeError, ValueError):
             return None
     summe = round(sum(zahl(p_.get("betrag")) or 0 for p_ in positionen if p_.get("zaehlt") is not False), 2)
-    titel = (a.get("titel") or titel or (alt or {}).get("titel") or "Vorgang").strip()[:80]
+    titel = (a.get("titel") or titel or (alt or {}).get("titel") or "Vorgang").strip()
+    titel = re.sub(r"\s*\(?kostenaufstellung\)?\s*", " ", titel, flags=re.I).strip(" –-:") or "Vorgang"   # Wort steht schon davor
+    titel = titel[:80]
     ordner = (alt or {}).get("ordner") if (alt or {}).get("ordner_fest") else ordner_name(a.get("ordner") or eintraege[0].get("ordner"))
     hinweise = [str(h) for h in a.get("hinweise") or [] if h]
 
@@ -1364,7 +1414,7 @@ def vorgang_bilden(chat, liste, eintraege, auftrag_text, titel="", von=""):
         if e is alt or e not in liste:
             continue
         if e.get("seiten"):
-            _weg(os.path.join(ABLAGE, e.get("datei") or ""))
+            _weg(ablage(e))
         liste.remove(e)
     inhalt = "\n".join(f"Beleg {z[0]}: {z[1]} {z[2]} ({z[3]}, {z[4]}) {z[5]}" for z in zeilen_pdf) + f"\nSumme: {euro(summe)}"
     v = alt or {"id": datetime.now().strftime("%Y%m%d%H%M%S") + uuid.uuid4().hex[:4], "eingang": datetime.now().isoformat(timespec="seconds"),
@@ -1380,7 +1430,7 @@ def vorgang_bilden(chat, liste, eintraege, auftrag_text, titel="", von=""):
               "fristen": v.get("fristen") or [], "schlagworte": (a.get("schlagworte") or [])[:10] + ["Vorgang", "Kostenaufstellung"],
               "inhalt": (str(a.get("anlass") or "") + "\n" + inhalt + "\n" + "\n".join(hinweise))[:6000],
               "frage": "", "vorschlaege": [], "datei": ziel_rel, "belege": belege, "anlagen": anlagen,
-              "notiz": auftrag_text[:500] if auftrag_text else v.get("notiz", "")})
+              "notiz": auftrag_text[-500:] if auftrag_text else v.get("notiz", "")})
     verzeichnis_schreiben(liste)
     logbuch(f"Vorgang: {titel} – {len(belege)} Belege, {euro(summe)}")
 
@@ -1479,7 +1529,7 @@ def trennen(chat, liste, e, jede_seite=False):
             neue.append(seiten_neu_ablegen(liste, [seiten[n - 1] for n in g], e, e.get("notiz") or ""))
     if not neue:
         return
-    _weg(os.path.join(ABLAGE, e.get("datei") or ""))
+    _weg(ablage(e))
     liste.remove(e)
     verzeichnis_schreiben(liste)
     logbuch(f"Getrennt: {e.get('titel')} → {len(neue)} Einträge")
@@ -1508,6 +1558,8 @@ def befehl(auftrag):
         eingereicht(chat, t, liste)
     elif re.match(r"^(schreiben|brief)\b", t):
         schreiben({"chat": chat, "id": None, "text": re.sub(r"^/?(schreiben|brief)\s*[:,-]?\s*", "", text, flags=re.I)})
+    elif re.search(NEU_ERSTELLEN, t, re.I) and any(e.get("belege") for e in liste):
+        vorgang_neu(chat, text, liste)
     elif re.search(SAMMELN, t, re.I):
         vorgang_befehl(chat, text, liste)
     elif re.match(r"^fristen", t):
@@ -1575,7 +1627,7 @@ def seite(auftrag):
     eintrag = next((e for e in liste if e.get("id") == auftrag.get("id")), None)
     if was == "lesen" and eintrag:
         # PDF in Stücken über die Home-Assistant-Verbindung (der Medien-Weg liefert keine PDFs aus)
-        pfad = os.path.join(ABLAGE, eintrag.get("datei", ""))
+        pfad = ablage(eintrag)
         ab = max(0, int(auftrag.get("ab") or 0))
         with open(pfad, "rb") as f:
             f.seek(ab)
@@ -1589,7 +1641,7 @@ def seite(auftrag):
             if time.time() - os.path.getmtime(os.path.join(ANSICHT, alt)) > 3600:
                 _weg(os.path.join(ANSICHT, alt))
         name = uuid.uuid4().hex + ".pdf"
-        shutil.copyfile(os.path.join(ABLAGE, eintrag.get("datei", "")), os.path.join(ANSICHT, name))
+        shutil.copyfile(ablage(eintrag), os.path.join(ANSICHT, name))
         return {"ok": True, "datei": "akte/_ansicht/" + name}
     if was == "einstellungen":
         return {"ok": True, "einstellungen": einstellungen()}
@@ -1671,7 +1723,7 @@ def seite(auftrag):
         eintrag["einreichen"].update({"status": was, "am": date.today().isoformat() if was == "eingereicht" else ""})
         verzeichnis_schreiben(liste)
     elif was == "loeschen" and eintrag:
-        _weg(os.path.join(ABLAGE, eintrag.get("datei", "")))
+        _weg(ablage(eintrag))
         for s in eintrag.get("seiten") or []:
             _weg(os.path.join(SEITEN, s))
         for b in eintrag.get("belege") or []:
@@ -1680,6 +1732,8 @@ def seite(auftrag):
             if b.get("datei"):
                 _weg(os.path.join(ABLAGE, b["datei"]))
         liste.remove(eintrag)
+        verzeichnis_schreiben(liste)
+    if dateien_reparieren(liste):
         verzeichnis_schreiben(liste)
     felder = ("id", "titel", "typ", "kategorie", "absender", "datum", "betrag", "person", "steuer", "einreichen", "fristen",
               "schlagworte", "von", "eingang", "notiz", "zahlung", "mahnung", "rechnungsnummer", "ordner", "frage", "vorschlaege")
