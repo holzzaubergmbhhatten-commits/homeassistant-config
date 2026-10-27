@@ -108,11 +108,23 @@ template:
       h_text: "{{ (trigger.query.h | default('') | string).replace(',', '.') }}"
       t: "{{ (t_text | string | regex_findall_index('-?[0-9]+(?:[.][0-9]+)?')) | float if t_text is search('[0-9]') else none }}"
       h: "{{ (h_text | string | regex_findall_index('[0-9]+(?:[.][0-9]+)?')) | float if h_text is search('[0-9]') else none }}"
+      # Am einfachsten: ?w=Wert/Wert/Wert/… – die Werte in der Reihenfolge der Aktionen im Kurzbefehl der Home-App,
+      # getrennt durch "/" (keine Raumnamen nötig). Reihenfolge der Aktionen dort:
+      reihenfolge: >-
+        {{ [['badezimmer', 'h'], ['badezimmer', 't'], ['kueche', 'h'], ['kueche', 't'], ['muckis_zimmer', 'h'], ['muckis_zimmer', 't'],
+            ['schlafzimmer', 'h'], ['schlafzimmer', 't'], ['terrasse', 'h'], ['terrasse', 't']] }}
+      w_teile: "{{ (trigger.query.w | default('') | string).replace('|', '/').replace(';', '/').split('/') if trigger.query.w is defined else [] }}"
       # Alle Räume in EINEM Aufruf (eine Automation in der Home-App für alle HomePods):
       # ?kueche_t=21,5&kueche_h=48&wohnzimmer_t=…&wohnzimmer_h=… – Raumname vor _t/_h wie oben (Küche → kueche)
       tq: >-
         {% set ns = namespace(d={}) %}
         {% if raum and t is not none %}{% set ns.d = dict(ns.d, **{raum: t}) %}{% endif %}
+        {% for r, a in reihenfolge if a == 't' %}
+        {% set i = reihenfolge.index([r, a]) %}
+        {% if i < w_teile | length and w_teile[i] is search('[0-9]') %}
+        {% set ns.d = dict(ns.d, **{r: (w_teile[i] | string).replace(',', '.') | regex_findall_index('-?[0-9]+(?:[.][0-9]+)?') | float}) %}
+        {% endif %}
+        {% endfor %}
         {% for k, v in trigger.query.items() if k[-2:] | lower == '_t' and v | string is search('[0-9]') %}
         {% set r = (k[:-2] | lower | trim).replace('ä','ae').replace('ö','oe').replace('ü','ue').replace('ß','ss').replace(' ','_') %}
         {% set ns.d = dict(ns.d, **{r: (v | string).replace(',', '.') | regex_findall_index('-?[0-9]+(?:[.][0-9]+)?') | float}) %}
@@ -121,6 +133,12 @@ template:
       hq: >-
         {% set ns = namespace(d={}) %}
         {% if raum and h is not none %}{% set ns.d = dict(ns.d, **{raum: h}) %}{% endif %}
+        {% for r, a in reihenfolge if a == 'h' %}
+        {% set i = reihenfolge.index([r, a]) %}
+        {% if i < w_teile | length and w_teile[i] is search('[0-9]') %}
+        {% set ns.d = dict(ns.d, **{r: (w_teile[i] | string).replace(',', '.') | regex_findall_index('[0-9]+(?:[.][0-9]+)?') | float}) %}
+        {% endif %}
+        {% endfor %}
         {% for k, v in trigger.query.items() if k[-2:] | lower == '_h' and v | string is search('[0-9]') %}
         {% set r = (k[:-2] | lower | trim).replace('ä','ae').replace('ö','oe').replace('ü','ue').replace('ß','ss').replace(' ','_') %}
         {% set ns.d = dict(ns.d, **{r: (v | string).replace(',', '.') | regex_findall_index('[0-9]+(?:[.][0-9]+)?') | float}) %}
