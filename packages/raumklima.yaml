@@ -272,3 +272,15 @@ template:
         state_class: measurement
         unit_of_measurement: "%"
         state: "{{ (hq['kind_2'] | float(0) | round(0)) if hq is mapping and 'kind_2' in hq else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
+      - name: "Temperatur Terrasse"
+        unique_id: raumklima_terrasse_temperatur
+        device_class: temperature
+        state_class: measurement
+        unit_of_measurement: "°C"
+        state: "{{ (tq['terrasse'] | float(0) | round(1)) if tq is mapping and 'terrasse' in tq else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
+      - name: "Luftfeuchte Terrasse"
+        unique_id: raumklima_terrasse_feuchte
+        device_class: humidity
+        state_class: measurement
+        unit_of_measurement: "%"
+        state: "{{ (hq['terrasse'] | float(0) | round(0)) if hq is mapping and 'terrasse' in hq else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"

@@ -1534,7 +1534,7 @@ views:
         columns: full
       content: |-
         ## <ha-icon icon="mdi:home-thermometer"></ha-icon> Raumklima
-        {%- set raeume = [('kuche', 'Küche'), ('badezimmer', 'Badezimmer'), ('badezimmer_2', 'Badezimmer 2'), ('schlafzimmer', 'Schlafzimmer'), ('muckis_zimmer', 'Muckis Zimmer'), ('wohnzimmer', 'Wohnzimmer'), ('buro', 'Büro'), ('diele', 'Diele'), ('flur', 'Flur'), ('kind_1', 'Kind 1'), ('kind_2', 'Kind 2')] %}
+        {%- set raeume = [('kuche', 'Küche'), ('badezimmer', 'Badezimmer'), ('badezimmer_2', 'Badezimmer 2'), ('schlafzimmer', 'Schlafzimmer'), ('muckis_zimmer', 'Muckis Zimmer'), ('wohnzimmer', 'Wohnzimmer'), ('buro', 'Büro'), ('diele', 'Diele'), ('flur', 'Flur'), ('kind_1', 'Kind 1'), ('kind_2', 'Kind 2'), ('terrasse', 'Terrasse')] %}
         {%- set ns = namespace(zeilen=[]) %}
         {%- for k, n in raeume %}
         {%- set t = states('sensor.temperatur_' ~ k) %}
