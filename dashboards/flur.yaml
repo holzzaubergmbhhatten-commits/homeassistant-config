@@ -1548,7 +1548,7 @@ views:
         | Raum | Temperatur | Luftfeuchte | |
         |:--|--:|--:|:--|
         {%- for n, t, h, zeit in ns.zeilen %}
-        | **{{ n }}** | {{ '%.1f' | format(t) | replace('.', ',') }} °C | {{ (h | float(0) | round(0) | int ~ ' %') if h | is_number else '–' }} | {% if h | is_number and h | float > 65 %}<font color="#FF9500">feucht</font>{% elif h | is_number and h | float < 35 %}<font color="#FF9500">trocken</font>{% endif %} |
+        | **{{ n }}** | {{ '%.1f' | format(t) | replace('.', ',') }} °C | {{ (h | float(0) | round(0) | int ~ ' %') if h | is_number else '–' }} | {% if n == 'Terrasse' %}<font color="#8E8E93">draußen</font>{% elif h | is_number and h | float > 65 %}<font color="#FF9500">feucht</font>{% elif h | is_number and h | float < 35 %}<font color="#FF9500">trocken</font>{% endif %} |
         {%- endfor %}
 
         <font color="#8E8E93">Aus den HomePods, alle 15 Minuten · zuletzt {{ (ns.zeilen | map(attribute=3) | max | as_local).strftime('%H:%M') }} Uhr</font>

@@ -42,7 +42,6 @@ automation:
         entity_id:
           - sensor.temperatur_kuche
           - sensor.temperatur_wohnzimmer
-          - sensor.temperatur_schlafzimmer
           - sensor.temperatur_muckis_zimmer
           - sensor.temperatur_buro
           - sensor.temperatur_badezimmer
@@ -80,6 +79,29 @@ automation:
             (jetzt {{ states(trigger.entity_id) }} °C).
             {{ ('Wärmepumpe: ' ~ wp ~ '.') if wp | trim else '' }}
             Prüfen: Berker-Regler im Raum hochgedreht? Stellmotor am Heizkreisverteiler offen? Fenster auf?
+  # Bad lüften: über 70 % Luftfeuchte länger als 45 Minuten (z. B. nach dem Duschen) → eine Telegram-Erinnerung.
+  # Meldet sich erst wieder, nachdem die Feuchte zwischendurch gefallen ist. Schlafzimmer (Fenster abends offen) und
+  # Terrasse (draußen) sind bewusst nicht dabei.
+  - id: raumklima_bad_lueften
+    alias: "Raumklima: Bad lüften"
+    mode: single
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.luftfeuchte_badezimmer
+        above: 70
+        for: "00:45:00"
+    conditions:
+      - condition: time
+        after: "07:00:00"
+        before: "22:00:00"
+    actions:
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
+          message: >-
+            💧 Bad lüften: Die Luftfeuchte liegt seit 45 Minuten bei {{ states('sensor.luftfeuchte_badezimmer') }} %.
+            Kurz Fenster auf (5–10 Minuten Stoßlüften), Tür zum Flur dabei zu.
   - id: raumklima_homepod_anstossen
     alias: "Raumklima: HomePods alle 15 Minuten abfragen"
     mode: single
