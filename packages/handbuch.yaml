@@ -1,7 +1,8 @@
 # Fragen zum Haus (Sicherungen, Haupthahn, Geräte, Anleitungen, Wo ist was) mit dem Haus-Handbuch beantworten:
 # claude_tools/handbuch.py liest das Handbuch (Link nur in input_text.zuhause_seite_link), die Fotos im Eingang und passende
 # Dokumente der Akte und antwortet konkret (z. B. „Hager-Verteiler Nebengebäude, Platz 7, Waschmaschinenschiene B16“).
-# - Telegram: Fragen mit „wo/wie/welche …?“ und einem Haus-Stichwort gehen direkt hierher (nicht an den allgemeinen Assistenten)
+# - Telegram: jede Frage („?“, „wo/wie/was/welche …“, „sag mal …“) wird zuerst hier nachgeschlagen (packages/telegram.yaml);
+#   steht nichts in den Unterlagen oder geht es um den aktuellen Zustand, antwortet wie bisher Jarvis mit den Live-Daten
 # - Sprache/Jarvis: Werkzeug „Jarvis Frage zum Haus“ (in den Sprachassistenten freigeben)
 shell_command:
   handbuch: python3 /config/claude_tools/handbuch.py {{ aktion }} {{ wert }}
@@ -10,10 +11,10 @@ script:
   jarvis_haus_frage:
     alias: Jarvis Frage zum Haus
     description: >-
-      Beantwortet praktische Fragen zum Haus und Hof aus dem Haus-Handbuch der Familie: welche Sicherung wofür (Sicherungsplan,
-      Verteiler, FI), wo Haupthahn/Absperrhähne/Zähler sind, Geräte und Maschinen (Waschmaschine, Trockner, Ape, Rasenmäher,
-      Wohnwagen), Anleitungen, Wartung, WLAN/Router. Nutze das IMMER bei solchen Fragen statt selbst zu raten, und gib die
-      Antwort ("antwort") wörtlich bzw. sinngemäß weiter.
+      Schlägt im gesammelten Wissen der Familie nach: Haus-Handbuch (Sicherungsplan, Haustechnik, Geräte, Maschinen mit
+      Betriebsstoffen wie Sprit/Öl und Anleitungen, Wo ist was, Netzwerk, Wohnwagen), Wartung, Zählerstände, Fotos und Akte.
+      Nutze das IMMER bei Fragen wie "welche Sicherung …", "wo ist …", "welchen Sprit braucht die Motorsäge", "wie oft
+      Filter wechseln" statt selbst zu raten. Ist "gefunden" true, gib "antwort" sinngemäß weiter, sonst antworte selbst.
     icon: mdi:home-search
     mode: queued
     fields:
@@ -36,39 +37,3 @@ script:
       - stop: fertig
         response_variable: ergebnis
 
-automation:
-  - id: telegram_haus_frage
-    alias: "Telegram: Fragen zum Haus aus dem Haus-Handbuch beantworten"
-    mode: queued
-    max: 5
-    triggers:
-      - trigger: event
-        event_type: telegram_text
-    conditions:
-      - condition: template
-        value_template: >-
-          {% set t = trigger.event.data.text | default('') | string %}
-          {{ not (t is match('^\\s*/?(akte|belege?|schreiben|brief)\\b', ignorecase=True)) and t is search('^(?!.*\\b(noch|gerade|jetzt|läuft|fertig)\\b)(?=.*(\\b(wo|wie|welche\w*|was|womit|warum|wieso)\\b|\?))(?=.*\\b(sicherung\w*|sicherungskasten|verteiler\w*|fi[- ]?schalter|absperr\w*|haupthahn|wasserhahn|wasseruhr|hauptwasser\w*|kläranlage|klaeranlage|wlan|router|anleitung|bedienungsanleitung|typenschild|filter\w*|waschmaschine\w*|trockner|geschirrspüler|spülmaschine|kühlschrank|gefrier\w*|herd|backofen|ape|rasenmäher|mähroboter|wohnwagen|ersatzteil\w*|zählerkasten|stromzähler|durchlauferhitzer)\\b)', ignorecase=True) }}
-    actions:
-      - action: telegram_bot.send_message
-        continue_on_error: true
-        data:
-          chat_id: "{{ trigger.event.data.chat_id }}"
-          message: "🏠 Ich schaue im Haus-Handbuch nach …"
-      - action: shell_command.handbuch
-        continue_on_error: true
-        data:
-          aktion: frage
-          wert: >-
-            {{ {'frage': trigger.event.data.text, 'von': trigger.event.data.from_first | default('', true),
-                'link': states('input_text.zuhause_seite_link') | string} | to_json | base64_encode }}
-        response_variable: antwort
-      - variables:
-          e: >-
-            {% set a = antwort.stdout | default('') if antwort is defined and antwort is mapping else '' %}
-            {{ a | from_json if (a | string).startswith('{') else {} }}
-      - action: telegram_bot.send_message
-        data:
-          chat_id: "{{ trigger.event.data.chat_id }}"
-          message: >-
-            {{ '🏠 ' ~ e.antwort if e.ok | default(false) else '⚠️ Das Handbuch konnte ich gerade nicht lesen' ~ (': ' ~ e.fehler if e.fehler is defined else '') ~ ' – bitte nochmal versuchen.' }}

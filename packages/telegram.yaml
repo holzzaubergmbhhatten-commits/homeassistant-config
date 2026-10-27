@@ -44,10 +44,6 @@ automation:
   - condition: template
     value_template: >-
       {{ not (trigger.event.data.text | default('') | string) is search('(geh(ö|oe)r\w*\s.{0,40}zusammen|kosten\s*-?\s*aufstellung|(belege|rechnungen|quittungen|kosten|fotos|bilder)\\b.{0,60}(zusammen|addier|summier)|zusammen\s*(zu\s*)?(fass|führ|fuehr)\w*\s.{0,40}(pdf|belege?|rechnung)|nicht\s+(mehr\s+)?zusammen|zusammen\s*(zu\s*)?(ge)?(füg|fueg|heft)|auseinander\s*(nehmen|machen)|\\btrennen\\b|(getrennt|einzeln)\s+ablegen)', ignorecase=True) }}
-  # Fragen zum Haus (Sicherungen, Haupthahn, Geräte …) beantwortet packages/handbuch.yaml mit dem Haus-Handbuch
-  - condition: template
-    value_template: >-
-      {{ not ((trigger.event.data.text | default('') | string) is search('^(?!.*\\b(noch|gerade|jetzt|läuft|fertig)\\b)(?=.*(\\b(wo|wie|welche\w*|was|womit|warum|wieso)\\b|\?))(?=.*\\b(sicherung\w*|sicherungskasten|verteiler\w*|fi[- ]?schalter|absperr\w*|haupthahn|wasserhahn|wasseruhr|hauptwasser\w*|kläranlage|klaeranlage|wlan|router|anleitung|bedienungsanleitung|typenschild|filter\w*|waschmaschine\w*|trockner|geschirrspüler|spülmaschine|kühlschrank|gefrier\w*|herd|backofen|ape|rasenmäher|mähroboter|wohnwagen|ersatzteil\w*|zählerkasten|stromzähler|durchlauferhitzer)\\b)', ignorecase=True)) }}
   # Nachrichten an Familienmitglieder ("Schick Mirka: …") und Schreiben ("Mach ein Schreiben für die Kündigung …") macht die Akte
   - condition: template
     value_template: >-
@@ -72,6 +68,30 @@ automation:
         aktion: befehl
         wert: "{{ {'text': trigger.event.data.text, 'chat': trigger.event.data.chat_id} | to_json | base64_encode }}"
     - stop: Antwort auf eine Rückfrage der Akte
+  # Fragen zuerst im gesammelten Wissen nachschlagen (Haus-Handbuch, Maschinen, Sicherungen, Wartung, Zähler, Eingang, Akte –
+  # packages/handbuch.yaml). Steht dort nichts oder geht es um den aktuellen Zustand, geht es unten wie bisher an Claude/Jarvis.
+  - if: >-
+      {{ (trigger.event.data.text | default('') | string) is search('\?|^\W*(ey\W+|hey\W+|du\W+)?(wo|wie|wann|was|welche\w*|wer|wieviel\w*|womit|warum|wieso|weshalb)\\b|\\b(sag|sage|erklär|erklaer|nenn)\w*\s+(mal|mir|uns|bitte)\\b|\\bwei(ß|ss)t\s+du\\b|\\bkannst\s+du\s+mir\s+sagen\\b', ignorecase=True) }}
+    then:
+    - action: shell_command.handbuch
+      continue_on_error: true
+      data:
+        aktion: frage
+        wert: >-
+          {{ {'frage': trigger.event.data.text, 'von': trigger.event.data.from_first | default('', true),
+              'link': states('input_text.zuhause_seite_link') | string} | to_json | base64_encode }}
+      response_variable: wissen
+    - variables:
+        w: >-
+          {% set a = wissen.stdout | default('') if wissen is defined and wissen is mapping else '' %}
+          {{ a | from_json if (a | string).startswith('{') else {} }}
+    - if: "{{ w.gefunden | default(false) }}"
+      then:
+      - action: telegram_bot.send_message
+        data:
+          chat_id: "{{ trigger.event.data.chat_id }}"
+          message: "🏠 {{ w.antwort }}"
+      - stop: aus dem gesammelten Wissen beantwortet
   - variables:
       text: '{{ trigger.event.data.text }}'
       chat: '{{ trigger.event.data.chat_id }}'

@@ -21,14 +21,17 @@ SEITEN = ["index", "sicherungen", "haustechnik", "geraete", "maschinen", "netzwe
           "wartung", "grundriss", "offene-fragen", "packliste"]
 DATEN = ["wo-daten.js", "maschinen-daten.js"]
 
-FRAGE = """Du hilfst einer Familie auf ihrem Resthof (Haus, Nebengebäude, Werkstatt, Stellplätze) bei praktischen Fragen zum Haus.
-Unten steht alles, was sie gesammelt hat: ihr Haus-Handbuch (Sicherungsplan, Haustechnik, Geräte, Maschinen, Wo ist was …),
-Fotos mit erkannten Infos und passende Dokumente. Antworte auf Deutsch, kurz, konkret und in Schritten:
+FRAGE = """Du hilfst einer Familie auf ihrem Resthof (Haus, Nebengebäude, Werkstatt, Stellplätze) bei Fragen aus ihrem gesammelten Wissen.
+Unten steht alles, was sie gesammelt hat: ihr Haus-Handbuch (Sicherungsplan, Haustechnik, Geräte, Maschinen mit Betriebsstoffen
+und Anleitungen, Wo ist was, Netzwerk, Wohnwagen …), Wartung, Zählerstände, Fotos mit erkannten Infos und passende Dokumente.
+"gefunden": false, wenn die Antwort NICHT in diesen Unterlagen steht oder es um den aktuellen Zustand/Steuerung geht (Temperatur
+jetzt, läuft gerade, Licht an/aus, Termine, Aufgaben, Wetter, Allgemeinwissen) – dann "antwort" leer lassen, das beantwortet
+ein anderer Assistent mit den Live-Daten. Sonst antworte auf Deutsch, kurz, konkret und in Schritten:
 WO genau (Verteiler, Raum, Sicherungsnummer wie F23, FI-Gruppe), WAS zu tun ist, worauf man achten muss (Sicherheit).
 Nenne die Quelle in Klammern (z. B. „laut Sicherungsplan“). Steht es nicht drin, sag das ehrlich und gib nur dann einen
 allgemeinen, sicheren Rat; schlage vor, was man ins Handbuch eintragen sollte. Erfinde keine Sicherungsnummern.
 Bei Strom: vor Arbeiten an Leitungen/Geräten immer die Sicherung aus, bei Unsicherheit Elektriker.
-Antworte NUR mit JSON: {"antwort": "Text für Telegram/Sprache (max. ca. 12 Zeilen)"}"""
+Antworte NUR mit JSON: {"gefunden": true/false, "antwort": "Text für Telegram/Sprache (max. ca. 12 Zeilen)"}"""
 
 
 def text_aus_html(s):
@@ -86,6 +89,18 @@ def handbuch(link):
     return text
 
 
+def weitere_daten():
+    """Wartung (Intervalle, letzte Erledigung) und Zählerstände der Nebenkosten – kurz als Text."""
+    teile = []
+    for name, pfad in (("Wartung", "/config/wartung_daten.json"), ("Nebenkosten/Zähler", "/config/nebenkosten.json")):
+        try:
+            with open(pfad, encoding="utf-8") as f:
+                teile.append(f"{name}: " + json.dumps(json.load(f), ensure_ascii=False)[:15000])
+        except (OSError, ValueError):
+            pass
+    return "\n".join(teile)
+
+
 def eingang_text():
     try:
         with open("/config/eingang.json", encoding="utf-8") as f:
@@ -114,7 +129,7 @@ def frage(auftrag):
     if not f:
         return {"ok": False, "fehler": "keine Frage"}
     hb = handbuch(auftrag.get("link") or "")
-    inhalt = (f"FOTOS IM EINGANG:\n{eingang_text() or '(keine)'}\n\nDOKUMENTE AUS DER AKTE:\n{akte_text(f) or '(keine passenden)'}\n\n"
+    inhalt = (f"WARTUNG UND ZÄHLER:\n{weitere_daten() or '(keine)'}\n\nFOTOS IM EINGANG:\n{eingang_text() or '(keine)'}\n\nDOKUMENTE AUS DER AKTE:\n{akte_text(f) or '(keine passenden)'}\n\n"
               f"Frage{' von ' + auftrag['von'] if auftrag.get('von') else ''}: {f}")
     client = anthropic.Anthropic(api_key=garten_ki.api_schluessel(), timeout=50, max_retries=1)
     a = client.messages.create(model=garten_ki.MODELL, max_tokens=1200,
@@ -128,10 +143,12 @@ def frage(auftrag):
     roh = "".join(b.text for b in a.content if getattr(b, "type", "") == "text")
     m = re.search(r"\{.*\}", roh, re.S)
     try:
-        antwort = json.loads(m.group(0)).get("antwort") if m else roh
+        j = json.loads(m.group(0)) if m else {"gefunden": bool(roh.strip()), "antwort": roh}
     except ValueError:
-        antwort = roh
-    return {"ok": True, "antwort": (antwort or "Dazu habe ich nichts gefunden.").strip()[:3500], "handbuch": bool(hb)}
+        j = {"gefunden": bool(roh.strip()), "antwort": roh}
+    antwort = str(j.get("antwort") or "").strip()[:3500]
+    return {"ok": True, "gefunden": bool(j.get("gefunden")) and bool(antwort), "antwort": antwort or "Dazu steht in unseren Unterlagen nichts.",
+            "handbuch": bool(hb)}
 
 
 def main():
