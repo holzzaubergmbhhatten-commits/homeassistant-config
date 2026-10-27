@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Energie</title>
+<title>Klima &amp; Energie</title>
 <!--
   Energie & Heizung (Reiter "Energie & Heizung" im Flur-Dashboard) – aufgebaut wie das Energiecockpit der ViCare-App:
   Energiefluss jetzt (PV, Speicher, Netz, Haus), darunter Tag / Woche / Monat / Jahr mit Blättern, Wärmepumpe und alle Werte.
@@ -23,7 +23,7 @@
   main { max-width: 1100px; margin: 0 auto; padding: 14px 16px 60px; }
   .kopf { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
   .kopf h1 { margin: 0; font-size: 26px; letter-spacing: -0.3px; flex: 1; }
-  .reiter, .zeitraum { display: inline-flex; background: var(--bg); border-radius: 12px; padding: 3px; gap: 2px; }
+  .reiter, .zeitraum { display: inline-flex; flex-wrap: wrap; max-width: 100%; background: var(--bg); border-radius: 12px; padding: 3px; gap: 2px; }
   .reiter button, .zeitraum button { padding: 7px 14px; border-radius: 10px; font-size: 14px; font-weight: 600; color: var(--grau); }
   .reiter button.an, .zeitraum button.an { background: var(--fuellung-an, #fff); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
   .karte { background: var(--karte); border-radius: 18px; padding: 14px 16px; box-shadow: 0 1px 3px rgba(0,0,0,.06); margin-bottom: 12px; }
@@ -63,6 +63,7 @@
   .dunkel .hinweis { background: rgba(255,159,10,.16); color: #FFD08A; }
   table.werte { width: 100%; border-collapse: collapse; font-size: 14px; }
   table.werte td { padding: 6px 2px; border-bottom: 1px solid var(--linie); }
+  table.werte.raum td { text-align: left; font-weight: 400; } table.werte.raum td:nth-child(2), table.werte.raum td:nth-child(3) { text-align: right; font-weight: 600; }
   table.werte td:last-child { text-align: right; font-weight: 600; white-space: nowrap; }
   .leer { text-align: center; padding: 30px 10px; color: var(--grau); }
 </style>
@@ -115,8 +116,9 @@ const KW = { gesamt: ["getvol", "getcof"], durchfluss: ["getflo", "getavo"], dru
 const EW = {};           // Wasser: Schlüssel → entity_id
 const E = {};            // Schlüssel → entity_id
 let REG = [], REG_W = [], GERAETE = {}, NETZ_VZ = 1, AKKU_VZ = 1, ERSTER = null;
-let reiter = "uebersicht", art = "tag", ref = new Date(), STAT = null, AUSWAHL = null;
+let reiter = "raeume", art = "tag", ref = new Date(), STAT = null, AUSWAHL = null;
 
+const svgBreite = () => (window.innerWidth < 600 ? 380 : 640);   // schmal: weniger Breite = größere Schrift im Diagramm
 function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
 const st = id => { const h = hass(); return id && h && h.states[id]; };
 function zahl(id) { const s = st(id); if (!s) return null; const v = parseFloat(s.state); return isFinite(v) ? v : null; }
@@ -227,7 +229,8 @@ function blaettern(r) {
 async function ladeStat() {
   const b = bereich(), h = hass(); if (!h) return;
   const ids = ["pvGesamt", "bezug", "einsp", "laden", "entladen", "wpTag"].map(k => E[k]).filter(Boolean);
-  const temp = ["aussen", "vorlauf", "ruecklauf", "warmwasser"].map(k => E[k]).filter(Boolean);
+  const temp = ["aussen", "vorlauf", "ruecklauf", "warmwasser"].map(k => E[k]).filter(Boolean)
+    .concat(raeume().flatMap(x => [x.t, x.h]).filter(Boolean));
   if (!E.pvGesamt && E.pvTag) ids.push(E.pvTag);
   if (EW.gesamt) ids.push(EW.gesamt);
   const schluessel = `${art}|${+b.von}`;
@@ -302,7 +305,7 @@ function viessmannZaehler() {
 
 function balken(werte, farben, hoehe = 190) {
   // werte: [{ teile: [[wert, farbe], …] }, …] – zwei Säulen je Fach: Erzeugung | Verbrauch
-  const b = STAT.b, n = b.n, W = 640, L = 34, R = 6, T = 20, U = 22, breit = (W - L - R) / n;
+  const b = STAT.b, n = b.n, W = svgBreite(), L = 34, R = 6, T = 20, U = 22, breit = (W - L - R) / n;
   let max = 0; werte.forEach(f => f.forEach(saeule => { max = Math.max(max, saeule.reduce((x, [v]) => x + (v || 0), 0)); }));
   const stufe = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000].find(x => max / x <= 4) || 1000, oben = Math.max(stufe, Math.ceil(max / stufe) * stufe);
   const y = v => T + (hoehe - T - U) * (1 - v / oben);
@@ -336,8 +339,72 @@ function wpDiagramm() {
   const f = []; for (let i = 0; i < STAT.b.n; i++) f.push([[[STAT.wp[i] || 0, "var(--wp)"]]]);
   return balken(f, null, 150);
 }
+/* ---------- Räume (HomePods, packages/raumklima.yaml) ---------- */
+const RAUM_FARBEN = ["#007AFF", "#FF9500", "#AF52DE", "#34C759", "#FF2D55", "#5AC8FA", "#A2845E", "#FFCC00"];
+function raeume() {   // alle Räume mit Temperatur aus den HomePods, die sich in den letzten 3 Stunden gemeldet haben
+  const h = hass(); if (!h) return [];
+  return Object.keys(h.states).filter(id => /^sensor\.temperatur_/.test(id)).map(id => {
+    const s = h.states[id], hid = id.replace("temperatur_", "luftfeuchte_");
+    return { t: id, h: h.states[hid] ? hid : null, name: String(s.attributes.friendly_name || id).replace(/^Temperatur /, ""),
+      zeit: new Date(s.last_reported || s.last_updated) };
+  }).filter(x => zahl(x.t) != null && Date.now() - x.zeit < 3 * 3600e3)
+    .sort((a, b) => (a.name === "Terrasse") - (b.name === "Terrasse") || a.name.localeCompare(b.name, "de"))
+    .map((x, i) => ({ ...x, farbe: RAUM_FARBEN[i % RAUM_FARBEN.length], draussen: /terrasse/i.test(x.name) }));
+}
+function linien(reihen, einheit, schritt, H = 190) {
+  const b = STAT.b, W = svgBreite(), L = 34, R = 6, T = 10, U = 22, daten = reihen.filter(x => (STAT.temp || {})[x.id] && STAT.temp[x.id].length);
+  if (!daten.length) return `<div class="klein">Für diesen Zeitraum noch nichts aufgezeichnet.</div>`;
+  let min = 1e9, max = -1e9;
+  daten.forEach(x => STAT.temp[x.id].forEach(p => { if (p.mean != null) { min = Math.min(min, p.mean); max = Math.max(max, p.mean); } }));
+  min = Math.floor(min / schritt) * schritt; max = Math.ceil(max / schritt) * schritt; if (max <= min) max = min + schritt;
+  const x = t => L + (W - L - R) * (t - b.von) / (b.bis - b.von), y = v => T + (H - T - U) * (1 - (v - min) / (max - min));
+  let svg = "";
+  for (let v = min; v <= max + 1e-9; v += schritt) svg += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--linie)"/><text x="${L - 5}" y="${y(v) + 4}" text-anchor="end">${fmt(v, 0)}${einheit}</text>`;
+  for (let i = 0; i < b.n; i += art === "tag" ? 3 : art === "monat" ? 5 : 1) {
+    const t = art === "tag" ? +b.von + i * 3600e3 : art === "jahr" ? +new Date(b.von.getFullYear(), i, 15) : +b.von + (i + 0.5) * 864e5;
+    svg += `<text x="${x(t)}" y="${H - 6}" text-anchor="middle">${esc(fachName(b, i))}</text>`;
+  }
+  daten.forEach(r => {
+    const pkt = STAT.temp[r.id].filter(p => p.mean != null).map(p => `${x(zeit(p.start)).toFixed(1)},${y(p.mean).toFixed(1)}`);
+    if (pkt.length) svg += `<polyline points="${pkt.join(" ")}" fill="none" stroke="${r.farbe}" stroke-width="2" stroke-linejoin="round"${r.gestrichelt ? ' stroke-dasharray="5 4"' : ""}/>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}">${svg}</svg><div class="legende">${daten.map(r => `<span><i style="background:${r.farbe}"></i>${esc(r.name)}</span>`).join("")}</div>`;
+}
+function raeumeSeite() {
+  const liste = raeume();
+  const zeilen = liste.map(x => {
+    const t = zahl(x.t), f = x.h ? zahl(x.h) : null;
+    const hinweis = x.draussen ? `<span class="klein">draußen</span>` : f == null ? "" : f > 65 ? `<b style="color:var(--orange)">${/bad/i.test(x.name) ? "feucht – lüften" : "feucht"}</b>`
+      : f < 35 ? `<b style="color:var(--orange)">trocken</b>` : `<span style="color:var(--gruen)">gut</span>`;
+    return `<tr><td><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${x.farbe};margin-right:6px"></i><b>${esc(x.name)}</b></td>
+      <td>${fmt(t, 1)} °C</td><td>${f == null ? "–" : fmt(f, 0) + " %"}</td><td>${hinweis}</td></tr>`;
+  }).join("");
+  const letzte = liste.length ? new Date(Math.max(...liste.map(x => +x.zeit))) : null;
+  let unten = `<div class="leer">Lade Verlauf …</div>`;
+  if (STAT && STAT.fehler) unten = `<div class="hinweis">Verlauf nicht lesbar: ${esc(STAT.fehler)}</div>`;
+  else if (STAT && STAT.temp) {
+    const rt = liste.map(x => ({ id: x.t, farbe: x.farbe, name: x.name, gestrichelt: x.draussen }));
+    if (E.aussen && !liste.some(x => x.draussen)) rt.push({ id: E.aussen, farbe: "#8E8E93", name: "Außen (Wärmepumpe)", gestrichelt: true });
+    const rh = liste.filter(x => x.h).map(x => ({ id: x.h, farbe: x.farbe, name: x.name, gestrichelt: x.draussen }));
+    unten = `<h2 style="font-size:15px">Temperatur</h2><div class="diagramm">${linien(rt, "°", 5)}</div>
+      <h2 style="font-size:15px;margin-top:14px">Luftfeuchte</h2><div class="diagramm">${linien(rh, " %", 10)}</div>
+      <div class="klein" style="margin-top:6px">Gut sind 40–60 % Luftfeuchte. Über 65 % länger als 20 Minuten im Bad kommt eine Erinnerung per Telegram.</div>`;
+  }
+  return `<div class="zwei">
+      <div class="karte"><h2>${ic("haus")} Räume jetzt</h2>${liste.length ? `<table class="werte raum"><tr><td></td><td>Temperatur</td><td>Feuchte</td><td></td></tr>${zeilen}</table>
+        <div class="klein" style="margin-top:6px">Aus den HomePods, alle 15 Minuten${letzte ? " · zuletzt " + letzte.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) + " Uhr" : ""}</div>`
+        : `<div class="klein">Die HomePods haben sich in den letzten 3 Stunden nicht gemeldet.</div>`}</div>
+      <div class="karte"><h2>${ic("wp")} Heizung &amp; Strom jetzt</h2><div class="kacheln">
+        ${kachel(gradT(E.aussen), "Außen")}${kachel(gradT(E.vorlauf), "Vorlauf")}${kachel(gradT(E.warmwasser), "Warmwasser")}
+        ${kachel(kwT(Math.max(0, kw(E.pvLeistung) || 0)), "PV jetzt")}${kachel(zahl(E.akkuStand) == null ? "–" : fmt(zahl(E.akkuStand), 0) + " %", "Speicher", zahl(E.akkuStand))}
+        ${EW.durchfluss ? kachel(esc(st_text(EW.durchfluss)), "Wasser fließt") : kachel(kwhT(kwh(E.wpTag)), "Wärmepumpe heute")}
+      </div></div>
+    </div>
+    <div class="karte">${navi()}${unten}</div>`;
+}
+
 function tempDiagramm() {
-  const b = STAT.b, W = 640, H = 170, L = 34, R = 6, T = 8, U = 22, reihen = [["aussen", "#5AC8FA", "Außen"], ["vorlauf", "#FF3B30", "Vorlauf"],
+  const b = STAT.b, W = svgBreite(), H = 170, L = 34, R = 6, T = 8, U = 22, reihen = [["aussen", "#5AC8FA", "Außen"], ["vorlauf", "#FF3B30", "Vorlauf"],
     ["ruecklauf", "#FF9500", "Rücklauf"], ["warmwasser", "#AF52DE", "Warmwasser"]].filter(([k]) => E[k] && (STAT.temp || {})[E[k]]);
   if (!reihen.length) return `<div class="klein">Noch keine Temperaturen aufgezeichnet.</div>`;
   let min = 100, max = -100;
@@ -423,7 +490,7 @@ function rueckblick(nurWp) {
     "Noch nichts abgeholt. Das passiert jede Nacht von selbst."}</div><div style="margin-top:8px">${knopf}</div></div>`;
   const jetzt = new Date(), monate = [];
   for (let i = 12; i >= 0; i--) { const d = new Date(jetzt.getFullYear(), jetzt.getMonth() - i, 1); monate.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); }
-  const W = 640, H = 190, L = 34, R = 6, T = 20, U = 22, breit = (W - L - R) / monate.length;
+  const W = svgBreite(), H = 190, L = 34, R = 6, T = 20, U = 22, breit = (W - L - R) / monate.length;
   let max = 0; liste.forEach(x => monate.forEach(m => { max = Math.max(max, (x.a.monat || {})[m] || 0); }));
   const stufe = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000].find(v => max / v <= 4) || 5000, oben = Math.max(stufe, Math.ceil(max / stufe) * stufe);
   const y = v => T + (H - T - U) * (1 - v / oben), sb = Math.min(12, (breit - 4) / liste.length);
@@ -549,9 +616,9 @@ function alleWerte() {
 }
 
 function zeichnen() {
-  const inhalt = { uebersicht, waermepumpe, wasser, alle: alleWerte }[reiter]();
-  $("inhalt").innerHTML = `<div class="kopf"><h1>Energie &amp; Heizung</h1>
-    <div class="reiter">${[["uebersicht", "Energie"], ["waermepumpe", "Wärmepumpe"], ["wasser", "Wasser"], ["alle", "Alle Werte"]].map(([k, n]) =>
+  const inhalt = { raeume: raeumeSeite, uebersicht, waermepumpe, wasser, alle: alleWerte }[reiter]();
+  $("inhalt").innerHTML = `<div class="kopf"><h1>Klima &amp; Energie</h1>
+    <div class="reiter">${[["raeume", "Räume"], ["uebersicht", "Energie"], ["waermepumpe", "Wärmepumpe"], ["wasser", "Wasser"], ["alle", "Alle Werte"]].map(([k, n]) =>
       `<button data-reiter="${k}" class="${reiter === k ? "an" : ""}">${n}</button>`).join("")}</div></div>
     ${Object.keys(E).length || REG.length ? "" : `<div class="hinweis">Keine Viessmann-Werte gefunden. Ist die Viessmann-Integration eingerichtet?</div>`}
     ${inhalt}`;
@@ -569,6 +636,8 @@ document.addEventListener("click", ev => {
   else if (t.dataset.heute) { ref = new Date(); AUSWAHL = null; ladeStat(); }
   else if (t.dataset.fach) { AUSWAHL = AUSWAHL === +t.dataset.fach ? null : +t.dataset.fach; zeichnen(); }
 });
+let breiteAlt = svgBreite();
+window.addEventListener("resize", () => { if (svgBreite() !== breiteAlt) { breiteAlt = svgBreite(); zeichnen(); } });
 function design() { const h = hass(); document.documentElement.classList.toggle("dunkel", !!(h && h.themes && h.themes.darkMode)); }
 let versuche = 0;
 async function start() {
