@@ -108,6 +108,24 @@ template:
       h_text: "{{ (trigger.query.h | default('') | string).replace(',', '.') }}"
       t: "{{ (t_text | string | regex_findall_index('-?[0-9]+(?:[.][0-9]+)?')) | float if t_text is search('[0-9]') else none }}"
       h: "{{ (h_text | string | regex_findall_index('[0-9]+(?:[.][0-9]+)?')) | float if h_text is search('[0-9]') else none }}"
+      # Alle Räume in EINEM Aufruf (eine Automation in der Home-App für alle HomePods):
+      # ?kueche_t=21,5&kueche_h=48&wohnzimmer_t=…&wohnzimmer_h=… – Raumname vor _t/_h wie oben (Küche → kueche)
+      tq: >-
+        {% set ns = namespace(d={}) %}
+        {% if raum and t is not none %}{% set ns.d = dict(ns.d, **{raum: t}) %}{% endif %}
+        {% for k, v in trigger.query.items() if k[-2:] | lower == '_t' and v | string is search('[0-9]') %}
+        {% set r = (k[:-2] | lower | trim).replace('ä','ae').replace('ö','oe').replace('ü','ue').replace('ß','ss').replace(' ','_') %}
+        {% set ns.d = dict(ns.d, **{r: (v | string).replace(',', '.') | regex_findall_index('-?[0-9]+(?:[.][0-9]+)?') | float}) %}
+        {% endfor %}
+        {{ ns.d }}
+      hq: >-
+        {% set ns = namespace(d={}) %}
+        {% if raum and h is not none %}{% set ns.d = dict(ns.d, **{raum: h}) %}{% endif %}
+        {% for k, v in trigger.query.items() if k[-2:] | lower == '_h' and v | string is search('[0-9]') %}
+        {% set r = (k[:-2] | lower | trim).replace('ä','ae').replace('ö','oe').replace('ü','ue').replace('ß','ss').replace(' ','_') %}
+        {% set ns.d = dict(ns.d, **{r: (v | string).replace(',', '.') | regex_findall_index('[0-9]+(?:[.][0-9]+)?') | float}) %}
+        {% endfor %}
+        {{ ns.d }}
     sensor:
       - name: Raumklima HomePods
         unique_id: raumklima_homepods_letzte
@@ -117,136 +135,140 @@ template:
         attributes:
           raeume: >-
             {% set alt = (this.attributes.raeume if this is defined and this.attributes is defined and this.attributes.raeume is mapping else {}) %}
-            {% if raum %}{{ dict(alt.items() | list + [(raum, {'t': t, 'h': h, 'zeit': now().strftime('%H:%M')})]) }}{% else %}{{ alt }}{% endif %}
+            {% set ns = namespace(d=alt) %}
+            {% for r in (((tq.keys() | list) if tq is mapping else []) + ((hq.keys() | list) if hq is mapping else [])) | unique %}
+            {% set ns.d = dict(ns.d.items() | list + [(r, {'t': tq.get(r) if tq is mapping else none, 'h': hq.get(r) if hq is mapping else none, 'zeit': now().strftime('%H:%M')})]) %}
+            {% endfor %}
+            {{ ns.d }}
       - name: "Temperatur Badezimmer"
         unique_id: raumklima_badezimmer_temperatur
         device_class: temperature
         state_class: measurement
         unit_of_measurement: "°C"
-        state: "{{ (t | float(0) | round(1)) if raum == 'badezimmer' and t not in (none, '') else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
+        state: "{{ (tq['badezimmer'] | float(0) | round(1)) if tq is mapping and 'badezimmer' in tq else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
       - name: "Luftfeuchte Badezimmer"
         unique_id: raumklima_badezimmer_feuchte
         device_class: humidity
         state_class: measurement
         unit_of_measurement: "%"
-        state: "{{ (h | float(0) | round(0)) if raum == 'badezimmer' and h not in (none, '') else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
+        state: "{{ (hq['badezimmer'] | float(0) | round(0)) if hq is mapping and 'badezimmer' in hq else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
       - name: "Temperatur Badezimmer 2"
         unique_id: raumklima_badezimmer_2_temperatur
         device_class: temperature
         state_class: measurement
         unit_of_measurement: "°C"
-        state: "{{ (t | float(0) | round(1)) if raum == 'badezimmer_2' and t not in (none, '') else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
+        state: "{{ (tq['badezimmer_2'] | float(0) | round(1)) if tq is mapping and 'badezimmer_2' in tq else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
       - name: "Luftfeuchte Badezimmer 2"
         unique_id: raumklima_badezimmer_2_feuchte
         device_class: humidity
         state_class: measurement
         unit_of_measurement: "%"
-        state: "{{ (h | float(0) | round(0)) if raum == 'badezimmer_2' and h not in (none, '') else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
+        state: "{{ (hq['badezimmer_2'] | float(0) | round(0)) if hq is mapping and 'badezimmer_2' in hq else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
       - name: "Temperatur Schlafzimmer"
         unique_id: raumklima_schlafzimmer_temperatur
         device_class: temperature
         state_class: measurement
         unit_of_measurement: "°C"
-        state: "{{ (t | float(0) | round(1)) if raum == 'schlafzimmer' and t not in (none, '') else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
+        state: "{{ (tq['schlafzimmer'] | float(0) | round(1)) if tq is mapping and 'schlafzimmer' in tq else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
       - name: "Luftfeuchte Schlafzimmer"
         unique_id: raumklima_schlafzimmer_feuchte
         device_class: humidity
         state_class: measurement
         unit_of_measurement: "%"
-        state: "{{ (h | float(0) | round(0)) if raum == 'schlafzimmer' and h not in (none, '') else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
+        state: "{{ (hq['schlafzimmer'] | float(0) | round(0)) if hq is mapping and 'schlafzimmer' in hq else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
       - name: "Temperatur Muckis Zimmer"
         unique_id: raumklima_muckis_zimmer_temperatur
         device_class: temperature
         state_class: measurement
         unit_of_measurement: "°C"
-        state: "{{ (t | float(0) | round(1)) if raum == 'muckis_zimmer' and t not in (none, '') else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
+        state: "{{ (tq['muckis_zimmer'] | float(0) | round(1)) if tq is mapping and 'muckis_zimmer' in tq else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
       - name: "Luftfeuchte Muckis Zimmer"
         unique_id: raumklima_muckis_zimmer_feuchte
         device_class: humidity
         state_class: measurement
         unit_of_measurement: "%"
-        state: "{{ (h | float(0) | round(0)) if raum == 'muckis_zimmer' and h not in (none, '') else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
+        state: "{{ (hq['muckis_zimmer'] | float(0) | round(0)) if hq is mapping and 'muckis_zimmer' in hq else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
       - name: "Temperatur Küche"
         unique_id: raumklima_kueche_temperatur
         device_class: temperature
         state_class: measurement
         unit_of_measurement: "°C"
-        state: "{{ (t | float(0) | round(1)) if raum == 'kueche' and t not in (none, '') else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
+        state: "{{ (tq['kueche'] | float(0) | round(1)) if tq is mapping and 'kueche' in tq else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
       - name: "Luftfeuchte Küche"
         unique_id: raumklima_kueche_feuchte
         device_class: humidity
         state_class: measurement
         unit_of_measurement: "%"
-        state: "{{ (h | float(0) | round(0)) if raum == 'kueche' and h not in (none, '') else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
+        state: "{{ (hq['kueche'] | float(0) | round(0)) if hq is mapping and 'kueche' in hq else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
       - name: "Temperatur Wohnzimmer"
         unique_id: raumklima_wohnzimmer_temperatur
         device_class: temperature
         state_class: measurement
         unit_of_measurement: "°C"
-        state: "{{ (t | float(0) | round(1)) if raum == 'wohnzimmer' and t not in (none, '') else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
+        state: "{{ (tq['wohnzimmer'] | float(0) | round(1)) if tq is mapping and 'wohnzimmer' in tq else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
       - name: "Luftfeuchte Wohnzimmer"
         unique_id: raumklima_wohnzimmer_feuchte
         device_class: humidity
         state_class: measurement
         unit_of_measurement: "%"
-        state: "{{ (h | float(0) | round(0)) if raum == 'wohnzimmer' and h not in (none, '') else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
+        state: "{{ (hq['wohnzimmer'] | float(0) | round(0)) if hq is mapping and 'wohnzimmer' in hq else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
       - name: "Temperatur Büro"
         unique_id: raumklima_buero_temperatur
         device_class: temperature
         state_class: measurement
         unit_of_measurement: "°C"
-        state: "{{ (t | float(0) | round(1)) if raum == 'buero' and t not in (none, '') else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
+        state: "{{ (tq['buero'] | float(0) | round(1)) if tq is mapping and 'buero' in tq else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
       - name: "Luftfeuchte Büro"
         unique_id: raumklima_buero_feuchte
         device_class: humidity
         state_class: measurement
         unit_of_measurement: "%"
-        state: "{{ (h | float(0) | round(0)) if raum == 'buero' and h not in (none, '') else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
+        state: "{{ (hq['buero'] | float(0) | round(0)) if hq is mapping and 'buero' in hq else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
       - name: "Temperatur Diele"
         unique_id: raumklima_diele_temperatur
         device_class: temperature
         state_class: measurement
         unit_of_measurement: "°C"
-        state: "{{ (t | float(0) | round(1)) if raum == 'diele' and t not in (none, '') else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
+        state: "{{ (tq['diele'] | float(0) | round(1)) if tq is mapping and 'diele' in tq else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
       - name: "Luftfeuchte Diele"
         unique_id: raumklima_diele_feuchte
         device_class: humidity
         state_class: measurement
         unit_of_measurement: "%"
-        state: "{{ (h | float(0) | round(0)) if raum == 'diele' and h not in (none, '') else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
+        state: "{{ (hq['diele'] | float(0) | round(0)) if hq is mapping and 'diele' in hq else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
       - name: "Temperatur Flur"
         unique_id: raumklima_flur_temperatur
         device_class: temperature
         state_class: measurement
         unit_of_measurement: "°C"
-        state: "{{ (t | float(0) | round(1)) if raum == 'flur' and t not in (none, '') else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
+        state: "{{ (tq['flur'] | float(0) | round(1)) if tq is mapping and 'flur' in tq else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
       - name: "Luftfeuchte Flur"
         unique_id: raumklima_flur_feuchte
         device_class: humidity
         state_class: measurement
         unit_of_measurement: "%"
-        state: "{{ (h | float(0) | round(0)) if raum == 'flur' and h not in (none, '') else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
+        state: "{{ (hq['flur'] | float(0) | round(0)) if hq is mapping and 'flur' in hq else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
       - name: "Temperatur Kind 1"
         unique_id: raumklima_kind_1_temperatur
         device_class: temperature
         state_class: measurement
         unit_of_measurement: "°C"
-        state: "{{ (t | float(0) | round(1)) if raum == 'kind_1' and t not in (none, '') else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
+        state: "{{ (tq['kind_1'] | float(0) | round(1)) if tq is mapping and 'kind_1' in tq else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
       - name: "Luftfeuchte Kind 1"
         unique_id: raumklima_kind_1_feuchte
         device_class: humidity
         state_class: measurement
         unit_of_measurement: "%"
-        state: "{{ (h | float(0) | round(0)) if raum == 'kind_1' and h not in (none, '') else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
+        state: "{{ (hq['kind_1'] | float(0) | round(0)) if hq is mapping and 'kind_1' in hq else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
       - name: "Temperatur Kind 2"
         unique_id: raumklima_kind_2_temperatur
         device_class: temperature
         state_class: measurement
         unit_of_measurement: "°C"
-        state: "{{ (t | float(0) | round(1)) if raum == 'kind_2' and t not in (none, '') else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
+        state: "{{ (tq['kind_2'] | float(0) | round(1)) if tq is mapping and 'kind_2' in tq else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
       - name: "Luftfeuchte Kind 2"
         unique_id: raumklima_kind_2_feuchte
         device_class: humidity
         state_class: measurement
         unit_of_measurement: "%"
-        state: "{{ (h | float(0) | round(0)) if raum == 'kind_2' and h not in (none, '') else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
+        state: "{{ (hq['kind_2'] | float(0) | round(0)) if hq is mapping and 'kind_2' in hq else (this.state if this is defined and this.state not in ('unknown', 'unavailable', none, '') else none) }}"
