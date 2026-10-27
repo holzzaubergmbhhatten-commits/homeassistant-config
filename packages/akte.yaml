@@ -200,6 +200,15 @@ automation:
           wert: >-
             {{ {'chats': (states('input_text.telegram_empfaenger') | string).split(';') | map('trim')
                           | select('match', '^-?\d+$') | list} | to_json | base64_encode }}
+      # Einmalig: Mirka die Akte-Neuigkeiten (Kostenaufstellung, Schreiben mit Wappen, Fotos …) erklären
+      - delay: 00:00:20
+      - action: shell_command.akte
+        continue_on_error: true
+        data:
+          aktion: neuigkeiten
+          wert: >-
+            {{ {'chats': (states('input_text.telegram_empfaenger') | string).split(';') | map('trim')
+                          | select('match', '^-?\d+$') | list} | to_json | base64_encode }}
 
 script:
   akte_aktion:

@@ -1977,6 +1977,61 @@ def ankuendigen(auftrag):
         senden(c, ANKUENDIGUNG)
 
 
+NEUIGKEITEN_MIRKA = """Hallo Mirka! 👋 Marco hat mich gebeten, dir zu erklären, was in den letzten Tagen in der digitalen Akte neu dazugekommen ist:
+
+📸 Mehrere Fotos auf einmal
+Du kannst mehrere Fotos zusammen (als Album) schicken. Der Text, den du zum ersten Foto schreibst, gilt für alle.
+
+🧮 Kostenaufstellung aus mehreren Belegen
+Schreib zu den Fotos z. B. „gehören zusammen, bitte Kostenaufstellung“ – oder danach „Die Belege vom Schaden gehören alle zusammen“. Du bekommst EIN PDF: vorne die Aufstellung mit Summe, dahinter alle Belege. Ändern geht mit „Akte Kostenaufstellung neu erstellen“ oder z. B. „… ohne Beleg 7“.
+
+🔗 Zusammenfügen und ✂️ Trennen
+Hat der Bot etwas falsch zusammengeheftet: „Akte … gehört nicht zusammen, bitte trennen“. Falsch getrennt: „Akte … gehören zusammen, bitte zusammenfügen“. Am Monitor im Flur gibt es dafür die Knöpfe „Zusammenfügen“ und „Trennen“.
+
+❓ Rückfragen einfach beantworten
+Fragt der Bot nach (z. B. „Für welche Wohnung?“), antworte einfach direkt im Chat – auch nur „Ja“. Am Monitor kannst du bei einer Rückfrage auch „Ordner selbst auswählen“ (wie im Datei-Explorer).
+
+✍️ Schreiben mit unserem Wappen
+Schreib z. B. „Schreiben an die Versicherung: bitte Adresse ändern auf …“. Du bekommst einen fertigen Brief mit unserem Familienwappen oben rechts – als PDF und als Word-Datei zum Bearbeiten. Bei gemeinsamen Sachen (Haus, Schaden …) steht „Familie Schlag“ als Absender, unterschrieben von uns beiden. Bei einer Kostenaufstellung kommen Brief, Übersicht und alle Belege zusammen in ein PDF.
+
+📷 Fotos an einen Beleg hängen
+Z. B. ein Foto vom Schaden an die Brillenrechnung: Foto schicken mit „Foto zur Brillenrechnung“. Weitere Fotos ohne Text direkt danach kommen mit dazu. Am Monitor geht es über „Foto anhängen“. Die Fotos stehen hinten im PDF.
+
+📥 Eingang am Monitor
+Hat der Bot ein Foto nicht als Beleg erkannt (landet dann im „Eingang“), gibt es dort jetzt „Ist ein Beleg: in die Akte“ und „An Akte-Eintrag hängen“.
+
+🔎 Suchen am Monitor
+Die Suche findet jetzt alles in allen Ordnern, auch Wörter aus dem Text der Dokumente – und verzeiht Tippfehler („Ovel Gönde“ findet Ovelgönne).
+
+Alles bleibt wie bisher nur bei uns zu Hause auf dem Home-Assistant-Rechner. „Akte Hilfe“ zeigt die Übersicht jederzeit."""
+
+
+def neuigkeiten(auftrag):
+    """Einmalig: Mirka die Neuerungen der Akte per Telegram erklären (Merker verhindert Wiederholung)."""
+    marke = "/config/.akte_neuigkeiten_mirka_1"
+    if os.path.exists(marke):
+        return
+    chats = [c for c in auftrag.get("chats") or [] if str(c).lstrip("-").isdigit()]
+    mirka = None
+    for c in chats:
+        try:
+            if "mirka" in (telegram("getChat", {"chat_id": c})["result"].get("first_name") or "").lower():
+                mirka = c
+                break
+        except Exception:  # noqa: BLE001
+            pass
+    open(marke, "w").close()
+    if mirka is None:   # nicht raten – lieber Marco Bescheid geben
+        if chats:
+            senden(chats[0], "ℹ️ Die Akte-Neuigkeiten für Mirka konnte ich nicht schicken: Ich finde Mirka nicht unter den Telegram-"
+                             "Empfängern. Sie muss dem Bot einmal schreiben und in input_text.telegram_empfaenger stehen.")
+        return
+    senden(mirka, NEUIGKEITEN_MIRKA)
+    logbuch("Neuigkeiten an Mirka geschickt")
+    if chats and chats[0] != mirka:
+        senden(chats[0], "✅ Mirka hat die Zusammenfassung der Akte-Neuigkeiten per Telegram bekommen.")
+
+
 # ---------- Start (lange Arbeit im Hintergrund) ----------
 
 def im_hintergrund(funktion, auftrag, warten=0):
@@ -2200,7 +2255,10 @@ def main():
     if aktion == "seite":
         print(json.dumps(seite(auftrag), ensure_ascii=False))
         return
-    funktion = {"neu": ablegen, "befehl": befehl, "erinnerung": erinnerung, "ankuendigen": ankuendigen,
+    if aktion == "neuigkeiten" and os.path.exists("/config/.akte_neuigkeiten_mirka_1"):
+        print(json.dumps({"ok": True, "schon": True}))
+        return
+    funktion = {"neu": ablegen, "befehl": befehl, "erinnerung": erinnerung, "ankuendigen": ankuendigen, "neuigkeiten": neuigkeiten,
                 "durchsicht": durchsicht, "einmalig_neu": einmalig_neu}.get(aktion)
     if not funktion:
         print(json.dumps({"ok": False, "fehler": "unbekannte Aktion"}))
