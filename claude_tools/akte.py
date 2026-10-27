@@ -234,9 +234,52 @@ def json_schreiben(pfad, d):
     os.replace(tmp, pfad)
 
 
+_BASIS = {}   # Stand beim Laden je Liste – damit beim Speichern nur die eigenen Änderungen geschrieben werden
+
+
 def verzeichnis():
     d = json_laden(VERZEICHNIS, [])
-    return d if isinstance(d, list) else []
+    d = d if isinstance(d, list) else []
+    _BASIS[id(d)] = (d, {e.get("id"): json.dumps(e, sort_keys=True) for e in d if isinstance(e, dict)})
+    return d
+
+
+def verzeichnis_schreiben(liste):
+    """Verzeichnis speichern, ohne Änderungen zu überschreiben, die ein anderer Vorgang inzwischen gemacht hat.
+    (Die Monitor-Seite schreibt sofort, Hintergrundarbeiten mit Claude brauchen oft eine halbe Minute – sonst würde z. B.
+    eine beantwortete Rückfrage vom älteren Stand wieder zurückgeholt.) Abgleich je Eintrag und Feld gegen den Ladestand."""
+    import fcntl
+    with open(VERZEICHNIS + ".lock", "w") as sperre:
+        fcntl.flock(sperre, fcntl.LOCK_EX)
+        basis_eintrag = _BASIS.get(id(liste))
+        if not basis_eintrag or basis_eintrag[0] is not liste:
+            json_schreiben(VERZEICHNIS, liste)
+        else:
+            basis = {k: json.loads(v) for k, v in basis_eintrag[1].items()}
+            jetzt = json_laden(VERZEICHNIS, [])
+            jetzt = {e.get("id"): e for e in (jetzt if isinstance(jetzt, list) else []) if isinstance(e, dict)}
+            neu = []
+            for e in liste:
+                i = e.get("id")
+                if i not in basis:                      # von mir neu angelegt
+                    neu.append(e)
+                    continue
+                if i not in jetzt:                      # inzwischen woanders gelöscht/zusammengeführt
+                    continue
+                b, t = basis[i], jetzt[i]
+                gemischt = dict(t)
+                for k in set(e) | set(b):
+                    if e.get(k) != b.get(k):            # von mir geändert → meins
+                        if k in e:
+                            gemischt[k] = e[k]
+                        else:
+                            gemischt.pop(k, None)
+                neu.append(gemischt)
+            meine = {e.get("id") for e in liste}
+            neu += [t for i, t in jetzt.items() if i not in basis and i not in meine]   # inzwischen woanders neu
+            json_schreiben(VERZEICHNIS, neu)
+            liste[:] = neu
+        _BASIS[id(liste)] = (liste, {e.get("id"): json.dumps(e, sort_keys=True) for e in liste if isinstance(e, dict)})
 
 
 def euro(x):
@@ -585,7 +628,7 @@ def ablegen(auftrag):
     if eintrag is None:
         liste.append(neu_eintrag)
     hinweis_mahnung = mahnung_pruefen(liste, neu_eintrag)
-    json_schreiben(VERZEICHNIS, liste)
+    verzeichnis_schreiben(liste)
     logbuch(f"Abgelegt: {neu_eintrag['titel']} ({neu_eintrag['absender']})")
 
     zeilen = [f"📁 {e.get('antwort') or 'Abgelegt.'}",
@@ -742,7 +785,7 @@ def neu_lesen(auftrag):
     bloecke = [dokument_block(pfad), {"type": "text", "text": f"Heute: {date.today().isoformat()}\nNotiz der Familie: {e.get('notiz') or '(keine)'}\n{familien_kontext()}"}]
     felder_setzen(e, claude(LESEN, bloecke, max_tokens=4000))
     datei_einordnen(e)
-    json_schreiben(VERZEICHNIS, liste)
+    verzeichnis_schreiben(liste)
     logbuch(f"Neu eingeordnet: {e.get('titel')}")
 
 
@@ -817,7 +860,7 @@ def schreiben(auftrag):
            "bezug_id": (bezug or {}).get("id", ""), "email_empfaenger": b.get("email") or ""}
     liste = verzeichnis()
     liste.append(neu)
-    json_schreiben(VERZEICHNIS, liste)
+    verzeichnis_schreiben(liste)
     logbuch(f"Schreiben aufgesetzt: {neu['titel']}")
     if chat:
         datei_senden(chat, os.path.join(ABLAGE, ziel_rel), f"✍️ {neu['titel']}")
@@ -877,7 +920,7 @@ def durchsicht(auftrag):
         if h:
             geaendert.append(f"{len(g)} Seiten zusammengeführt: {h.get('titel')}")
     if geaendert:
-        json_schreiben(VERZEICHNIS, liste)
+        verzeichnis_schreiben(liste)
     bericht = (a.get("bericht") or "").strip()
     logbuch("Durchsicht: " + (f"{len(geaendert)} Korrektur(en)" if geaendert else "alles in Ordnung"))
     if bericht or geaendert:
@@ -973,7 +1016,7 @@ def frage_beantworten(chat, frage, liste):
         return
     geaendert = aenderungen_anwenden(liste, a.get("aenderungen"))
     if geaendert:
-        json_schreiben(VERZEICHNIS, liste)
+        verzeichnis_schreiben(liste)
         logbuch("Per Telegram geändert: " + "; ".join(geaendert))
     senden(chat, "📁 " + (a.get("antwort") or "Dazu habe ich nichts gefunden.") +
            (("\n📝 Gemerkt bei: " + "; ".join(geaendert)) if geaendert else ""))
@@ -1051,7 +1094,7 @@ def eingereicht(chat, text, liste):
         if e["id"] in gewaehlt and e.get("einreichen", {}).get("status") == "offen":
             e["einreichen"].update({"status": "eingereicht", "am": heute})
             anzahl += 1
-    json_schreiben(VERZEICHNIS, liste)
+    verzeichnis_schreiben(liste)
     senden(chat, f"✅ {anzahl} Beleg(e) als eingereicht markiert." if anzahl else "ℹ️ Nichts zu markieren – „Einreichen“ zeigt die offenen.")
 
 
@@ -1103,7 +1146,7 @@ def rueckfrage_beantworten(chat, text, r, liste):
         return
     e["notiz"] = (((e.get("notiz") or "") + " · ") if e.get("notiz") else "") + f"{r.get('frage')} → {text}"[:300]
     e.update({"frage": "", "vorschlaege": [], "beantwortet": True})
-    json_schreiben(VERZEICHNIS, liste)
+    verzeichnis_schreiben(liste)
     neu_lesen({"id": e["id"]})
     e = next((x for x in verzeichnis() if x.get("id") == r.get("id")), e)
     senden(chat, f"📝 Danke, gemerkt: „{e.get('titel')}“ liegt jetzt in {e.get('ordner') or 'Unsortiert'}.")
@@ -1197,7 +1240,7 @@ def heften(chat, liste, eintraege):
     if not haupt:
         senden(chat, "ℹ️ Da war nichts zusammenzufügen.")
         return
-    json_schreiben(VERZEICHNIS, liste)
+    verzeichnis_schreiben(liste)
     logbuch(f"Zusammengefügt: {haupt.get('titel')} ({len(eintraege)} Teile)")
     senden(chat, f"🔗 Zusammengefügt zu einem Dokument: {zeile(1, haupt)[3:]} · {haupt.get('ordner') or 'Unsortiert'}"
                  + (f" · {len(haupt['seiten'])} Seiten" if haupt.get("seiten") else ""))
@@ -1338,7 +1381,7 @@ def vorgang_bilden(chat, liste, eintraege, auftrag_text, titel="", von=""):
               "inhalt": (str(a.get("anlass") or "") + "\n" + inhalt + "\n" + "\n".join(hinweise))[:6000],
               "frage": "", "vorschlaege": [], "datei": ziel_rel, "belege": belege, "anlagen": anlagen,
               "notiz": auftrag_text[:500] if auftrag_text else v.get("notiz", "")})
-    json_schreiben(VERZEICHNIS, liste)
+    verzeichnis_schreiben(liste)
     logbuch(f"Vorgang: {titel} – {len(belege)} Belege, {euro(summe)}")
 
     zeilen = [f"🧮 Kostenaufstellung „{titel}“ – {len(belege)} Belege zu einem Vorgang zusammengefasst"
@@ -1438,7 +1481,7 @@ def trennen(chat, liste, e, jede_seite=False):
         return
     _weg(os.path.join(ABLAGE, e.get("datei") or ""))
     liste.remove(e)
-    json_schreiben(VERZEICHNIS, liste)
+    verzeichnis_schreiben(liste)
     logbuch(f"Getrennt: {e.get('titel')} → {len(neue)} Einträge")
     senden(chat, f"✂️ „{e.get('titel')}“ ist jetzt getrennt – {len(neue)} eigene Einträge:\n"
                  + "\n".join(zeile(n, x) + f" · {x.get('ordner') or 'Unsortiert'}" for n, x in enumerate(neue, 1)))
@@ -1501,7 +1544,7 @@ def erinnerung(auftrag):
                 f["erinnert"] = True
                 geaendert = True
     if geaendert:
-        json_schreiben(VERZEICHNIS, liste)
+        verzeichnis_schreiben(liste)
 
 
 ANKUENDIGUNG = """Hallo! 👋 Neu im Zuhause-Bot: die digitale Akte 📁
@@ -1589,7 +1632,7 @@ def seite(auftrag):
         if eintrag.get("frage"):
             eintrag.update({"frage": "", "vorschlaege": [], "beantwortet": True})
         datei_einordnen(eintrag)
-        json_schreiben(VERZEICHNIS, liste)
+        verzeichnis_schreiben(liste)
         logbuch(f"In Ordner „{eintrag['ordner']}“: {eintrag.get('titel')}")
     elif was == "ordner_umbenennen":
         alt, neu = auftrag.get("id") or "", ordner_name(auftrag.get("ordner"))
@@ -1599,7 +1642,7 @@ def seite(auftrag):
                 if o == alt or o.startswith(alt + " / "):
                     x["ordner"] = neu + o[len(alt):]
                     datei_einordnen(x)
-            json_schreiben(VERZEICHNIS, liste)
+            verzeichnis_schreiben(liste)
             logbuch(f"Ordner „{alt}“ heißt jetzt „{neu}“")
     elif was == "antwort" and eintrag:
         antwort = (auftrag.get("text") or "").strip()[:300]
@@ -1612,21 +1655,21 @@ def seite(auftrag):
             eintrag["notiz"] = ((eintrag.get("notiz") or "") + " · " if eintrag.get("notiz") else "") + \
                                (f"Auf „{frage}“: " if frage else "") + ", ".join(teile)
         eintrag.update({"frage": "", "vorschlaege": [], "beantwortet": True})
-        json_schreiben(VERZEICHNIS, liste)
+        verzeichnis_schreiben(liste)
         logbuch(f"Rückfrage beantwortet: {eintrag.get('titel')}")
         im_hintergrund(neu_lesen, {"id": eintrag["id"]})
     elif was == "notiz" and eintrag:
         eintrag["notiz"] = (auftrag.get("text") or "").strip()[:500]
-        json_schreiben(VERZEICHNIS, liste)
+        verzeichnis_schreiben(liste)
         logbuch(f"Notiz: {eintrag.get('titel')}")
         if eintrag["notiz"]:
             im_hintergrund(neu_lesen, {"id": eintrag["id"]})
     elif was in ("bezahlt", "unbezahlt") and eintrag:
         eintrag["zahlung"], eintrag["zahlung_fest"] = ("bezahlt" if was == "bezahlt" else "offen"), True
-        json_schreiben(VERZEICHNIS, liste)
+        verzeichnis_schreiben(liste)
     elif was in ("eingereicht", "offen") and eintrag and eintrag.get("einreichen", {}).get("noetig"):
         eintrag["einreichen"].update({"status": was, "am": date.today().isoformat() if was == "eingereicht" else ""})
-        json_schreiben(VERZEICHNIS, liste)
+        verzeichnis_schreiben(liste)
     elif was == "loeschen" and eintrag:
         _weg(os.path.join(ABLAGE, eintrag.get("datei", "")))
         for s in eintrag.get("seiten") or []:
@@ -1637,7 +1680,7 @@ def seite(auftrag):
             if b.get("datei"):
                 _weg(os.path.join(ABLAGE, b["datei"]))
         liste.remove(eintrag)
-        json_schreiben(VERZEICHNIS, liste)
+        verzeichnis_schreiben(liste)
     felder = ("id", "titel", "typ", "kategorie", "absender", "datum", "betrag", "person", "steuer", "einreichen", "fristen",
               "schlagworte", "von", "eingang", "notiz", "zahlung", "mahnung", "rechnungsnummer", "ordner", "frage", "vorschlaege")
     aus = [dict({k: e.get(k) for k in felder}, kurz=(e.get("inhalt") or "")[:500], such=suchwoerter(e),

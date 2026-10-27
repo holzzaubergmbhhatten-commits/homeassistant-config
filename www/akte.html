@@ -122,7 +122,7 @@
 <input type="file" id="ordner-datei" webkitdirectory multiple hidden>
 <script src="/local/wappen.js?v=1"></script>
 <script>
-const SEITEN_VERSION = 21;
+const SEITEN_VERSION = 22;
 const $ = id => document.getElementById(id);
 const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const euro = x => x == null || x === "" ? "" : Number(x).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
@@ -265,6 +265,19 @@ function unterordner(basis) {
   return [...new Set(ordnerNamen().filter(o => !basis || o.startsWith(basis + " / ")).map(o => o.split(" / ").slice(0, tiefe + 1).join(" / ")))]
     .filter(o => o !== basis).sort((a, b) => a.localeCompare(b, "de"));
 }
+// Ordner auswählen wie im Datei-Explorer: Hauptordner antippen → Unterordner → „Hier ablegen“ (oder neuen Unterordner anlegen)
+let ordnerPfad = "";
+function ordnerAuswahl(e) {
+  const teile = ordnerPfad ? ordnerPfad.split(" / ") : [], unter = unterordner(ordnerPfad);
+  return `<div class="frage"><b>📂 In welchen Ordner?</b>
+    <div class="aktionen"><button class="knopf" data-a="ordner-pfad" data-v="">Alle Ordner</button>
+      ${teile.map((t, i) => `› <button class="knopf" data-a="ordner-pfad" data-v="${esc(teile.slice(0, i + 1).join(" / "))}">${esc(t)}</button>`).join(" ")}</div>
+    ${unter.length ? `<div class="wahl">${unter.map(o => `<button data-a="ordner-pfad" data-v="${esc(o)}">📂 ${esc(o.split(" / ").pop())}${unterordner(o).length ? " ›" : ""}</button>`).join("")}</div>`
+      : `<div class="klein">${ordnerPfad ? "Keine Unterordner." : "Noch keine Ordner."}</div>`}
+    ${ordnerPfad ? `<div class="aktionen"><button class="knopf gruen" data-a="ordner-setzen" data-w="${esc(e.id)}" data-v="${esc(ordnerPfad)}">Hier ablegen: ${esc(ordnerPfad)}</button></div>` : ""}
+    <div class="zeile2"><input id="ordner-neu-${esc(e.id)}" placeholder="${ordnerPfad ? "Neuer Unterordner in " + esc(teile[teile.length - 1]) : "Neuer Hauptordner, z. B. Mathilda"}"><button class="knopf gruen" data-a="ordner-setzen" data-w="${esc(e.id)}">Anlegen + ablegen</button></div>
+    <div class="aktionen"><button class="knopf" data-a="ordner-wahl" data-w="${esc(e.id)}">Abbrechen</button></div></div>`;
+}
 function ordnerKacheln(basis) {
   const namen = unterordner(basis || "");
   if (!namen.length) return basis ? "" : `<div class="leer">Noch keine Ordner – sie entstehen automatisch, sobald Belege einsortiert werden.</div>`;
@@ -314,10 +327,9 @@ function zeichnen() {
         </div>
         ${e.frage ? `<div class="frage"><b>❓ ${esc(e.frage)}</b>
           ${(e.vorschlaege || []).length ? `<div class="wahl">${e.vorschlaege.map(v => `<button data-a="antwort" data-w="${esc(e.id)}" data-v="${esc(v)}">${esc(v)}</button>`).join("")}</div>` : ""}
-          <div class="zeile2"><input id="antwort-${esc(e.id)}" placeholder="oder eigene Antwort …"><button class="knopf gruen" data-a="antwort" data-w="${esc(e.id)}">OK</button></div></div>` : ""}
-        ${ordnerWahl === e.id ? `<div class="frage"><b>📂 In welchen Ordner?</b>
-          <div class="wahl">${ordnerNamen().map(o => `<button data-a="ordner-setzen" data-w="${esc(e.id)}" data-v="${esc(o)}">${esc(o)}</button>`).join("")}</div>
-          <div class="zeile2"><input id="ordner-neu-${esc(e.id)}" placeholder="oder neuer Ordner, z. B. Mathilda"><button class="knopf gruen" data-a="ordner-setzen" data-w="${esc(e.id)}">OK</button></div></div>` : ""}
+          <div class="zeile2"><input id="antwort-${esc(e.id)}" placeholder="oder eigene Antwort …"><button class="knopf gruen" data-a="antwort" data-w="${esc(e.id)}">OK</button></div>
+          <div class="aktionen"><button class="knopf" data-a="ordner-wahl" data-w="${esc(e.id)}">📂 Passt nicht – Ordner selbst auswählen</button></div></div>` : ""}
+        ${ordnerWahl === e.id ? ordnerAuswahl(e) : ""}
         ${schreibenOffen === e.id ? `<div class="frage"><b>✍️ Was soll das Schreiben?</b>
           <textarea class="notiz-feld" id="schreiben-${esc(e.id)}" placeholder="z. B. Bitte Adresse ändern auf Fünfhauser Weg 7, 26939 Ovelgönne · Widerspruch gegen den Bescheid, weil … · Kündigung zum nächstmöglichen Termin"></textarea>
           <div class="aktionen"><button class="knopf gruen" data-a="schreiben-los" data-w="${esc(e.id)}">Schreiben aufsetzen</button></div></div>` : ""}
@@ -452,14 +464,21 @@ document.addEventListener("click", async ev => {
       const v = el.dataset.v || "", feld = $("antwort-" + w), text = v ? "" : (feld ? feld.value.trim() : "");
       if (!v && !text) { toast("Bitte eine Antwort antippen oder eintippen"); break; }
       if (!ordnerListe.length) { const r = await skript({ was: "einstellungen" }); ordnerListe = ((r && r.einstellungen && r.einstellungen.ordner) || []).map(o => o.name); }
-      const istOrdner = v && ordnerListe.some(o => o.toLowerCase() === v.toLowerCase());
+      const istOrdner = v && (ordnerNamen().some(o => o.toLowerCase() === v.toLowerCase()) || v.includes(" / "));
       const a = await skript({ was: "antwort", id: w, text: istOrdner ? "" : (v || text), ordner: istOrdner ? v : "" });
       if (a && Array.isArray(a.eintraege)) eintraege = a.eintraege;
       toast("Danke – ich ordne den Beleg damit neu ein"); zeichnen(); setTimeout(neuLaden, 40000); break;
     }
-    case "ordner-wahl": ordnerWahl = ordnerWahl === w ? "" : w; zeichnen(); break;
+    case "ordner-wahl": {
+      ordnerWahl = ordnerWahl === w ? "" : w;
+      const e = eintraege.find(x => x.id === w);   // beim Ordner des Belegs starten (falls vorhanden)
+      ordnerPfad = e && e.ordner && ordnerNamen().includes(e.ordner) ? e.ordner.split(" / ").slice(0, -1).join(" / ") : "";
+      zeichnen(); break;
+    }
+    case "ordner-pfad": ordnerPfad = el.dataset.v || ""; zeichnen(); break;
     case "ordner-setzen": {
-      const feld = $("ordner-neu-" + w), o = el.dataset.v || (feld ? feld.value.trim() : "");
+      const feld = $("ordner-neu-" + w), eingabe = feld ? feld.value.trim().replace(/\s*\/\s*/g, " / ") : "";
+      const o = el.dataset.v || (eingabe ? (ordnerPfad ? ordnerPfad + " / " : "") + eingabe : "");
       if (!o) { toast("Bitte einen Ordner antippen oder einen Namen eintippen"); break; }
       ordnerWahl = "";
       const a = await skript({ was: "ordner_setzen", id: w, ordner: o });
