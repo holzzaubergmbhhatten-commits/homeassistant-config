@@ -160,6 +160,15 @@ was auffällt und was zu tun ist; leer lassen, wenn nichts Wichtiges"}"""
 SAMMELN = (r"geh(ö|oe)r\w*\s.{0,40}zusammen|zusammen\s*(zu\s*)?(ge)?(füg|fueg|heft)|\bein(e|en)?\s+(dokument|schreiben|datei)\b|kosten\s*-?\s*aufstellung|zusammen\s*(zu\s*)?(fass|führ|fuehr|rechn|stell|addier)"
            r"|(alle|die)\s+kosten\s.{0,30}(addier|summ|zusammen)|(eine?|1)\s+pdf\b|als\s+(einen?\s+)?vorgang")
 
+# "Mach bitte ein Schreiben für die Kündigung beim Turnbund" / "Setz einen Brief an die Versicherung auf" → Schreiben aufsetzen
+SCHREIBEN_WUNSCH = (r"\b(mach|erstell|setz|schreib|formulier|entw[iu]rf|verfass|brauch|bräucht|braeucht)\w*\b.{0,50}"
+                    r"\b(schreiben|brief|kündigung|kuendigung|widerspruch|antrag|anschreiben|beschwerde)\b"
+                    r"|^\s*(kündigung|kuendigung|widerspruch)\b")
+# "Schick Mirka: …", "Sag Mirka, dass …", "Schreib Marco bitte …" → Nachricht an ein anderes Familienmitglied weiterleiten
+WEITERLEITEN = (r"^\s*(schick|schicke|sende|sag|sage|schreib|schreibe|richte)\s+(?:bitte\s+)?(?:an\s+)?"
+                r"(?!(?:mir|mich|uns|mal|bitte|ein|eine|einen|was|das|den|die|der|alle)\b)([a-zäöüß]{2,20})"
+                r"(?:\s+bitte)?\s*(?:[:,]|\s+dass\b|\s+aus\b|\s+bescheid\b)")
+
 # Foto mit Text "Foto zu …"/"Bild zum Schaden …"/"anhängen an …" → an einen bestehenden Eintrag hängen statt neu ablegen
 FOTO_ZU = r"^\s*((fotos?|bilder?|schadensfotos?)\s+(zu|zum|zur|für|fuer|von|vom)\b|(an|zu)\s+.{3,60}\s+(an)?h(ä|ae)ngen\b|anh(ä|ae)ngen\b)"
 
@@ -913,7 +922,7 @@ def schreiben(auftrag):
                     f"{euro(bezug.get('betrag'))}) und die Belege 1–{len(bezug['belege'])}. Nimm genau die Positionen und Beträge "
                     f"der Kostenaufstellung, damit Brief und Übersicht übereinstimmen.\nKostenaufstellung:\n{bezug.get('inhalt') or ''}") if vorgang else ""
     inhalt.append({"type": "text", "text": f"Heute: {date.today().strftime('%d.%m.%Y')}\n{familien_kontext()}\n{anlagen_text}\n\n"
-                                           f"Auftrag der Familie: {auftrag.get('text') or ''}"})
+                                           f"Auftrag der Familie{' (von ' + auftrag['von'] + ')' if auftrag.get('von') else ''}: {auftrag.get('text') or ''}"})
     b = claude(SCHREIBEN, inhalt, max_tokens=4000, effort="medium")
     if not b.get("text"):
         senden(chat, "⚠️ Das Schreiben konnte ich nicht aufsetzen – bitte den Auftrag etwas genauer beschreiben.")
@@ -1322,6 +1331,40 @@ def vorgang_befehl(chat, text, liste, nachfragen=True):
         vorgang_bilden(chat, liste, gewaehlt, text, titel=a.get("titel") or "")
 
 
+UMFORMULIEREN = """Eine Person aus der Familie möchte einer anderen über einen Telegram-Bot etwas ausrichten lassen. Formuliere die Nachricht
+kurz und natürlich als direkte Mitteilung an die Empfängerin bzw. den Empfänger (Du-Form, aus Sicht der absendenden Person,
+z. B. "Sag Mirka, dass ich später komme" → "Ich komme später."). Nichts hinzuerfinden. Antworte NUR mit JSON: {"text": "…"}"""
+
+
+def weiterleiten(chat, text, von, chats):
+    """„Schick Mirka: …“ – Nachricht an ein anderes Familienmitglied (Empfänger aus den Telegram-Chats, nach Vornamen)."""
+    m = re.match(WEITERLEITEN, text, re.I)
+    name = m.group(2).lower()
+    rest = text[m.end():].strip(" :,")
+    empfaenger = None
+    for c in [c for c in chats if str(c).lstrip("-").isdigit() and str(c) != str(chat)]:
+        try:
+            vorname = (telegram("getChat", {"chat_id": c})["result"].get("first_name") or "")
+        except Exception:  # noqa: BLE001
+            continue
+        if vorname.lower().startswith(name) or name.startswith(vorname.lower()[:4]):
+            empfaenger, name_richtig = c, vorname
+            break
+    if empfaenger is None:
+        senden(chat, f"📨 Ich finde „{m.group(2)}“ nicht unter den Telegram-Empfängern. Die Person muss dem Bot einmal schreiben "
+                     "und in input_text.telegram_empfaenger stehen.")
+        return
+    if not rest:
+        senden(chat, f"📨 Was soll ich {name_richtig} schicken? Z. B. „Schick {name_richtig}: Bin um 18 Uhr da“.")
+        return
+    if re.search(r"\b(dass|bescheid)\b", text[:m.end() + 12], re.I):   # „Sag Mirka, dass ich später komme“ → „Ich komme später.“
+        rest = claude(UMFORMULIEREN, [{"type": "text", "text": f"Von: {von or 'Familie'}\nAn: {name_richtig}\nAuftrag: {text}"}],
+                      max_tokens=400).get("text") or rest
+    senden(empfaenger, f"📨 Nachricht von {von or 'der Familie'}:\n{rest}")
+    senden(chat, f"✅ An {name_richtig} geschickt.")
+    logbuch(f"Nachricht weitergeleitet an {name_richtig}")
+
+
 def foto_zu(auftrag, liste):
     """Telegram-Foto an einen bestehenden Eintrag hängen. Ziel: aus dem Text (Suche, Vorgänge bevorzugt) oder – bei weiteren
     Fotos ohne Text kurz danach – derselbe wie beim letzten Mal."""
@@ -1716,12 +1759,16 @@ def befehl(auftrag):
     liste = verzeichnis()
     t = text.lower().lstrip("/")
     r = rueckfrage_offen(chat, loeschen=True)
-    if re.search(TRENNEN, t, re.I) and not (r and r.get("art") == "beleg"):
+    if re.match(WEITERLEITEN, t, re.I):
+        weiterleiten(chat, text, auftrag.get("von") or "", auftrag.get("chats") or [])
+    elif re.search(TRENNEN, t, re.I) and not (r and r.get("art") == "beleg"):
         trennen_befehl(chat, text + (f"\n(vorher: {r.get('text')})" if r and r.get("art") == "trennen" else ""), liste)
     elif r and not re.match(r"^(akte|belege?|steuer|einreichen|eingereicht|fristen|schreiben|brief)\b", t):
         rueckfrage_beantworten(chat, text, r, liste)
     elif re.match(r"^(akte|belege?)\s*(hilfe|\?)?\s*$", t):
         senden(chat, HILFE + f"\n\nIn der Akte: {len(liste)} Dokumente.")
+    elif re.search(SCHREIBEN_WUNSCH, t, re.I) and not re.match(r"^(akte|belege?)\b", t):
+        schreiben({"chat": chat, "id": None, "text": text, "von": auftrag.get("von") or ""})
     elif re.match(r"^steuer", t):
         j = re.search(r"(20\d\d)", t)
         steuer(chat, int(j.group(1)) if j else date.today().year - (1 if date.today().month < 6 else 0), liste)

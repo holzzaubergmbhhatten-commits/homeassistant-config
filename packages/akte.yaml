@@ -2,6 +2,7 @@
 # - PDF an den Bot → Akte. Foto mit Text "Beleg"/"Akte" → Akte; "+"/"weiter"/"Seite 2" → weitere Seite zum letzten Beleg.
 #   Fotos ohne solchen Text erkennt packages/eingang.yaml (Rechnung & Co. → hierher, Pflanze → Garten, Haus → Eingang).
 # - Text: "Akte <Frage>", "Steuer 2026", "Einreichen", "Eingereicht [1 3]", "Fristen", "Akte Hilfe".
+# - "Mach bitte ein Schreiben für die Kündigung …" → Brief (PDF + Word); "Schick Mirka: …" / "Sag Mirka, dass …" → Nachricht weiterleiten.
 # - Mehrere Belege → ein Vorgang (Kostenaufstellung mit Summe, ein PDF mit allen Belegen): Fotos als Album schicken und zum
 #   ersten "gehören zusammen, bitte Kostenaufstellung" schreiben – oder danach "Die gehören alle zusammen …".
 # - Ohne Telegram: Dateien in Home Assistant → Medien → Lokale Medien → Ordner "Akte-Eingang" hochladen.
@@ -58,7 +59,7 @@ automation:
         value_template: >-
           {% set m = trigger.event.data.file_mime_type | default('') %}
           {{ m in ['application/pdf', 'application/zip', 'application/x-zip-compressed'] or (m.startswith('image/') and (trigger.event.data.text | default('', true))
-             is match('^\s*(\+|beleg|akte|weiter|seite|rückseite|rueckseite|wappen|(fotos?|bilder?|schadensfotos?)\s+(zu|zum|zur|für|fuer|von|vom)\b|anh(ä|ae)ngen\b|(an|zu|dran)\s.{0,60}h(ä|ae)ngen\b)', ignorecase=True)) }}
+             is match('^\s*(\+|beleg|akte|weiter|seite|rückseite|rueckseite|wappen|(fotos?|bilder?|schadensfotos?)\s+(zu|zum|zur|für|fuer|von|vom)\\b|anh(ä|ae)ngen\\b|(an|zu|dran)\s.{0,60}h(ä|ae)ngen\\b)', ignorecase=True)) }}
     actions:
       - variables:
           chat: "{{ trigger.event.data.chat_id }}"
@@ -96,14 +97,19 @@ automation:
         # auch "Die gehören alle zusammen, bitte Kosten addieren …" (mehrere Belege → ein Vorgang mit Kostenaufstellung)
         value_template: >-
           {% set t = trigger.event.data.text | default('') | string %}
-          {{ t is match('^\s*/?(akte|belege?|steuer\s*(20\d\d)?\s*$|einreichen|eingereicht|fristen|schreiben|brief)\b', ignorecase=True)
-             or t is search('(geh(ö|oe)r\w*\s.{0,40}zusammen|kosten\s*-?\s*aufstellung|(belege|rechnungen|quittungen|kosten|fotos|bilder)\b.{0,60}(zusammen|addier|summier)|zusammen\s*(zu\s*)?(fass|führ|fuehr)\w*\s.{0,40}(pdf|belege?|rechnung)|nicht\s+(mehr\s+)?zusammen|zusammen\s*(zu\s*)?(ge)?(füg|fueg|heft)|auseinander\s*(nehmen|machen)|\btrennen\b|(getrennt|einzeln)\s+ablegen)', ignorecase=True) }}
+          {{ t is match('^\s*/?(akte|belege?|steuer\s*(20\d\d)?\s*$|einreichen|eingereicht|fristen|schreiben|brief)\\b', ignorecase=True)
+             or t is search('(geh(ö|oe)r\w*\s.{0,40}zusammen|kosten\s*-?\s*aufstellung|(belege|rechnungen|quittungen|kosten|fotos|bilder)\\b.{0,60}(zusammen|addier|summier)|zusammen\s*(zu\s*)?(fass|führ|fuehr)\w*\s.{0,40}(pdf|belege?|rechnung)|nicht\s+(mehr\s+)?zusammen|zusammen\s*(zu\s*)?(ge)?(füg|fueg|heft)|auseinander\s*(nehmen|machen)|\\btrennen\\b|(getrennt|einzeln)\s+ablegen)', ignorecase=True)
+             or t is match('^\s*(schick|schicke|sende|sag|sage|schreib|schreibe|richte)\s+(?:bitte\s+)?(?:an\s+)?(?!(?:mir|mich|uns|mal|bitte|ein|eine|einen|was|das|den|die|der|alle)\\b)([a-zäöüß]{2,20})(?:\s+bitte)?\s*(?:[:,]|\s+dass\\b|\s+aus\\b|\s+bescheid\\b)', ignorecase=True)
+             or t is search('\\b(mach|erstell|setz|schreib|formulier|entw[iu]rf|verfass|brauch|bräucht|braeucht)\w*\\b.{0,50}\\b(schreiben|brief|kündigung|kuendigung|widerspruch|antrag|anschreiben|beschwerde)\\b|^\s*(kündigung|kuendigung|widerspruch)\\b', ignorecase=True) }}
     actions:
       - action: shell_command.akte
         continue_on_error: true
         data:
           aktion: befehl
-          wert: "{{ {'text': trigger.event.data.text, 'chat': trigger.event.data.chat_id} | to_json | base64_encode }}"
+          wert: >-
+            {{ {'text': trigger.event.data.text, 'chat': trigger.event.data.chat_id, 'von': trigger.event.data.from_first | default('', true),
+                'chats': (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list}
+               | to_json | base64_encode }}
 
   - id: akte_erinnerungen
     alias: "Akte: Fristen und offene Arztrechnungen erinnern"

@@ -42,7 +42,7 @@ automation:
         value_template: >-
           {{ (trigger.event.data.file_mime_type | default('')).startswith('image/')
              and not ((trigger.event.data.text | default('', true))
-                      is match('^\s*(\+|beleg|akte|weiter|seite|rückseite|rueckseite|wappen|(fotos?|bilder?|schadensfotos?)\s+(zu|zum|zur|für|fuer|von|vom)\b|anh(ä|ae)ngen\b|(an|zu|dran)\s.{0,60}h(ä|ae)ngen\b)', ignorecase=True)) }}
+                      is match('^\s*(\+|beleg|akte|weiter|seite|rückseite|rueckseite|wappen|(fotos?|bilder?|schadensfotos?)\s+(zu|zum|zur|für|fuer|von|vom)\\b|anh(ä|ae)ngen\\b|(an|zu|dran)\s.{0,60}h(ä|ae)ngen\\b)', ignorecase=True)) }}
     actions:
       - variables:
           chat: "{{ trigger.event.data.chat_id }}"
