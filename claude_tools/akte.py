@@ -121,7 +121,13 @@ Grundlage: der Auftrag der Familie, das angehängte Dokument (falls vorhanden; d
 Aktenzeichen, Datum des Schreibens) und die Hinweise der Familie (Namen, Anschrift, Telefonnummern, E-Mail). Erfinde nichts:
 Fehlt etwas Wichtiges (z. B. die neue Adresse), schreibe "[bitte ergänzen: …]" an die Stelle.
 Absender ist die Person, an die das Dokument gerichtet ist bzw. um die es geht (z. B. Mirka bei Mirkas Versicherung),
-mit IHREM Namen, IHRER Telefonnummer und ggf. E-Mail aus den Hinweisen; sonst Marco. Der Betreff nennt immer die
+mit IHREM Namen, IHRER Telefonnummer und ggf. E-Mail aus den Hinweisen; sonst Marco.
+Geht es um eine gemeinsame Sache der Familie (Haus/Wohnung, Schaden, Haushalt, gemeinsame Verträge) und sagen die Hinweise
+nichts anderes: Absender ist die Familie – absender[0] = "Familie <Nachname>", gemeinsame Anschrift aus den Hinweisen, Telefon
+wie oben; "name" (Unterschrift) = beide Vornamen mit Nachname (z. B. "Marco und Mirka <Nachname>"); im Text "wir"/"uns".
+Sind unten ANLAGEN genannt, werden sie automatisch hinter den Brief geheftet: Verweise im Text darauf (z. B. "Die Belege
+liegen als Anlagen 1–7 bei") und schreibe NICHT, dass Belege nachgereicht werden; setze ans Textende eine Zeile
+"Anlagen: …" mit der Liste. Der Betreff nennt immer die
 Vertrags-, Versicherungs-, Kunden- oder Aktennummer aus dem Dokument. Antworte NUR mit JSON:
 {"absender": ["Vorname Nachname", "Straße Nr", "PLZ Ort"], "empfaenger": ["Firma/Behörde", "ggf. Abteilung", "Straße", "PLZ Ort"],
  "info": [{"bezeichnung": "Vertragsnummer" / "Versicherungsnummer" / "Kundennummer" / "Ihr Zeichen", "wert": "…"},
@@ -860,6 +866,38 @@ def teilen(auftrag):
         datei_senden(chat, ablage(e), zeile(1, e)[3:])
 
 
+def anlagen_heften(brief, anlagen):
+    """Belege hinter einen Brief heften: Fotos als Seiten mit „Anlage n: …“ oben, PDF-Belege werden angehängt."""
+    import nk_pdf
+    import pdf_verbinden
+    os.makedirs(EXPORT, exist_ok=True)
+    teile, fotos = [brief], None
+    for n, text_, bl in anlagen:
+        seiten = [os.path.join(SEITEN, s_) for s_ in bl.get("seiten") or [] if os.path.exists(os.path.join(SEITEN, s_))]
+        if seiten:
+            if fotos is None:
+                fotos = nk_pdf.Blatt(("", ""), hochformat=True)
+                fotos.b = []   # ohne Kopfseite, nur die Belege
+            for k, s_ in enumerate(seiten, 1):
+                with open(s_, "rb") as f:
+                    fotos.bild_seite(f.read(), f"Anlage {n}: {text_}" + (f" (Seite {k}/{len(seiten)})" if len(seiten) > 1 else ""))
+        elif bl.get("datei") and os.path.exists(os.path.join(ABLAGE, bl["datei"])):
+            if fotos is not None:   # Reihenfolge der Anlagen einhalten
+                teile.append(os.path.join(EXPORT, f"anlagen_{len(teile)}.pdf"))
+                fotos.speichern(teile[-1])
+                fotos = None
+            teile.append(os.path.join(ABLAGE, bl["datei"]))
+    if fotos is not None:
+        teile.append(os.path.join(EXPORT, f"anlagen_{len(teile)}.pdf"))
+        fotos.speichern(teile[-1])
+    if len(teile) > 1:
+        pdf_verbinden.verbinden(brief + ".neu", teile)
+        os.replace(brief + ".neu", brief)
+    for t in teile[1:]:
+        if t.startswith(EXPORT):
+            _weg(t)
+
+
 def schreiben(auftrag):
     """Brief zu einem Beleg (oder frei) aufsetzen, als PDF ablegen und per Telegram schicken."""
     import brief_pdf
@@ -872,9 +910,17 @@ def schreiben(auftrag):
     inhalt = []
     if bezug is not None and os.path.exists(ablage(bezug)):
         inhalt.append(dokument_block(ablage(bezug)))
-    inhalt.append({"type": "text", "text": f"Heute: {date.today().strftime('%d.%m.%Y')}\n{familien_kontext()}\n\n"
+    # Schreiben zu einer Kostenaufstellung: alle Belege kommen als Anlagen hinten dran (Fotos als Seiten, PDF-Belege angehängt)
+    anlagen = []
+    for n, bl in enumerate((bezug or {}).get("belege") or [], 1):
+        text_ = " · ".join(t for t in [bl.get("absender") or bl.get("titel") or "", bl.get("typ") or "", de_datum(bl.get("datum")),
+                                        euro(bl.get("betrag")) if bl.get("betrag") else ""] if t)
+        anlagen.append((n, text_, bl))
+    anlagen_text = ("\nANLAGEN (werden automatisch hinter den Brief geheftet):\n" + "\n".join(f"Anlage {n}: {t}" for n, t, _ in anlagen)
+                    + f"\nKostenaufstellung laut Akte:\n{(bezug or {}).get('inhalt') or ''}") if anlagen else ""
+    inhalt.append({"type": "text", "text": f"Heute: {date.today().strftime('%d.%m.%Y')}\n{familien_kontext()}\n{anlagen_text}\n\n"
                                            f"Auftrag der Familie: {auftrag.get('text') or ''}"})
-    b = claude(SCHREIBEN, inhalt, max_tokens=3000, effort="medium")
+    b = claude(SCHREIBEN, inhalt, max_tokens=4000, effort="medium")
     if not b.get("text"):
         senden(chat, "⚠️ Das Schreiben konnte ich nicht aufsetzen – bitte den Auftrag etwas genauer beschreiben.")
         return
@@ -890,6 +936,8 @@ def schreiben(auftrag):
     brief_pdf.brief(os.path.join(ABLAGE, ziel_rel), b.get("absender") or [], b.get("empfaenger") or [],
                     f"{b.get('ort') or 'Ovelgönne'}, {date.today().strftime('%d.%m.%Y')}", b.get("betreff") or "", b.get("text") or "",
                     name=b.get("name") or "", info=info[:4], fuss=[str(z) for z in (b.get("fuss") or []) if z][:2] or None, wappen=wappen)
+    if anlagen:
+        anlagen_heften(os.path.join(ABLAGE, ziel_rel), anlagen)
     neu = {"id": datetime.now().strftime("%Y%m%d%H%M%S") + uuid.uuid4().hex[:4], "eingang": datetime.now().isoformat(timespec="seconds"),
            "chat": chat, "von": "Akte (Schreiben)", "datei": ziel_rel, "typ": "Eigenes Schreiben", "kategorie": (bezug or {}).get("kategorie", "Sonstiges"),
            "titel": b.get("betreff") or "Schreiben", "absender": (b.get("empfaenger") or [""])[0], "datum": date.today().isoformat(),
@@ -903,7 +951,8 @@ def schreiben(auftrag):
     logbuch(f"Schreiben aufgesetzt: {neu['titel']}")
     if chat:
         datei_senden(chat, os.path.join(ABLAGE, ziel_rel), f"✍️ {neu['titel']}")
-        zeilen = ["✍️ Schreiben ist fertig und liegt in der Akte (Ordner „" + ordner + "“). Bitte einmal lesen – "
+        zeilen = ["✍️ Schreiben ist fertig und liegt in der Akte (Ordner „" + ordner + "“)"
+                  + (f" – mit {len(anlagen)} Belegen als Anlagen hinten dran" if anlagen else "") + ". Bitte einmal lesen – "
                   "Stellen mit [bitte ergänzen] noch ausfüllen.",
                   "", "📮 Anschrift:", *[z for z in (b.get("empfaenger") or []) if z]]
         if neu["email_empfaenger"]:
