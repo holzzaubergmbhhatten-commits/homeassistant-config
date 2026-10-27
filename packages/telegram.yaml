@@ -50,6 +50,7 @@ automation:
       {% set t = trigger.event.data.text | default('') | string %}
       {{ not (t is match('^\s*(schick|schicke|sende|sag|sage|schreib|schreibe|richte)\s+(?:bitte\s+)?(?:(?:eine?\s+)?(?:kurze\s+)?(?:test[-\s]?)?(?:nachricht|info|mitteilung)\s+)?(?:an\s+)?(?!(?:mir|mich|uns|mal|bitte|ein|eine|einen|was|das|den|die|der|alle|nachricht|testnachricht)\\b)([a-zäöüß]{2,20})(?:\s+bitte)?(?:\s+(?:eine?\s+)?(?:kurze\s+)?(?:test[-\s]?)?(?:nachricht|info|mitteilung)(?:\s+vo[nm]\s+\w+)?)?\s*(?:[:,]|\s+dass\\b|\s+aus\\b|\s+bescheid\\b|$)', ignorecase=True)
               or t is search('\\b(schick|send|weiterleit|leite|erklär|erklaer|teil|richte|zeig)\w*\\b.{0,80}\\b(mirka|marco|mathilda)\\b|\\b(mirka|marco|mathilda)\\b.{0,80}\\b(schick|send|weiterleit|erklär|erklaer|zeig)\w*', ignorecase=True)
+              or t is match('^\s*(ich\s+bin|ich\s+hei(ß|ss)e|mein\s+name\s+ist|hier\s+ist)\s+(mirka|marco|mathilda)\s*[.!]?\s*$', ignorecase=True)
               or t is search('\\b(mach|erstell|setz|schreib|formulier|entw[iu]rf|verfass|brauch|bräucht|braeucht)\w*\\b.{0,50}\\b(schreiben|brief|kündigung|kuendigung|widerspruch|antrag|anschreiben|beschwerde)\\b|^\s*(kündigung|kuendigung|widerspruch)\\b', ignorecase=True)) }}
   actions:
   # Wartet die Akte gerade auf eine Antwort (Rückfrage zu einem Beleg/Vorgang)? Dann geht "Ja" & Co. dorthin, nicht an Claude.

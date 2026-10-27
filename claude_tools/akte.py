@@ -171,6 +171,9 @@ WEITERLEITEN = (r"^\s*(schick|schicke|sende|sag|sage|schreib|schreibe|richte)\s+
                 r"(?!(?:mir|mich|uns|mal|bitte|ein|eine|einen|was|das|den|die|der|alle|nachricht|testnachricht)\b)([a-zäöüß]{2,20})"
                 r"(?:\s+bitte)?(?:\s+" + _NACHRICHT + r"(?:\s+vo[nm]\s+\w+)?)?\s*(?:[:,]|\s+dass\b|\s+aus\b|\s+bescheid\b|$)")
 
+# „Ich bin Mirka“ – dieser Telegram-Chat gehört dauerhaft zu Mirka (für Weiterleiten, Absender von Schreiben usw.)
+ICH_BIN = r"^\s*(ich\s+bin|ich\s+hei(ß|ss)e|mein\s+name\s+ist|hier\s+ist)\s+(mirka|marco|mathilda)\s*[.!]?\s*$"
+
 # Freier formuliert: „Du solltest die Neuerungen Mirka schicken“, „Leite Mirka das Schreiben weiter“ → Claude entscheidet, was
 FAMILIE_SENDEN = (r"\b(schick|send|weiterleit|leite|erklär|erklaer|teil|richte|zeig)\w*\b.{0,80}\b(mirka|marco|mathilda)\b"
                   r"|\b(mirka|marco|mathilda)\b.{0,80}\b(schick|send|weiterleit|erklär|erklaer|zeig)\w*")
@@ -1347,11 +1350,16 @@ kurz und natürlich als direkte Mitteilung an die Empfängerin bzw. den Empfäng
 z. B. "Sag Mirka, dass ich später komme" → "Ich komme später."). Nichts hinzuerfinden. Antworte NUR mit JSON: {"text": "…"}"""
 
 
-def name_merken(chat, von):
-    """Vorname zum Chat merken (kommt bei jeder Telegram-Nachricht mit) – so findet „Schick Mirka …“ den richtigen Chat."""
+def name_merken(chat, von, fest=False):
+    """Vorname zum Chat merken (kommt bei jeder Telegram-Nachricht mit) – so findet „Schick Mirka …“ den richtigen Chat.
+    fest=True („Ich bin Mirka“): gilt dauerhaft, auch wenn das Telegram-Profil anders heißt."""
     if not chat or not von:
         return
     d = json_laden(NAMEN, {})
+    if fest:
+        d["fest:" + str(chat)] = str(von)[:40]
+        json_schreiben(NAMEN, d)
+    von = d.get("fest:" + str(chat)) or von
     if d.get(str(chat)) != von:
         d[str(chat)] = str(von)[:40]
         try:
@@ -1375,18 +1383,18 @@ def neuigkeiten_bei_naechster_nachricht(chat, von, namen):
             datei_senden(chat, os.path.join(ABLAGE, pfad), f"✍️ {titel} (von Marco)")
         logbuch("Neuigkeiten an Mirka geschickt (bei ihrer Nachricht)")
         for c, n in namen.items():
-            if "marco" in n.lower() and c != str(chat):
+            if not c.startswith("fest:") and "marco" in str(n).lower() and c != str(chat):
                 senden(c, "✅ Mirka hat eben die Akte-Neuigkeiten" + (f" und das Schreiben „{titel}“" if pfad else "") + " bekommen.")
     except Exception as fehler:  # noqa: BLE001
         logbuch(f"Neuigkeiten an Mirka: {str(fehler)[:120]}", "fehler")
 
 
 def chat_namen(chats):
-    """{chat: [Namen]} – gemerkter Vorname plus Vor-/Nachname und Benutzername aus Telegram."""
+    """{chat: [Namen]} – fest zugeordneter bzw. gemerkter Vorname plus Vor-/Nachname und Benutzername aus Telegram."""
     gemerkt = json_laden(NAMEN, {})
     alle = {}
     for c in [str(c) for c in chats or [] if str(c).lstrip("-").isdigit()]:
-        namen = [gemerkt.get(c, "")]
+        namen = [gemerkt.get("fest:" + c) or gemerkt.get(c, "")]
         try:
             r = telegram("getChat", {"chat_id": c})["result"]
             namen += [r.get("first_name") or "", r.get("last_name") or "", r.get("username") or ""]
@@ -1890,7 +1898,11 @@ def befehl(auftrag):
     liste = verzeichnis()
     t = text.lower().lstrip("/")
     r = rueckfrage_offen(chat, loeschen=True)
-    if re.match(WEITERLEITEN, t, re.I):
+    if re.match(ICH_BIN, t, re.I):
+        name = re.match(ICH_BIN, t, re.I).group(3).capitalize()
+        name_merken(chat, name, fest=True)
+        senden(chat, f"✅ Gemerkt: Dieser Telegram-Chat gehört {name}. Nachrichten wie „Schick {name}: …“ kommen ab jetzt hier an.")
+    elif re.match(WEITERLEITEN, t, re.I):
         weiterleiten(chat, text, auftrag.get("von") or "", auftrag.get("chats") or [])
     elif re.search(FAMILIE_SENDEN, t, re.I) and not re.match(r"^(akte|belege?)\b", t):
         familie_senden(chat, text, auftrag.get("von") or "", auftrag.get("chats") or [], liste)
