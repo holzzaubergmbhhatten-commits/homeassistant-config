@@ -170,6 +170,10 @@ WEITERLEITEN = (r"^\s*(schick|schicke|sende|sag|sage|schreib|schreibe|richte)\s+
                 r"(?!(?:mir|mich|uns|mal|bitte|ein|eine|einen|was|das|den|die|der|alle|nachricht|testnachricht)\b)([a-zäöüß]{2,20})"
                 r"(?:\s+bitte)?(?:\s+" + _NACHRICHT + r"(?:\s+vo[nm]\s+\w+)?)?\s*(?:[:,]|\s+dass\b|\s+aus\b|\s+bescheid\b|$)")
 
+# Freier formuliert: „Du solltest die Neuerungen Mirka schicken“, „Leite Mirka das Schreiben weiter“ → Claude entscheidet, was
+FAMILIE_SENDEN = (r"\b(schick|send|weiterleit|leite|erklär|erklaer|teil|richte|zeig)\w*\b.{0,80}\b(mirka|marco|mathilda)\b"
+                  r"|\b(mirka|marco|mathilda)\b.{0,80}\b(schick|send|weiterleit|erklär|erklaer|zeig)\w*")
+
 # Foto mit Text "Foto zu …"/"Bild zum Schaden …"/"anhängen an …" → an einen bestehenden Eintrag hängen statt neu ablegen
 FOTO_ZU = r"^\s*((fotos?|bilder?|schadensfotos?)\s+(zu|zum|zur|für|fuer|von|vom)\b|(an|zu)\s+.{3,60}\s+(an)?h(ä|ae)ngen\b|anh(ä|ae)ngen\b)"
 
@@ -963,7 +967,7 @@ def schreiben(auftrag):
             _weg(os.path.join(ABLAGE, bezug["brief"]))
         if bezug.get("word") and bezug["word"] != word_rel:
             _weg(os.path.join(ABLAGE, bezug["word"]))
-        bezug["brief"], bezug["word"] = ziel_rel, word_rel
+        bezug["brief"], bezug["word"], bezug["brief_titel"] = ziel_rel, word_rel, b.get("betreff") or ""
         dokument_zusammensetzen(bezug)
         bezug["notiz"] = ((bezug.get("notiz") or "") + f" · Schreiben {date.today().strftime('%d.%m.%Y')}: {auftrag.get('text') or ''}")[-500:]
         verzeichnis_schreiben(liste)
@@ -1363,6 +1367,61 @@ def nachricht_an(name, text, von, chats, ausser=None):
     senden(empfaenger, f"📨 Nachricht von {von or 'der Familie'}:\n{text}")
     logbuch(f"Nachricht weitergeleitet an {vorname}")
     return {"ok": True, "an": vorname}
+
+
+FAMILIE = """Eine Person aus der Familie bittet den Telegram-Bot, einem anderen Familienmitglied etwas zu schicken. Möglich ist:
+- "neuigkeiten": die fertige Erklärung aller Neuerungen der digitalen Akte (Kostenaufstellung, Schreiben mit Wappen, Fotos …)
+- "letztes_schreiben": das zuletzt aufgesetzte Schreiben als PDF (nur der Brief, ohne Anhänge) – unten steht, welches das ist
+- "text": eine eigene kurze Nachricht (dann "text" ausfüllen, als direkte Mitteilung in Du-Form)
+Antworte NUR mit JSON: {"an": "Vorname", "senden": ["neuigkeiten" | "letztes_schreiben" | "text", …], "text": "nur bei text",
+ "rueckfrage": "nur wenn wirklich unklar ist, wem oder was geschickt werden soll, sonst leer"}"""
+
+
+def letztes_schreiben(liste):
+    """Das zuletzt aufgesetzte Schreiben (Pfad zur reinen Brief-PDF ohne Anlagen, Betreff) oder (None, None)."""
+    kandidaten = []
+    for e in liste:
+        if e.get("typ") == "Eigenes Schreiben" and e.get("datei"):
+            kandidaten.append((e.get("eingang") or "", e["datei"], e.get("titel")))
+        if e.get("brief"):
+            kandidaten.append((os.path.basename(e["brief"])[:10], e["brief"], e.get("brief_titel") or f"Schreiben zu „{e.get('titel')}“"))
+    kandidaten = [k for k in kandidaten if os.path.exists(os.path.join(ABLAGE, k[1]))]
+    if not kandidaten:
+        return None, None
+    _, pfad, titel = max(kandidaten, key=lambda k: (k[0], os.path.getmtime(os.path.join(ABLAGE, k[1]))))
+    return pfad, titel
+
+
+def familie_senden(chat, text, von, chats, liste):
+    """Frei formulierter Auftrag („Du solltest die Neuerungen Mirka schicken und das Schreiben als PDF“) – Claude legt fest,
+    an wen und was; geschickt wird nur, was es wirklich gibt, und der Absender bekommt eine genaue Rückmeldung."""
+    schreiben_pfad, schreiben_titel = letztes_schreiben(liste)
+    a = claude(FAMILIE, [{"type": "text", "text": f"Von: {von or '?'}\nLetztes Schreiben: {schreiben_titel or '(keins)'}\nAuftrag: {text}"}],
+               max_tokens=600)
+    if a.get("rueckfrage") or not a.get("an"):
+        senden(chat, "📨 " + (a.get("rueckfrage") or "Wem soll ich was schicken? Z. B. „Schick Mirka: …“"))
+        return
+    empfaenger, vorname = empfaenger_finden(a["an"], chats, ausser=chat)
+    if empfaenger is None:
+        senden(chat, f"📨 „{a['an']}“ ist nicht unter den Telegram-Empfängern – sie/er muss dem Bot einmal schreiben.")
+        return
+    erledigt = []
+    for was in a.get("senden") or []:
+        if was == "neuigkeiten":
+            senden(empfaenger, NEUIGKEITEN_MIRKA.replace("Hallo Mirka!", f"Hallo {vorname}!").replace("Marco hat mich", f"{von or 'Marco'} hat mich"))
+            erledigt.append("die Akte-Neuigkeiten")
+        elif was == "letztes_schreiben" and schreiben_pfad:
+            datei_senden(empfaenger, os.path.join(ABLAGE, schreiben_pfad), f"✍️ {schreiben_titel} (von {von or 'der Familie'})")
+            erledigt.append(f"das Schreiben „{schreiben_titel}“ als PDF")
+        elif was == "text" and a.get("text"):
+            senden(empfaenger, f"📨 Nachricht von {von or 'der Familie'}:\n{a['text']}")
+            erledigt.append("deine Nachricht")
+    if erledigt:
+        logbuch(f"An {vorname} geschickt: {', '.join(erledigt)}")
+        senden(chat, f"✅ An {vorname} geschickt: " + ", ".join(erledigt) + ".")
+    else:
+        senden(chat, "📨 Das konnte ich nicht schicken" + (" – es gibt noch kein Schreiben." if "letztes_schreiben" in (a.get("senden") or [])
+                                                          else ". Schreib es bitte etwas genauer."))
 
 
 def weiterleiten(chat, text, von, chats):
@@ -1777,6 +1836,8 @@ def befehl(auftrag):
     r = rueckfrage_offen(chat, loeschen=True)
     if re.match(WEITERLEITEN, t, re.I):
         weiterleiten(chat, text, auftrag.get("von") or "", auftrag.get("chats") or [])
+    elif re.search(FAMILIE_SENDEN, t, re.I) and not re.match(r"^(akte|belege?)\b", t):
+        familie_senden(chat, text, auftrag.get("von") or "", auftrag.get("chats") or [], liste)
     elif re.search(TRENNEN, t, re.I) and not (r and r.get("art") == "beleg"):
         trennen_befehl(chat, text + (f"\n(vorher: {r.get('text')})" if r and r.get("art") == "trennen" else ""), liste)
     elif r and not re.match(r"^(akte|belege?|steuer|einreichen|eingereicht|fristen|schreiben|brief)\b", t):
