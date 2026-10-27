@@ -496,7 +496,8 @@ script:
   jarvis_telegram_nachricht:
     alias: Jarvis Nachricht per Telegram
     description: >-
-      Schickt Marco eine Nachricht per Telegram aufs Handy. Nutze das, wenn jemand sagt "schick mir das per
+      Schickt der Person, die gerade fragt, eine Nachricht per Telegram aufs Handy (NICHT an andere – dafür
+      jarvis_nachricht_an_familie). Nutze das, wenn jemand sagt "schick mir das per
       Telegram / aufs Handy", und AUCH VON DIR AUS, wenn etwas nicht geklappt hat (z. B. ein Werkzeug meldet einen
       Fehler oder ein Gerät reagiert nicht): Dann schick eine kurze, sachliche Problembeschreibung mit dem, was
       gewünscht war, was passiert ist und der Fehlermeldung, damit Marco sie an Claude weiterleiten kann.
@@ -530,6 +531,48 @@ script:
             ergebnis: per Telegram geschickt
       - stop: fertig
         response_variable: ok
+
+  jarvis_nachricht_an_familie:
+    alias: Jarvis Nachricht an Familienmitglied
+    description: >-
+      Schickt einem anderen Familienmitglied (z. B. Mirka oder Marco) eine Nachricht per Telegram. Nutze das bei
+      "Sag Mirka, dass …", "Schick Mirka eine Nachricht", "Richte Marco aus …". "an" = Vorname, "text" = die Nachricht
+      als direkte Mitteilung (z. B. "Ich komme später."), "von" = wer sie schickt. Melde danach genau, was zurückkam:
+      bei ok "An … geschickt", sonst den Fehler – nie eine Zustellung behaupten, die nicht bestätigt wurde.
+    icon: mdi:message-arrow-right
+    mode: queued
+    fields:
+      an:
+        name: An (Vorname)
+        required: true
+        selector:
+          text:
+      text:
+        name: Nachricht
+        required: true
+        selector:
+          text:
+            multiline: true
+      von:
+        name: Von (Vorname)
+        selector:
+          text:
+    sequence:
+      - action: shell_command.akte
+        continue_on_error: true
+        data:
+          aktion: nachricht
+          wert: >-
+            {{ {'an': an, 'text': text, 'von': von | default('', true),
+                'chats': (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\\d+$') | list}
+               | to_json | base64_encode }}
+        response_variable: antwort
+      - variables:
+          ergebnis: >-
+            {% set a = antwort.stdout | default('') if antwort is defined and antwort is mapping else '' %}
+            {{ a | from_json if (a | string).startswith('{') else {'ok': false, 'fehler': 'keine Antwort vom Akte-Programm'} }}
+      - stop: fertig
+        response_variable: ergebnis
 
   jarvis_belegung:
     alias: Jarvis Belegung Ferienwohnung und Stellplätze

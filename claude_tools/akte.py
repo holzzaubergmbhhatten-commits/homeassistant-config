@@ -165,9 +165,10 @@ SCHREIBEN_WUNSCH = (r"\b(mach|erstell|setz|schreib|formulier|entw[iu]rf|verfass|
                     r"\b(schreiben|brief|kündigung|kuendigung|widerspruch|antrag|anschreiben|beschwerde)\b"
                     r"|^\s*(kündigung|kuendigung|widerspruch)\b")
 # "Schick Mirka: …", "Sag Mirka, dass …", "Schreib Marco bitte …" → Nachricht an ein anderes Familienmitglied weiterleiten
-WEITERLEITEN = (r"^\s*(schick|schicke|sende|sag|sage|schreib|schreibe|richte)\s+(?:bitte\s+)?(?:an\s+)?"
-                r"(?!(?:mir|mich|uns|mal|bitte|ein|eine|einen|was|das|den|die|der|alle)\b)([a-zäöüß]{2,20})"
-                r"(?:\s+bitte)?\s*(?:[:,]|\s+dass\b|\s+aus\b|\s+bescheid\b)")
+_NACHRICHT = r"(?:eine?\s+)?(?:kurze\s+)?(?:test-?)?(?:nachricht|info|mitteilung)"
+WEITERLEITEN = (r"^\s*(schick|schicke|sende|sag|sage|schreib|schreibe|richte)\s+(?:bitte\s+)?(?:" + _NACHRICHT + r"\s+)?(?:an\s+)?"
+                r"(?!(?:mir|mich|uns|mal|bitte|ein|eine|einen|was|das|den|die|der|alle|nachricht|testnachricht)\b)([a-zäöüß]{2,20})"
+                r"(?:\s+bitte)?(?:\s+" + _NACHRICHT + r"(?:\s+vo[nm]\s+\w+)?)?\s*(?:[:,]|\s+dass\b|\s+aus\b|\s+bescheid\b|$)")
 
 # Foto mit Text "Foto zu …"/"Bild zum Schaden …"/"anhängen an …" → an einen bestehenden Eintrag hängen statt neu ablegen
 FOTO_ZU = r"^\s*((fotos?|bilder?|schadensfotos?)\s+(zu|zum|zur|für|fuer|von|vom)\b|(an|zu)\s+.{3,60}\s+(an)?h(ä|ae)ngen\b|anh(ä|ae)ngen\b)"
@@ -1336,33 +1337,43 @@ kurz und natürlich als direkte Mitteilung an die Empfängerin bzw. den Empfäng
 z. B. "Sag Mirka, dass ich später komme" → "Ich komme später."). Nichts hinzuerfinden. Antworte NUR mit JSON: {"text": "…"}"""
 
 
+def empfaenger_finden(name, chats, ausser=None):
+    """Telegram-Chat zu einem Vornamen (aus den Empfängern, über getChat) – (chat, Vorname) oder (None, None)."""
+    name = (name or "").strip().lower()
+    for c in [c for c in chats or [] if str(c).lstrip("-").isdigit() and str(c) != str(ausser)]:
+        try:
+            vorname = telegram("getChat", {"chat_id": c})["result"].get("first_name") or ""
+        except Exception:  # noqa: BLE001
+            continue
+        if name and (vorname.lower().startswith(name) or name.startswith(vorname.lower()[:4])):
+            return c, vorname
+    return None, None
+
+
+def nachricht_an(name, text, von, chats, ausser=None):
+    """Nachricht an ein Familienmitglied schicken. Ergebnis für Jarvis/Telegram: {"ok", "an"} oder {"ok": False, "fehler"}."""
+    empfaenger, vorname = empfaenger_finden(name, chats, ausser)
+    if empfaenger is None:
+        return {"ok": False, "fehler": f"„{name}“ ist nicht unter den Telegram-Empfängern (muss dem Bot einmal geschrieben haben)"}
+    senden(empfaenger, f"📨 Nachricht von {von or 'der Familie'}:\n{text}")
+    logbuch(f"Nachricht weitergeleitet an {vorname}")
+    return {"ok": True, "an": vorname}
+
+
 def weiterleiten(chat, text, von, chats):
     """„Schick Mirka: …“ – Nachricht an ein anderes Familienmitglied (Empfänger aus den Telegram-Chats, nach Vornamen)."""
     m = re.match(WEITERLEITEN, text, re.I)
-    name = m.group(2).lower()
     rest = text[m.end():].strip(" :,")
-    empfaenger = None
-    for c in [c for c in chats if str(c).lstrip("-").isdigit() and str(c) != str(chat)]:
-        try:
-            vorname = (telegram("getChat", {"chat_id": c})["result"].get("first_name") or "")
-        except Exception:  # noqa: BLE001
-            continue
-        if vorname.lower().startswith(name) or name.startswith(vorname.lower()[:4]):
-            empfaenger, name_richtig = c, vorname
-            break
-    if empfaenger is None:
-        senden(chat, f"📨 Ich finde „{m.group(2)}“ nicht unter den Telegram-Empfängern. Die Person muss dem Bot einmal schreiben "
-                     "und in input_text.telegram_empfaenger stehen.")
-        return
+    if not rest and re.search(r"test", text, re.I):
+        rest = "Testnachricht – wenn du das liest, klappt das Weiterleiten über den Bot. 👍"
     if not rest:
-        senden(chat, f"📨 Was soll ich {name_richtig} schicken? Z. B. „Schick {name_richtig}: Bin um 18 Uhr da“.")
+        senden(chat, f"📨 Was soll ich {m.group(2)} schicken? Z. B. „Schick {m.group(2)}: Bin um 18 Uhr da“.")
         return
     if re.search(r"\b(dass|bescheid)\b", text[:m.end() + 12], re.I):   # „Sag Mirka, dass ich später komme“ → „Ich komme später.“
-        rest = claude(UMFORMULIEREN, [{"type": "text", "text": f"Von: {von or 'Familie'}\nAn: {name_richtig}\nAuftrag: {text}"}],
+        rest = claude(UMFORMULIEREN, [{"type": "text", "text": f"Von: {von or 'Familie'}\nAn: {m.group(2)}\nAuftrag: {text}"}],
                       max_tokens=400).get("text") or rest
-    senden(empfaenger, f"📨 Nachricht von {von or 'der Familie'}:\n{rest}")
-    senden(chat, f"✅ An {name_richtig} geschickt.")
-    logbuch(f"Nachricht weitergeleitet an {name_richtig}")
+    r = nachricht_an(m.group(2), rest, von, chats, ausser=chat)
+    senden(chat, f"✅ An {r['an']} geschickt." if r["ok"] else f"📨 {r['fehler']}.")
 
 
 def foto_zu(auftrag, liste):
@@ -2287,6 +2298,10 @@ def main():
         print(json.dumps(stueck(sys.argv[2:]), ensure_ascii=False))
         return
     auftrag = json.loads(base64.b64decode(sys.argv[2]).decode("utf-8")) if len(sys.argv) > 2 else {}
+    if aktion == "nachricht":   # Jarvis-Werkzeug „Nachricht an Familienmitglied“ (antwortet sofort mit dem Ergebnis)
+        print(json.dumps(nachricht_an(auftrag.get("an"), auftrag.get("text") or "", auftrag.get("von") or "", auftrag.get("chats") or []),
+                         ensure_ascii=False))
+        return
     if aktion == "foto_folge":   # schnell: gehört ein Foto ohne Text zu „Foto zu …“ von eben?
         print(json.dumps({"ziel": foto_folge(auftrag.get("chat")) or ""}))
         return
