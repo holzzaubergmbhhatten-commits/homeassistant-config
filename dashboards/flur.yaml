@@ -1635,6 +1635,40 @@ views:
         name: Schlafzimmer
       - entity: sensor.luftfeuchte_muckis_zimmer
         name: Muckis Zimmer
+- title: Energie & Heizung
+  path: energie
+  icon: mdi:solar-power-variant
+  type: sections
+  max_columns: 2
+  sections:
+  # Alle Werte der Viessmann-Integration (Wärmepumpe, Wechselrichter mit Speicher/PV), nach Gerät gruppiert –
+  # ohne feste Entitäts-IDs, damit neue Werte von selbst dazukommen
+  - type: grid
+    cards:
+    - type: markdown
+      grid_options:
+        columns: full
+      content: |-
+        {%- set alle = integration_entities('vicare') | list %}
+        {%- set geraete = alle | map('device_id') | reject('none') | unique | list %}
+        {%- for g in geraete %}
+        {%- set name = device_attr(g, 'name_by_user') or device_attr(g, 'name') %}
+        ## <ha-icon icon="{{ 'mdi:solar-power-variant' if name is search('wechselrichter|speicher|charge', ignorecase=True) else 'mdi:heat-pump' }}"></ha-icon> {{ name }}
+
+        | | |
+        |:--|--:|
+        {%- for e in alle | sort if device_id(e) == g and states(e) not in ['unknown', 'unavailable'] and e.split('.')[0] in ['sensor', 'binary_sensor', 'number', 'select', 'climate', 'water_heater'] %}
+        {%- set n = (state_attr(e, 'friendly_name') or e) | replace(name ~ ' ', '') %}
+        {%- set w = states(e) %}
+        | {{ n }} | {{ ((w | float | round(1) | string | replace('.', ',')) ~ ' ' ~ (state_attr(e, 'unit_of_measurement') or '')) if w | is_number else state_translated(e) }} |
+        {%- endfor %}
+
+        {%- endfor %}
+        {%- if not geraete %}
+        Noch keine Werte von Viessmann.
+        {%- endif %}
+
+        <font color="#8E8E93">Viessmann aktualisiert alle paar Minuten. Verlauf und Tagessummen: Seite „Energie“ in Home Assistant (links im Menü).</font>
 - title: Grundriss
   path: grundriss
   icon: mdi:floor-plan

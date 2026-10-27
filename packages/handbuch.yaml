@@ -24,11 +24,21 @@ script:
         selector:
           text:
     sequence:
+      - variables:
+          live: >-
+            {%- set ns = namespace(z=[]) %}
+            {%- for e in integration_entities('vicare') | sort if states(e) not in ['unknown', 'unavailable'] %}
+            {%- set ns.z = ns.z + [(device_attr(e, 'name_by_user') or device_attr(e, 'name') or 'Viessmann') ~ ' · ' ~ (state_attr(e, 'friendly_name') or e) ~ ': ' ~ states(e) ~ ' ' ~ (state_attr(e, 'unit_of_measurement') or '')] %}
+            {%- endfor %}
+            {%- for s in states.sensor if s.entity_id is match('sensor\\.(temperatur|luftfeuchte)_') and s.state not in ['unknown', 'unavailable'] %}
+            {%- set ns.z = ns.z + ['Raum · ' ~ s.name ~ ': ' ~ s.state ~ ' ' ~ (s.attributes.unit_of_measurement or '')] %}
+            {%- endfor %}
+            {{ ns.z | join('\n') }}
       - action: shell_command.handbuch
         continue_on_error: true
         data:
           aktion: frage
-          wert: "{{ {'frage': frage, 'link': states('input_text.zuhause_seite_link') | string} | to_json | base64_encode }}"
+          wert: "{{ {'frage': frage, 'link': states('input_text.zuhause_seite_link') | string, 'live': live} | to_json | base64_encode }}"
         response_variable: antwort
       - variables:
           ergebnis: >-

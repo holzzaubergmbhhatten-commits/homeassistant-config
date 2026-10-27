@@ -24,9 +24,12 @@ DATEN = ["wo-daten.js", "maschinen-daten.js"]
 FRAGE = """Du hilfst einer Familie auf ihrem Resthof (Haus, Nebengebäude, Werkstatt, Stellplätze) bei Fragen aus ihrem gesammelten Wissen.
 Unten steht alles, was sie gesammelt hat: ihr Haus-Handbuch (Sicherungsplan, Haustechnik, Geräte, Maschinen mit Betriebsstoffen
 und Anleitungen, Wo ist was, Netzwerk, Wohnwagen …), Wartung, Zählerstände, Fotos mit erkannten Infos und passende Dokumente.
-"gefunden": false, wenn die Antwort NICHT in diesen Unterlagen steht oder es um den aktuellen Zustand/Steuerung geht (Temperatur
-jetzt, läuft gerade, Licht an/aus, Termine, Aufgaben, Wetter, Allgemeinwissen) – dann "antwort" leer lassen, das beantwortet
-ein anderer Assistent mit den Live-Daten. Sonst antworte auf Deutsch, kurz, konkret und in Schritten:
+Dazu kommen AKTUELLE WERTE aus Home Assistant: Wärmepumpe (Vorlauf, Warmwasser, Kompressor, Betriebsart …), Wechselrichter mit
+Speicher (PV-Leistung, Ladestand, Netzbezug/Einspeisung, Verbrauch) und die Raumtemperaturen. Damit beantwortest du auch Fragen
+wie „Was macht die PV?“, „Wie voll ist der Speicher?“, „Wie warm ist das Warmwasser?“ – kurz erklärt (z. B. „Die PV liefert
+gerade 3,2 kW, davon gehen 1,1 kW ins Haus, der Speicher lädt mit 2 kW und ist zu 64 % voll“), mit Einordnung, ob das normal ist.
+"gefunden": false, wenn die Antwort weder in den Unterlagen noch in den aktuellen Werten steht oder es um Steuerung, Licht,
+Termine, Aufgaben, Wetter oder Allgemeinwissen geht – dann "antwort" leer lassen, das beantwortet ein anderer Assistent. Sonst antworte auf Deutsch, kurz, konkret und in Schritten:
 WO genau (Verteiler, Raum, Sicherungsnummer wie F23, FI-Gruppe), WAS zu tun ist, worauf man achten muss (Sicherheit).
 Nenne die Quelle in Klammern (z. B. „laut Sicherungsplan“). Steht es nicht drin, sag das ehrlich und gib nur dann einen
 allgemeinen, sicheren Rat; schlage vor, was man ins Handbuch eintragen sollte. Erfinde keine Sicherungsnummern.
@@ -129,7 +132,8 @@ def frage(auftrag):
     if not f:
         return {"ok": False, "fehler": "keine Frage"}
     hb = handbuch(auftrag.get("link") or "")
-    inhalt = (f"WARTUNG UND ZÄHLER:\n{weitere_daten() or '(keine)'}\n\nFOTOS IM EINGANG:\n{eingang_text() or '(keine)'}\n\nDOKUMENTE AUS DER AKTE:\n{akte_text(f) or '(keine passenden)'}\n\n"
+    inhalt = (f"AKTUELLE WERTE AUS HOME ASSISTANT (Stand jetzt):\n{(auftrag.get('live') or '(keine)')[:20000]}\n\n"
+              f"WARTUNG UND ZÄHLER:\n{weitere_daten() or '(keine)'}\n\nFOTOS IM EINGANG:\n{eingang_text() or '(keine)'}\n\nDOKUMENTE AUS DER AKTE:\n{akte_text(f) or '(keine passenden)'}\n\n"
               f"Frage{' von ' + auftrag['von'] if auftrag.get('von') else ''}: {f}")
     client = anthropic.Anthropic(api_key=garten_ki.api_schluessel(), timeout=50, max_retries=1)
     a = client.messages.create(model=garten_ki.MODELL, max_tokens=1200,
