@@ -1539,7 +1539,7 @@ views:
         {%- for k, n in raeume %}
         {%- set t = states('sensor.temperatur_' ~ k) %}
         {%- set h = states('sensor.luftfeuchte_' ~ k) %}
-        {%- if t | is_number %}
+        {%- if t | is_number and (now() - states.sensor['temperatur_' ~ k].last_reported).total_seconds() < 3 * 3600 %}
         {%- set ns.zeilen = ns.zeilen + [(n, t | float, h, states.sensor['temperatur_' ~ k].last_reported)] %}
         {%- endif %}
         {%- endfor %}
