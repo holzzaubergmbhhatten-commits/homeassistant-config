@@ -14,8 +14,11 @@ _NS = ('xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
 GRAU, AKZENT = "6B7078", "406B3B"
 
 
+SCHRIFT = '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="Arial" w:cs="Arial"/>'   # an jedem Text (iPhone/Pages lesen keine Standards)
+
+
 def _lauf(text, groesse=11, fett=False, farbe=None):
-    eig = f'<w:sz w:val="{int(groesse * 2)}"/>' + ("<w:b/>" if fett else "") + (f'<w:color w:val="{farbe}"/>' if farbe else "")
+    eig = SCHRIFT + f'<w:sz w:val="{int(groesse * 2)}"/><w:szCs w:val="{int(groesse * 2)}"/>' + ("<w:b/>" if fett else "") + (f'<w:color w:val="{farbe}"/>' if farbe else "")
     return f'<w:r><w:rPr>{eig}</w:rPr><w:t xml:space="preserve">{escape(str(text))}</w:t></w:r>'
 
 
@@ -28,16 +31,21 @@ def _absatz(inhalt="", nach=0, rechts=False, linie=False):
     return f"<w:p><w:pPr>{eig}</w:pPr>{inhalt}</w:p>"
 
 
-def _zelle(breite, absaetze):
-    return (f'<w:tc><w:tcPr><w:tcW w:w="{breite}" w:type="dxa"/></w:tcPr>{"".join(absaetze) or _absatz()}</w:tc>')
+def _zelle(breite, absaetze, unten=None, oben_mitte="top"):
+    rand = (f'<w:tcBorders><w:bottom w:val="single" w:sz="{unten[1]}" w:space="0" w:color="{unten[0]}"/></w:tcBorders>'
+            if unten else "")
+    return (f'<w:tc><w:tcPr><w:tcW w:w="{breite}" w:type="dxa"/>{rand}<w:vAlign w:val="{oben_mitte}"/></w:tcPr>'
+            f'{"".join(absaetze) or _absatz()}</w:tc>')
 
 
-def _tabelle(zellen):
+def _tabelle(zellen, unten=None, mitte="top"):
+    """Unsichtbare Tabelle mit festen Breiten (twips); unten=(Farbe, Stärke) zieht eine Linie unter die ganze Zeile."""
     gitter = "".join(f'<w:gridCol w:w="{b}"/>' for b, _ in zellen)
-    return ('<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders><w:top w:val="nil"/><w:left w:val="nil"/>'
-            '<w:bottom w:val="nil"/><w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders>'
-            '<w:tblLayout w:type="fixed"/></w:tblPr>'
-            f'<w:tblGrid>{gitter}</w:tblGrid><w:tr>{"".join(_zelle(b, a) for b, a in zellen)}</w:tr></w:tbl>')
+    return (f'<w:tbl><w:tblPr><w:tblW w:w="{sum(b for b, _ in zellen)}" w:type="dxa"/><w:tblInd w:w="0" w:type="dxa"/>'
+            '<w:tblBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/>'
+            '<w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders><w:tblLayout w:type="fixed"/>'
+            '<w:tblCellMar><w:left w:w="0" w:type="dxa"/><w:right w:w="0" w:type="dxa"/></w:tblCellMar></w:tblPr>'
+            f'<w:tblGrid>{gitter}</w:tblGrid><w:tr>{"".join(_zelle(b, a, unten, mitte) for b, a in zellen)}</w:tr></w:tbl>')
 
 
 def _bild(breite_cm, hoehe_cm):
@@ -60,25 +68,29 @@ def brief(pfad, absender, empfaenger, ort_datum, betreff, text, gruss="Mit freun
         h = 2.4
         b = min(4.0, h * w_b / w_h)
         kopf_rechts = [_absatz(_bild(b, b * w_h / w_b), rechts=True)]
-    kopf_links = [_absatz(_lauf(absender[0] if absender else "", 17, fett=True)),
-                  _absatz(_lauf(" · ".join(absender[1:]), 9, farbe=GRAU))]
-    teile = [_tabelle([(6800, kopf_links), (2800, kopf_rechts)]), _absatz(linie=True, nach=600)]
+    kopf_links = [_absatz(_lauf(absender[0] if absender else "", 17, fett=True), nach=40),
+                  _absatz(_lauf(" · ".join(absender[1:]), 9, farbe=GRAU), nach=120)]
+    # Kopf: Name links, Wappen rechts, grüne Linie darunter (als Zellrand – das zeigen auch iPhone und Pages)
+    teile = [_tabelle([(7054, kopf_links), (2300, kopf_rechts or [_absatz()])], unten=(AKZENT, 12), mitte="bottom"),
+             _absatz(nach=700)]
 
-    links = [_absatz(_lauf(" · ".join(absender[:3]), 7, farbe=GRAU), nach=120)]
-    links += [_absatz(_lauf(z, 11)) for z in empfaenger or [] if z]
+    links = [_tabelle([(4900, [_absatz(_lauf(" · ".join(absender[:3]), 7, farbe=GRAU), nach=40)])], unten=("B0B4BA", 4)),
+             _absatz(nach=60)]
+    links += [_absatz(_lauf(z, 11), nach=20) for z in empfaenger or [] if z]
     rechts = []
     for bez, wert in (info or []) + [("Datum", ort_datum.split(", ")[-1])]:
         if wert:
-            rechts += [_absatz(_lauf(bez, 7.5, farbe=GRAU)), _absatz(_lauf(wert, 9.5), nach=80)]
-    teile += [_tabelle([(5600, links), (4000, rechts)]), _absatz(nach=480)]
+            rechts += [_absatz(_lauf(bez, 7.5, farbe=GRAU)), _absatz(_lauf(wert, 9.5), nach=100)]
+    teile += [_tabelle([(5654, links), (3700, rechts)]), _absatz(nach=600)]
 
     teile.append(_absatz(_lauf(betreff, 12, fett=True), nach=360))
     for zeile in str(text or "").split("\n"):
-        teile.append(_absatz(_lauf(zeile, 11) if zeile.strip() else "", nach=0))
+        teile.append(_absatz(_lauf(zeile, 11) if zeile.strip() else _lauf("", 11), nach=0))
     teile += [_absatz(), _absatz(_lauf(gruss, 11)), _absatz(), _absatz(), _absatz(_lauf(name, 11, fett=True) if name else "")]
 
     fusszeilen = [z for z in (fuss or [" · ".join(absender)]) if z][:2]
     fuss_xml = (f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr {_NS}>'
+                + _tabelle([(9354, [_absatz()])], unten=("B0B4BA", 4))
                 + "".join(_absatz(_lauf(z, 7.5, farbe=GRAU)) for z in fusszeilen) + "</w:ftr>")
     sekt = ('<w:sectPr><w:footerReference w:type="default" r:id="rIdFuss"/><w:pgSz w:w="11906" w:h="16838"/>'
             '<w:pgMar w:top="1000" w:right="1134" w:bottom="1300" w:left="1418" w:header="500" w:footer="500" w:gutter="0"/></w:sectPr>')
@@ -86,8 +98,10 @@ def brief(pfad, absender, empfaenger, ort_datum, betreff, text, gruss="Mit freun
                 + "".join(teile) + sekt + "</w:body></w:document>")
     stile = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
              '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr>'
-             '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="22"/><w:lang w:val="de-DE"/></w:rPr></w:rPrDefault>'
-             '</w:docDefaults></w:styles>')
+             '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="Arial" w:cs="Arial"/><w:sz w:val="22"/><w:lang w:val="de-DE"/></w:rPr></w:rPrDefault>'
+             '<w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="264" w:lineRule="auto"/></w:pPr></w:pPrDefault>'
+             '</w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Standard"><w:name w:val="Normal"/><w:rPr>'
+             '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="22"/></w:rPr></w:style></w:styles>')
     rels = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
             '<Relationship Id="rIdStile" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'

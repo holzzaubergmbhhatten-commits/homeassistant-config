@@ -906,9 +906,12 @@ def schreiben(auftrag):
     chat = auftrag.get("chat") or chat_fuer(auftrag.get("wer"), auftrag.get("chats"))
     bezug = next((x for x in liste if x.get("id") == auftrag.get("id")), None)
     if bezug is None and auftrag.get("id") is None and liste:
-        treffer = suchen(liste, auftrag.get("text") or "", 1)
+        # passendes Dokument nur bei einem klaren Treffer (Titel/Absender/Schlagworte), sonst ein freies Schreiben
+        treffer = suchen(liste, auftrag.get("text") or "", 1, mindest=3)
         bezug = liste[treffer[0]] if treffer else None
-    vorgang = bool((bezug or {}).get("belege"))
+    # In eine Kostenaufstellung kommt das Schreiben nur, wenn es am Eintrag selbst aufgesetzt wurde oder ausdrücklich darum geht
+    vorgang = bool((bezug or {}).get("belege")) and (auftrag.get("id") == (bezug or {}).get("id") or bool(
+        re.search(r"kosten|schaden|regulier|vorgang|aufstellung", auftrag.get("text") or "", re.I)))
     if vorgang and re.search(r"neupreis|preis|betrag|summe|\d+[,.]\d\d\s*(€|eur)|korrig|änder|aender|ohne\s+beleg", auftrag.get("text") or "", re.I):
         # Beträge sollen anders angesetzt werden → erst die Kostenaufstellung anpassen, damit Brief und Übersicht übereinstimmen
         vorgang_bilden(chat, liste, [bezug], auftrag.get("text") or "", still=True)
@@ -1091,7 +1094,7 @@ def wort_passt(w, woerter, text):
     return any(difflib.SequenceMatcher(None, w, t[:len(w) + 1]).ratio() >= grenze for t in woerter if len(t) >= len(w) - 2)
 
 
-def suchen(liste, frage, anzahl=40):
+def suchen(liste, frage, anzahl=40, mindest=None):
     woerter = [normal(w) for w in re.findall(r"[a-zäöüß0-9]{3,}", frage.lower())
                if w not in {"akte", "beleg", "belege", "was", "wie", "wer", "wann", "der", "die", "das", "und", "mir", "uns",
                             "unsere", "unser", "schick", "schicke", "bitte", "von", "vom", "für", "bei", "mit", "zum", "zur"}]
@@ -1112,6 +1115,8 @@ def suchen(liste, frage, anzahl=40):
             p += 0.5
         bewertet.append((p, i))
     bewertet.sort(key=lambda x: (-x[0], -x[1]))
+    if mindest is not None:   # nur echte Treffer (z. B. für Schreiben: lieber kein Bezug als ein falscher)
+        return [i for p, i in bewertet[:anzahl] if p >= mindest]
     return [i for p, i in bewertet[:anzahl] if p > 0] or [i for p, i in bewertet[:15]]
 
 
@@ -1904,6 +1909,14 @@ def seite(auftrag):
     if was == "schreiben":
         im_hintergrund(schreiben, auftrag)
         return {"ok": True}
+    if was == "brief_weg" and eintrag and eintrag.get("brief"):   # Schreiben vorne aus dem Dokument nehmen
+        for f in ("brief", "word"):
+            if eintrag.get(f):
+                _weg(os.path.join(ABLAGE, eintrag.pop(f)))
+        dokument_zusammensetzen(eintrag)
+        verzeichnis_schreiben(liste)
+        logbuch(f"Schreiben entfernt: {eintrag.get('titel')}")
+        was = "liste"
     if was == "foto_weg" and eintrag:
         eintrag["fotos"] = [f for f in eintrag.get("fotos") or [] if f.get("datei") != auftrag.get("text")]
         _weg(os.path.join(FOTOS, os.path.basename(auftrag.get("text") or "-")))
@@ -2013,7 +2026,8 @@ def seite(auftrag):
               "schlagworte", "von", "eingang", "notiz", "zahlung", "mahnung", "rechnungsnummer", "ordner", "frage", "vorschlaege")
     aus = [dict({k: e.get(k) for k in felder}, kurz=(e.get("inhalt") or "")[:500], such=suchwoerter(e),
                  teile=len(e.get("belege") or []) or len(e.get("seiten") or []), vorgang=bool(e.get("belege")),
-                 fotos=[{"datei": f.get("datei"), "text": f.get("text", "")} for f in e.get("fotos") or []]) for e in liste]
+                 fotos=[{"datei": f.get("datei"), "text": f.get("text", "")} for f in e.get("fotos") or []],
+                 hat_brief=bool(e.get("brief"))) for e in liste]
     aus.sort(key=lambda e: (e.get("datum") or "", e.get("eingang") or ""), reverse=True)
     wartend = 0
     for d in (EINGANG, ORDNER, UPLOAD):

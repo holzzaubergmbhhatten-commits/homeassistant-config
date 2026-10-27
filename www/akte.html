@@ -123,7 +123,7 @@
 <input type="file" id="foto-datei" multiple accept="image/*" hidden>
 <script src="/local/wappen.js?v=1"></script>
 <script>
-const SEITEN_VERSION = 24;
+const SEITEN_VERSION = 25;
 const $ = id => document.getElementById(id);
 const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const euro = x => x == null || x === "" ? "" : Number(x).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
@@ -345,6 +345,7 @@ function zeichnen() {
           <button class="knopf" data-a="ordner-wahl" data-w="${esc(e.id)}">📂 Ordner</button>
           <button class="knopf" data-a="schreiben-oeffnen" data-w="${esc(e.id)}">✍️ Schreiben</button>
           <button class="knopf" data-a="foto-anhaengen" data-w="${esc(e.id)}">📷 Foto anhängen</button>
+          ${e.hat_brief ? `<button class="knopf" data-a="brief-weg" data-w="${esc(e.id)}">✍️ Schreiben vorne entfernen</button>` : ""}
           ${notizOffen === e.id ? `<button class="knopf gruen" data-a="notiz-speichern" data-w="${esc(e.id)}">Notiz speichern</button>`
             : `<button class="knopf" data-a="notiz" data-w="${esc(e.id)}">📝 Notiz</button>`}
           ${e.zahlung === "offen" ? `<button class="knopf gruen" data-a="bezahlt" data-w="${esc(e.id)}">Bezahlt</button>`
@@ -504,6 +505,10 @@ document.addEventListener("click", async ev => {
       toast("Umbenannt"); zeichnen(); break;
     }
     case "fehler-weg": { const a = await skript({ was: "fehler_weg" }); if (a && Array.isArray(a.log)) log = a.log; else log = log.map(l => l.art === "fehler" ? { ...l, art: "fehler_gesehen" } : l); zeichnen(); break; }
+    case "brief-weg": {
+      if (el.dataset.scharf !== "1") { el.dataset.scharf = "1"; el.classList.add("scharf"); el.textContent = "Wirklich entfernen?"; return; }
+      await skript({ was: "brief_weg", id: w }); await aktion("liste"); toast("Schreiben entfernt"); zeichnen(); break;
+    }
     case "foto-anhaengen": fotoZiel = w; $("foto-datei").click(); break;
     case "foto-weg": {
       if (el.dataset.scharf !== "1") { el.dataset.scharf = "1"; el.textContent = "wirklich entfernen?"; return; }
