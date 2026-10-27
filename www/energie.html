@@ -554,6 +554,10 @@ function csvZeilen(text) {
   });
 }
 function csvLesen(text) {
+  const anfang = text.search(/measuredAt|^\s*(zeit|datum|date)\b/im);   // z. B. „blob:https://…“ davor beim Kopieren
+  if (anfang > 0) text = text.slice(anfang);
+  // eingefügter Text kann in einer Zeile ankommen: vor jedem Zeitstempel umbrechen
+  text = text.replace(/\s+(?=\d{4}-\d{2}-\d{2}T)/g, "\n");
   const z = csvZeilen(text); if (z.length < 2) throw new Error("Datei ist leer");
   const kopf = z[0].map(x => x.toLowerCase());
   const spalte = re => kopf.findIndex(k => re.test(k));
@@ -580,10 +584,11 @@ function csvLesen(text) {
   });
   return { erg, art, anzahl: Object.keys(erg[art]).length };
 }
-async function importDatei(datei) {
-  IMPORT_TEXT = "Lese Datei …"; zeichnen();
+async function importDatei(datei) { return importText(await datei.text()); }
+async function importText(inhalt) {
+  IMPORT_TEXT = "Lese ein …"; zeichnen();
   try {
-    const { erg, art: a, anzahl } = csvLesen(await datei.text());
+    const { erg, art: a, anzahl } = csvLesen(inhalt);
     if (!anzahl) throw new Error("Keine Werte in der Datei gefunden.");
     const r = await hass().callWS({ type: "call_service", domain: "script", service: "energie_verlauf",
       service_data: { aktion: "import", daten: JSON.stringify(erg) }, return_response: true });
@@ -602,6 +607,9 @@ function importKarte() {
       für die Zeit, bevor Home Assistant aufgezeichnet hat. ${esc(bestand)}</div>
     <label class="heute" style="display:inline-block;margin-top:8px;cursor:pointer">CSV-Datei auswählen
       <input type="file" id="csvdatei" accept=".csv,text/csv" style="display:none"></label>
+    <div class="klein" style="margin-top:10px">Oder den Inhalt der Datei hier hineinkopieren (im Portal Datei öffnen → alles markieren → kopieren):</div>
+    <textarea id="csvtext" rows="4" style="width:100%;margin-top:6px;font:13px Menlo,monospace;border-radius:10px;border:1px solid var(--linie);padding:8px;background:var(--bg);color:var(--text)" placeholder="measuredAt,Netzeinspeisung (Wh),…"></textarea>
+    <button class="heute" data-csvtext="1" style="margin-top:6px">Text einlesen</button>
     ${IMPORT_TEXT ? `<div class="auswahl">${esc(IMPORT_TEXT)}</div>` : ""}</div>`;
 }
 document.addEventListener("change", ev => { if (ev.target && ev.target.id === "csvdatei" && ev.target.files[0]) importDatei(ev.target.files[0]); });
@@ -699,6 +707,11 @@ function alleWerte() {
 }
 
 function zeichnen() {
+  const csvAlt = ($("csvtext") || {}).value;
+  zeichnenInnen();
+  if (csvAlt && $("csvtext")) $("csvtext").value = csvAlt;
+}
+function zeichnenInnen() {
   const inhalt = { raeume: raeumeSeite, uebersicht, waermepumpe, wasser, alle: alleWerte }[reiter]();
   $("inhalt").innerHTML = `<div class="kopf"><h1>Klima &amp; Energie</h1>
     <div class="reiter">${[["raeume", "Räume"], ["uebersicht", "Energie"], ["waermepumpe", "Wärmepumpe"], ["wasser", "Wasser"], ["alle", "Alle Werte"]].map(([k, n]) =>
@@ -711,8 +724,9 @@ function live() {     // nur die Live-Teile neu, damit Antippen und Blättern ni
   else if (reiter !== "uebersicht") zeichnen();
 }
 document.addEventListener("click", ev => {
-  const t = ev.target.closest("[data-reiter],[data-art],[data-blaettern],[data-heute],[data-fach],[data-rueck]"); if (!t) return;
+  const t = ev.target.closest("[data-reiter],[data-art],[data-blaettern],[data-heute],[data-fach],[data-rueck],[data-csvtext]"); if (!t) return;
   if (t.dataset.rueck) { ladeRueck(true); return; }
+  if (t.dataset.csvtext) { const v = ($("csvtext") || {}).value || ""; if (v.trim()) importText(v); return; }
   if (t.dataset.reiter) { reiter = t.dataset.reiter; zeichnen(); }
   else if (t.dataset.art) { art = t.dataset.art; AUSWAHL = null; ladeStat(); }
   else if (t.dataset.blaettern) blaettern(+t.dataset.blaettern);

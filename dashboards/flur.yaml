@@ -1527,7 +1527,7 @@ views:
   # Räume (HomePods), Energie wie das Energiecockpit der ViCare-App, Wärmepumpe, Wasser (Conel), alle Werte – Tag/Woche/Monat/Jahr
   cards:
   - type: iframe
-    url: /local/energie.html?v=5
+    url: /local/energie.html?v=6
     aspect_ratio: 53.3%
 - title: Grundriss
   path: grundriss
