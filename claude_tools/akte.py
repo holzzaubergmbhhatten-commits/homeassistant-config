@@ -125,8 +125,8 @@ mit IHREM Namen, IHRER Telefonnummer und ggf. E-Mail aus den Hinweisen; sonst Ma
 Geht es um eine gemeinsame Sache der Familie (Haus/Wohnung, Schaden, Haushalt, gemeinsame Verträge) und sagen die Hinweise
 nichts anderes: Absender ist die Familie – absender[0] = "Familie <Nachname>", gemeinsame Anschrift aus den Hinweisen, Telefon
 wie oben; "name" (Unterschrift) = beide Vornamen mit Nachname (z. B. "Marco und Mirka <Nachname>"); im Text "wir"/"uns".
-Sind unten ANLAGEN genannt, werden sie automatisch hinter den Brief geheftet: Verweise im Text darauf (z. B. "Die Belege
-liegen als Anlagen 1–7 bei") und schreibe NICHT, dass Belege nachgereicht werden; setze ans Textende eine Zeile
+Sind unten ANLAGEN genannt, werden sie automatisch hinter den Brief geheftet: Verweise im Text darauf (z. B. "Die
+Kostenaufstellung und die Belege 1–7 liegen als Anlagen bei") und schreibe NICHT, dass Belege nachgereicht werden; setze ans Textende eine Zeile
 "Anlagen: …" mit der Liste. Der Betreff nennt immer die
 Vertrags-, Versicherungs-, Kunden- oder Aktennummer aus dem Dokument. Antworte NUR mit JSON:
 {"absender": ["Vorname Nachname", "Straße Nr", "PLZ Ort"], "empfaenger": ["Firma/Behörde", "ggf. Abteilung", "Straße", "PLZ Ort"],
@@ -866,38 +866,6 @@ def teilen(auftrag):
         datei_senden(chat, ablage(e), zeile(1, e)[3:])
 
 
-def anlagen_heften(brief, anlagen):
-    """Belege hinter einen Brief heften: Fotos als Seiten mit „Anlage n: …“ oben, PDF-Belege werden angehängt."""
-    import nk_pdf
-    import pdf_verbinden
-    os.makedirs(EXPORT, exist_ok=True)
-    teile, fotos = [brief], None
-    for n, text_, bl in anlagen:
-        seiten = [os.path.join(SEITEN, s_) for s_ in bl.get("seiten") or [] if os.path.exists(os.path.join(SEITEN, s_))]
-        if seiten:
-            if fotos is None:
-                fotos = nk_pdf.Blatt(("", ""), hochformat=True)
-                fotos.b = []   # ohne Kopfseite, nur die Belege
-            for k, s_ in enumerate(seiten, 1):
-                with open(s_, "rb") as f:
-                    fotos.bild_seite(f.read(), f"Anlage {n}: {text_}" + (f" (Seite {k}/{len(seiten)})" if len(seiten) > 1 else ""))
-        elif bl.get("datei") and os.path.exists(os.path.join(ABLAGE, bl["datei"])):
-            if fotos is not None:   # Reihenfolge der Anlagen einhalten
-                teile.append(os.path.join(EXPORT, f"anlagen_{len(teile)}.pdf"))
-                fotos.speichern(teile[-1])
-                fotos = None
-            teile.append(os.path.join(ABLAGE, bl["datei"]))
-    if fotos is not None:
-        teile.append(os.path.join(EXPORT, f"anlagen_{len(teile)}.pdf"))
-        fotos.speichern(teile[-1])
-    if len(teile) > 1:
-        pdf_verbinden.verbinden(brief + ".neu", teile)
-        os.replace(brief + ".neu", brief)
-    for t in teile[1:]:
-        if t.startswith(EXPORT):
-            _weg(t)
-
-
 def schreiben(auftrag):
     """Brief zu einem Beleg (oder frei) aufsetzen, als PDF ablegen und per Telegram schicken."""
     import brief_pdf
@@ -907,17 +875,20 @@ def schreiben(auftrag):
     if bezug is None and auftrag.get("id") is None and liste:
         treffer = suchen(liste, auftrag.get("text") or "", 1)
         bezug = liste[treffer[0]] if treffer else None
+    vorgang = bool((bezug or {}).get("belege"))
+    if vorgang and re.search(r"neupreis|preis|betrag|summe|\d+[,.]\d\d\s*(€|eur)|korrig|änder|aender|ohne\s+beleg", auftrag.get("text") or "", re.I):
+        # Beträge sollen anders angesetzt werden → erst die Kostenaufstellung anpassen, damit Brief und Übersicht übereinstimmen
+        vorgang_bilden(chat, liste, [bezug], auftrag.get("text") or "", still=True)
+        liste = verzeichnis()
+        bezug = next((x for x in liste if x.get("id") == bezug.get("id")), bezug)
     inhalt = []
-    if bezug is not None and os.path.exists(ablage(bezug)):
-        inhalt.append(dokument_block(ablage(bezug)))
-    # Schreiben zu einer Kostenaufstellung: alle Belege kommen als Anlagen hinten dran (Fotos als Seiten, PDF-Belege angehängt)
-    anlagen = []
-    for n, bl in enumerate((bezug or {}).get("belege") or [], 1):
-        text_ = " · ".join(t for t in [bl.get("absender") or bl.get("titel") or "", bl.get("typ") or "", de_datum(bl.get("datum")),
-                                        euro(bl.get("betrag")) if bl.get("betrag") else ""] if t)
-        anlagen.append((n, text_, bl))
-    anlagen_text = ("\nANLAGEN (werden automatisch hinter den Brief geheftet):\n" + "\n".join(f"Anlage {n}: {t}" for n, t, _ in anlagen)
-                    + f"\nKostenaufstellung laut Akte:\n{(bezug or {}).get('inhalt') or ''}") if anlagen else ""
+    grundlage = os.path.join(ABLAGE, bezug["uebersicht"]) if vorgang and bezug.get("uebersicht") else ablage(bezug) if bezug else ""
+    if bezug is not None and os.path.exists(grundlage):
+        inhalt.append(dokument_block(grundlage))
+    # Schreiben zu einer Kostenaufstellung: Brief + Kostenaufstellung + alle Belege werden EIN Dokument
+    anlagen_text = (f"\nANLAGEN (werden automatisch hinter den Brief geheftet): die Kostenaufstellung (Übersicht, Summe "
+                    f"{euro(bezug.get('betrag'))}) und die Belege 1–{len(bezug['belege'])}. Nimm genau die Positionen und Beträge "
+                    f"der Kostenaufstellung, damit Brief und Übersicht übereinstimmen.\nKostenaufstellung:\n{bezug.get('inhalt') or ''}") if vorgang else ""
     inhalt.append({"type": "text", "text": f"Heute: {date.today().strftime('%d.%m.%Y')}\n{familien_kontext()}\n{anlagen_text}\n\n"
                                            f"Auftrag der Familie: {auftrag.get('text') or ''}"})
     b = claude(SCHREIBEN, inhalt, max_tokens=4000, effort="medium")
@@ -936,8 +907,21 @@ def schreiben(auftrag):
     brief_pdf.brief(os.path.join(ABLAGE, ziel_rel), b.get("absender") or [], b.get("empfaenger") or [],
                     f"{b.get('ort') or 'Ovelgönne'}, {date.today().strftime('%d.%m.%Y')}", b.get("betreff") or "", b.get("text") or "",
                     name=b.get("name") or "", info=info[:4], fuss=[str(z) for z in (b.get("fuss") or []) if z][:2] or None, wappen=wappen)
-    if anlagen:
-        anlagen_heften(os.path.join(ABLAGE, ziel_rel), anlagen)
+    if vorgang:
+        # Schreiben vorne in den Vorgang – am Monitor und per Telegram ist es dann ein Dokument mit Übersicht und Belegen
+        if bezug.get("brief") and bezug["brief"] != ziel_rel:
+            _weg(os.path.join(ABLAGE, bezug["brief"]))
+        bezug["brief"] = ziel_rel
+        vorgang_zusammensetzen(bezug)
+        bezug["notiz"] = ((bezug.get("notiz") or "") + f" · Schreiben {date.today().strftime('%d.%m.%Y')}: {auftrag.get('text') or ''}")[-500:]
+        verzeichnis_schreiben(liste)
+        logbuch(f"Schreiben zum Vorgang: {bezug.get('titel')}")
+        if chat:
+            datei_senden(chat, os.path.join(ABLAGE, bezug["datei"]), f"✍️ {b.get('betreff') or 'Schreiben'}")
+            senden(chat, "✍️ Schreiben ist fertig – zusammen mit der Kostenaufstellung und allen Belegen in einem PDF. Am Monitor "
+                         f"liegt es bei „{bezug.get('titel')}“. Bitte einmal lesen – Stellen mit [bitte ergänzen] noch ausfüllen."
+                         + ("\n\n📮 Anschrift:\n" + "\n".join(z for z in (b.get("empfaenger") or []) if z) if b.get("empfaenger") else ""))
+        return
     neu = {"id": datetime.now().strftime("%Y%m%d%H%M%S") + uuid.uuid4().hex[:4], "eingang": datetime.now().isoformat(timespec="seconds"),
            "chat": chat, "von": "Akte (Schreiben)", "datei": ziel_rel, "typ": "Eigenes Schreiben", "kategorie": (bezug or {}).get("kategorie", "Sonstiges"),
            "titel": b.get("betreff") or "Schreiben", "absender": (b.get("empfaenger") or [""])[0], "datum": date.today().isoformat(),
@@ -951,8 +935,7 @@ def schreiben(auftrag):
     logbuch(f"Schreiben aufgesetzt: {neu['titel']}")
     if chat:
         datei_senden(chat, os.path.join(ABLAGE, ziel_rel), f"✍️ {neu['titel']}")
-        zeilen = ["✍️ Schreiben ist fertig und liegt in der Akte (Ordner „" + ordner + "“)"
-                  + (f" – mit {len(anlagen)} Belegen als Anlagen hinten dran" if anlagen else "") + ". Bitte einmal lesen – "
+        zeilen = ["✍️ Schreiben ist fertig und liegt in der Akte (Ordner „" + ordner + "“). Bitte einmal lesen – "
                   "Stellen mit [bitte ergänzen] noch ausfüllen.",
                   "", "📮 Anschrift:", *[z for z in (b.get("empfaenger") or []) if z]]
         if neu["email_empfaenger"]:
@@ -1363,7 +1346,21 @@ def trennen_seite(auftrag):
         trennen(auftrag.get("chat"), liste, e, jede_seite=auftrag.get("ordner") == "jede")
 
 
-def vorgang_bilden(chat, liste, eintraege, auftrag_text, titel="", von=""):
+def vorgang_zusammensetzen(v):
+    """Ein Dokument für den Vorgang: Schreiben (falls eins aufgesetzt wurde) + Kostenaufstellung + alle Belege."""
+    import pdf_verbinden
+    ueb, brief = v.get("uebersicht") or v.get("datei"), v.get("brief")
+    neu = ueb
+    if brief and ueb and os.path.exists(os.path.join(ABLAGE, brief)) and os.path.exists(os.path.join(ABLAGE, ueb)):
+        neu = ueb[:-4] + "_mit-Schreiben.pdf"
+        pdf_verbinden.verbinden(os.path.join(ABLAGE, neu) + ".neu", [os.path.join(ABLAGE, brief), os.path.join(ABLAGE, ueb)])
+        os.replace(os.path.join(ABLAGE, neu) + ".neu", os.path.join(ABLAGE, neu))
+    if v.get("datei") and v["datei"] not in (neu, ueb, brief):
+        _weg(os.path.join(ABLAGE, v["datei"]))
+    v["datei"], v["uebersicht"] = neu, ueb
+
+
+def vorgang_bilden(chat, liste, eintraege, auftrag_text, titel="", von="", still=False):
     """Belege (auch einen schon bestehenden Vorgang, der ergänzt wird) zu einem Eintrag mit Kostenaufstellung bündeln."""
     import nk_pdf
     belege, alt = [], None
@@ -1455,8 +1452,7 @@ def vorgang_bilden(chat, liste, eintraege, auftrag_text, titel="", von=""):
     if alt is None and os.path.exists(os.path.join(ABLAGE, ziel_rel)):
         ziel_rel = ziel_rel[:-4] + f"_{uuid.uuid4().hex[:4]}.pdf"
     blatt.speichern(os.path.join(ABLAGE, ziel_rel))
-    if alt is not None and alt.get("datei") and alt["datei"] != ziel_rel:
-        _weg(os.path.join(ABLAGE, alt["datei"]))
+    alte_dateien = {(alt or {}).get("datei"), (alt or {}).get("uebersicht")} - {None, ziel_rel}
 
     # Einzel-Einträge gehen im Vorgang auf (ihre Fotos bleiben, die Einzel-PDFs werden durch das Sammel-PDF ersetzt)
     for e in eintraege:
@@ -1478,11 +1474,16 @@ def vorgang_bilden(chat, liste, eintraege, auftrag_text, titel="", von=""):
               "steuer": {"relevant": False, "art": "keine", "jahr": None, "betrag": None}, "einreichen": {"noetig": False},
               "fristen": v.get("fristen") or [], "schlagworte": (a.get("schlagworte") or [])[:10] + ["Vorgang", "Kostenaufstellung"],
               "inhalt": (str(a.get("anlass") or "") + "\n" + inhalt + "\n" + "\n".join(hinweise))[:6000],
-              "frage": "", "vorschlaege": [], "datei": ziel_rel, "belege": belege, "anlagen": anlagen,
+              "frage": "", "vorschlaege": [], "uebersicht": ziel_rel, "belege": belege, "anlagen": anlagen,
               "notiz": auftrag_text[-500:] if auftrag_text else v.get("notiz", "")})
+    vorgang_zusammensetzen(v)
+    for x in alte_dateien - {v.get("datei"), v.get("uebersicht"), v.get("brief")}:
+        _weg(os.path.join(ABLAGE, x))
     verzeichnis_schreiben(liste)
     logbuch(f"Vorgang: {titel} – {len(belege)} Belege, {euro(summe)}")
 
+    if still:
+        return
     zeilen = [f"🧮 Kostenaufstellung „{titel}“ – {len(belege)} Belege zu einem Vorgang zusammengefasst"
               + (" (ergänzt)" if alt is not None else "") + ":"]
     for z, p_ in zip(zeilen_pdf, positionen):
@@ -1491,7 +1492,8 @@ def vorgang_bilden(chat, liste, eintraege, auftrag_text, titel="", von=""):
     zeilen += [f"ℹ️ {h}" for h in hinweise[:4]]
     zeilen.append(f"🗂 Ordner: {ordner or 'Unsortiert'} – als ein Eintrag in der Akte (Reiter Akte).")
     senden(chat, "\n".join(zeilen))
-    datei_senden(chat, os.path.join(ABLAGE, ziel_rel), f"Kostenaufstellung {titel} · Summe {euro(summe)}")
+    datei_senden(chat, os.path.join(ABLAGE, v["datei"]), f"Kostenaufstellung {titel} · Summe {euro(summe)}"
+                 + (" (mit Schreiben vorne)" if v["datei"] != ziel_rel else ""))
     for x in anlagen:
         if os.path.exists(os.path.join(ABLAGE, x)):
             datei_senden(chat, os.path.join(ABLAGE, x), f"Anlage zu „{titel}“")
@@ -1579,6 +1581,9 @@ def trennen(chat, liste, e, jede_seite=False):
     if not neue:
         return
     _weg(ablage(e))
+    for x in (e.get("brief"), e.get("uebersicht")):
+        if x:
+            _weg(os.path.join(ABLAGE, x))
     liste.remove(e)
     verzeichnis_schreiben(liste)
     logbuch(f"Getrennt: {e.get('titel')} → {len(neue)} Einträge")
@@ -1782,6 +1787,9 @@ def seite(auftrag):
         _weg(ablage(eintrag))
         for s in eintrag.get("seiten") or []:
             _weg(os.path.join(SEITEN, s))
+        for x in (eintrag.get("brief"), eintrag.get("uebersicht")):
+            if x:
+                _weg(os.path.join(ABLAGE, x))
         for b in eintrag.get("belege") or []:
             for s in b.get("seiten") or []:
                 _weg(os.path.join(SEITEN, s))
