@@ -27,7 +27,7 @@ Einstellungen → Sprachassistenten → Reiter **Entitäten freigeben**:
 - Skript „Termin eintragen“ ✅ (kommt automatisch aus `packages/termine.yaml`)
 - Jarvis-Werkzeuge aus `packages/jarvis.yaml` ✅ – gelten für Sprache UND Telegram-Bot:
   „Jarvis Tagesüberblick“, „Jarvis Nachricht per Telegram“, „Jarvis Durchsage“ (HomePods), „Jarvis Morgen-Ansage“, „Jarvis Haustür abschließen“ (kann nur ab-, nie aufschließen), „Jarvis Kamerabild schicken“, „Jarvis Belegung Ferienwohnung und Stellplätze“ (nur Zeiträume,
-  keine Gästenamen), „Jarvis Nachricht auf den Flur-Monitor“, „Jarvis Erinnerung“, „Jarvis Aufgabe erledigt“, „Jarvis Nachricht an Familienmitglied“ (neu – bitte freigeben)
+  keine Gästenamen), „Jarvis Nachricht auf den Flur-Monitor“, „Jarvis Erinnerung“, „Jarvis Aufgabe erledigt“, „Jarvis Nachricht an Familienmitglied“, „Jarvis Frage zum Haus“ (beide neu – bitte freigeben)
 - `todo.aufgaben` ✅
 - Hoftor: bewusst **nicht** freigeben, solange niemand per Sprache das Tor öffnen soll
 - Nuki-Schloss selbst (lock.…): **nicht** freigeben – sonst könnte man per Sprache aufschließen. Zum Abschließen gibt es das Skript.

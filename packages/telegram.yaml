@@ -44,6 +44,10 @@ automation:
   - condition: template
     value_template: >-
       {{ not (trigger.event.data.text | default('') | string) is search('(geh(ö|oe)r\w*\s.{0,40}zusammen|kosten\s*-?\s*aufstellung|(belege|rechnungen|quittungen|kosten|fotos|bilder)\\b.{0,60}(zusammen|addier|summier)|zusammen\s*(zu\s*)?(fass|führ|fuehr)\w*\s.{0,40}(pdf|belege?|rechnung)|nicht\s+(mehr\s+)?zusammen|zusammen\s*(zu\s*)?(ge)?(füg|fueg|heft)|auseinander\s*(nehmen|machen)|\\btrennen\\b|(getrennt|einzeln)\s+ablegen)', ignorecase=True) }}
+  # Fragen zum Haus (Sicherungen, Haupthahn, Geräte …) beantwortet packages/handbuch.yaml mit dem Haus-Handbuch
+  - condition: template
+    value_template: >-
+      {{ not ((trigger.event.data.text | default('') | string) is search('^(?!.*\\b(noch|gerade|jetzt|läuft|fertig)\\b)(?=.*(\\b(wo|wie|welche\w*|was|womit|warum|wieso)\\b|\?))(?=.*\\b(sicherung\w*|sicherungskasten|verteiler\w*|fi[- ]?schalter|absperr\w*|haupthahn|wasserhahn|wasseruhr|hauptwasser\w*|kläranlage|klaeranlage|wlan|router|anleitung|bedienungsanleitung|typenschild|filter\w*|waschmaschine\w*|trockner|geschirrspüler|spülmaschine|kühlschrank|gefrier\w*|herd|backofen|ape|rasenmäher|mähroboter|wohnwagen|ersatzteil\w*|zählerkasten|stromzähler|durchlauferhitzer)\\b)', ignorecase=True)) }}
   # Nachrichten an Familienmitglieder ("Schick Mirka: …") und Schreiben ("Mach ein Schreiben für die Kündigung …") macht die Akte
   - condition: template
     value_template: >-
