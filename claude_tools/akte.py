@@ -1673,6 +1673,13 @@ def seite(auftrag):
     if was == "schreiben":
         im_hintergrund(schreiben, auftrag)
         return {"ok": True}
+    if was == "fehler_weg":   # Fehlermeldungen am Monitor als gesehen markieren
+        log = json_laden(LOGBUCH, [])
+        for l in log if isinstance(log, list) else []:
+            if l.get("art") == "fehler":
+                l["art"] = "fehler_gesehen"
+        json_schreiben(LOGBUCH, log)
+        was = "liste"
     if was == "verbinden":
         im_hintergrund(verbinden_seite, auftrag)
         return {"ok": True}
