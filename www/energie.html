@@ -537,11 +537,13 @@ function histFuellen(st) {      // dort, wo Home Assistant noch nichts hat, die 
   st.importiert = false;
   if (!quelle) return;
   for (let i = 0; i < st.b.n; i++) {
-    let k;
-    if (art === "jahr") k = `${st.b.von.getFullYear()}-${pad2(i + 1)}`;
-    else { const d = new Date(st.b.von); d.setDate(d.getDate() + i); k = tagKey(d); }
+    let k, beginn;
+    if (art === "jahr") { k = `${st.b.von.getFullYear()}-${pad2(i + 1)}`; beginn = new Date(st.b.von.getFullYear(), i, 1); }
+    else { beginn = new Date(st.b.von); beginn.setDate(beginn.getDate() + i); k = tagKey(beginn); }
     const h = quelle[k]; if (!h) continue;
-    if (["pv", "bezug", "einsp"].some(f => (st[f][i] || 0) > 0.05)) continue;
+    // Home Assistant hat den Zeitraum ganz aufgezeichnet → dessen Werte behalten; hat es erst mittendrin angefangen → Portal
+    const haVoll = ERSTER && ERSTER <= beginn;
+    if (haVoll && ["pv", "bezug", "einsp"].some(f => (st[f][i] || 0) > 0.05)) continue;
     ["pv", "bezug", "einsp", "laden", "entladen", "wp"].forEach(f => { if (h[f] != null) st[f][i] = h[f]; });
     st.importiert = true;
   }
