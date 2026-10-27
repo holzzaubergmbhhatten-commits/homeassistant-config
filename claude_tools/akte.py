@@ -1358,6 +1358,27 @@ def name_merken(chat, von):
             json_schreiben(NAMEN, d)
         except OSError:
             pass
+    neuigkeiten_bei_naechster_nachricht(chat, von, d)
+
+
+def neuigkeiten_bei_naechster_nachricht(chat, von, namen):
+    """Einmalig: Schreibt Mirka dem Bot das nächste Mal, bekommt sie die Akte-Neuigkeiten und das zuletzt aufgesetzte
+    Schreiben (nur der Brief) – zugestellt an genau den Chat, aus dem sie schreibt. Marco bekommt eine Bestätigung."""
+    marke = "/config/.akte_neuigkeiten_mirka_2"
+    if "mirka" not in str(von).lower() or os.path.exists(marke):
+        return
+    try:
+        open(marke, "w").close()
+        senden(chat, NEUIGKEITEN_MIRKA)
+        pfad, titel = letztes_schreiben(verzeichnis())
+        if pfad:
+            datei_senden(chat, os.path.join(ABLAGE, pfad), f"✍️ {titel} (von Marco)")
+        logbuch("Neuigkeiten an Mirka geschickt (bei ihrer Nachricht)")
+        for c, n in namen.items():
+            if "marco" in n.lower() and c != str(chat):
+                senden(c, "✅ Mirka hat eben die Akte-Neuigkeiten" + (f" und das Schreiben „{titel}“" if pfad else "") + " bekommen.")
+    except Exception as fehler:  # noqa: BLE001
+        logbuch(f"Neuigkeiten an Mirka: {str(fehler)[:120]}", "fehler")
 
 
 def chat_namen(chats):
@@ -1418,7 +1439,7 @@ def letztes_schreiben(liste):
         if e.get("typ") == "Eigenes Schreiben" and e.get("datei"):
             kandidaten.append((e.get("eingang") or "", e["datei"], e.get("titel")))
         if e.get("brief"):
-            kandidaten.append((os.path.basename(e["brief"])[:10], e["brief"], e.get("brief_titel") or f"Schreiben zu „{e.get('titel')}“"))
+            kandidaten.append((os.path.basename(e["brief"])[:10], e["brief"], e.get("brief_titel") or f"Schreiben vom {de_datum(os.path.basename(e['brief'])[:10])}"))
     kandidaten = [k for k in kandidaten if os.path.exists(os.path.join(ABLAGE, k[1]))]
     if not kandidaten:
         return None, None
