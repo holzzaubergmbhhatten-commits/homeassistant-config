@@ -497,8 +497,13 @@ document.addEventListener("click", ev => {
   else if (t.dataset.fach) { AUSWAHL = AUSWAHL === +t.dataset.fach ? null : +t.dataset.fach; zeichnen(); }
 });
 function design() { const h = hass(); document.documentElement.classList.toggle("dunkel", !!(h && h.themes && h.themes.darkMode)); }
+let versuche = 0;
 async function start() {
-  if (!hass()) { setTimeout(start, 400); return; }
+  if (!hass()) {
+    if (++versuche === 15) $("inhalt").innerHTML = `<div class="hinweis">Die Seite ist da, findet aber Home Assistant nicht.
+      Sie funktioniert nur im Dashboard (Reiter „Energie &amp; Heizung“).</div>`;
+    setTimeout(start, 400); return;
+  }
   design();
   try { await finden(); } catch (e) { $("inhalt").innerHTML = `<div class="hinweis">Viessmann-Werte nicht lesbar: ${esc(e.message || e)}</div>`; return; }
   zeichnen();
