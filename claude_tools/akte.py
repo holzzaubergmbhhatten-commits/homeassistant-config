@@ -899,26 +899,45 @@ def schreiben(auftrag):
     ziel_rel = os.path.join(ordner_pfad(ordner), str(date.today().year),
                             f"{date.today().isoformat()}_Schreiben_{sicherer_name(b.get('dateiname') or b.get('betreff'), 50)}.pdf")
     os.makedirs(os.path.dirname(os.path.join(ABLAGE, ziel_rel)), exist_ok=True)
+    n = 2
+    while os.path.exists(os.path.join(ABLAGE, ziel_rel)) and ziel_rel != (bezug or {}).get("brief"):   # nichts überschreiben
+        ziel_rel = re.sub(r"(_\d+)?\.pdf$", f"_{n}.pdf", ziel_rel)
+        n += 1
     info = [(str(i.get("bezeichnung") or ""), str(i.get("wert") or "")) for i in (b.get("info") or []) if isinstance(i, dict)]
     # Grußformel und Name am Ende entfernen, falls Claude sie doch mitgeschrieben hat (das Layout setzt sie selbst)
     b["text"] = re.sub(r"\n\s*(mit freundlichen grüßen|freundliche grüße|viele grüße|beste grüße|mit besten grüßen)[\s\S]*$", "",
                        (b.get("text") or "").rstrip(), flags=re.I).rstrip()
     wappen = open(WAPPEN, "rb").read() if os.path.exists(WAPPEN) else None
-    brief_pdf.brief(os.path.join(ABLAGE, ziel_rel), b.get("absender") or [], b.get("empfaenger") or [],
-                    f"{b.get('ort') or 'Ovelgönne'}, {date.today().strftime('%d.%m.%Y')}", b.get("betreff") or "", b.get("text") or "",
-                    name=b.get("name") or "", info=info[:4], fuss=[str(z) for z in (b.get("fuss") or []) if z][:2] or None, wappen=wappen)
+    brief_daten = dict(absender=b.get("absender") or [], empfaenger=b.get("empfaenger") or [],
+                       ort_datum=f"{b.get('ort') or 'Ovelgönne'}, {date.today().strftime('%d.%m.%Y')}", betreff=b.get("betreff") or "",
+                       text=b.get("text") or "", name=b.get("name") or "", info=info[:4],
+                       fuss=[str(z) for z in (b.get("fuss") or []) if z][:2] or None, wappen=wappen)
+    brief_pdf.brief(os.path.join(ABLAGE, ziel_rel), **brief_daten)
+    # dasselbe Schreiben als Word-Datei – zum Ergänzen (Empfänger, Aktenzeichen …) und Weiterbearbeiten
+    word_rel = ziel_rel[:-4] + ".docx"
+    try:
+        import brief_docx
+        brief_docx.brief(os.path.join(ABLAGE, word_rel), **brief_daten)
+    except Exception as fehler:  # noqa: BLE001
+        logbuch(f"Word-Datei nicht erstellt: {str(fehler)[:120]}", "fehler")
+        word_rel = ""
     if vorgang:
         # Schreiben vorne in den Vorgang – am Monitor und per Telegram ist es dann ein Dokument mit Übersicht und Belegen
         if bezug.get("brief") and bezug["brief"] != ziel_rel:
             _weg(os.path.join(ABLAGE, bezug["brief"]))
-        bezug["brief"] = ziel_rel
+        if bezug.get("word") and bezug["word"] != word_rel:
+            _weg(os.path.join(ABLAGE, bezug["word"]))
+        bezug["brief"], bezug["word"] = ziel_rel, word_rel
         vorgang_zusammensetzen(bezug)
         bezug["notiz"] = ((bezug.get("notiz") or "") + f" · Schreiben {date.today().strftime('%d.%m.%Y')}: {auftrag.get('text') or ''}")[-500:]
         verzeichnis_schreiben(liste)
         logbuch(f"Schreiben zum Vorgang: {bezug.get('titel')}")
         if chat:
             datei_senden(chat, os.path.join(ABLAGE, bezug["datei"]), f"✍️ {b.get('betreff') or 'Schreiben'}")
-            senden(chat, "✍️ Schreiben ist fertig – zusammen mit der Kostenaufstellung und allen Belegen in einem PDF. Am Monitor "
+            if word_rel:
+                datei_senden(chat, os.path.join(ABLAGE, word_rel), "📝 Das Schreiben als Word-Datei zum Bearbeiten (ohne Anlagen)")
+            senden(chat, "✍️ Schreiben ist fertig – zusammen mit der Kostenaufstellung und allen Belegen in einem PDF, dazu das "
+                         "Schreiben als Word-Datei zum Ergänzen. Am Monitor "
                          f"liegt es bei „{bezug.get('titel')}“. Bitte einmal lesen – Stellen mit [bitte ergänzen] noch ausfüllen."
                          + ("\n\n📮 Anschrift:\n" + "\n".join(z for z in (b.get("empfaenger") or []) if z) if b.get("empfaenger") else ""))
         return
@@ -928,15 +947,17 @@ def schreiben(auftrag):
            "betrag": None, "person": b.get("name") or "", "ordner": ordner, "ordner_fest": True, "zahlung": "keine",
            "steuer": {"relevant": False, "art": "keine"}, "einreichen": {"noetig": False}, "fristen": [], "schlagworte": ["Schreiben"],
            "inhalt": b.get("text", "")[:6000], "notiz": f"Aufgesetzt: {auftrag.get('text') or ''}"[:300],
-           "bezug_id": (bezug or {}).get("id", ""), "email_empfaenger": b.get("email") or ""}
+           "bezug_id": (bezug or {}).get("id", ""), "email_empfaenger": b.get("email") or "", "word": word_rel}
     liste = verzeichnis()
     liste.append(neu)
     verzeichnis_schreiben(liste)
     logbuch(f"Schreiben aufgesetzt: {neu['titel']}")
     if chat:
         datei_senden(chat, os.path.join(ABLAGE, ziel_rel), f"✍️ {neu['titel']}")
+        if word_rel:
+            datei_senden(chat, os.path.join(ABLAGE, word_rel), "📝 Als Word-Datei zum Bearbeiten")
         zeilen = ["✍️ Schreiben ist fertig und liegt in der Akte (Ordner „" + ordner + "“). Bitte einmal lesen – "
-                  "Stellen mit [bitte ergänzen] noch ausfüllen.",
+                  "Stellen mit [bitte ergänzen] noch ausfüllen (am einfachsten in der Word-Datei).",
                   "", "📮 Anschrift:", *[z for z in (b.get("empfaenger") or []) if z]]
         if neu["email_empfaenger"]:
             zeilen += ["", f"✉️ Mail an: {neu['email_empfaenger']}" + (f" ({b.get('email_quelle')})" if b.get("email_quelle") else "")]
@@ -1581,7 +1602,7 @@ def trennen(chat, liste, e, jede_seite=False):
     if not neue:
         return
     _weg(ablage(e))
-    for x in (e.get("brief"), e.get("uebersicht")):
+    for x in (e.get("brief"), e.get("uebersicht"), e.get("word")):
         if x:
             _weg(os.path.join(ABLAGE, x))
     liste.remove(e)
@@ -1787,7 +1808,7 @@ def seite(auftrag):
         _weg(ablage(eintrag))
         for s in eintrag.get("seiten") or []:
             _weg(os.path.join(SEITEN, s))
-        for x in (eintrag.get("brief"), eintrag.get("uebersicht")):
+        for x in (eintrag.get("brief"), eintrag.get("uebersicht"), eintrag.get("word")):
             if x:
                 _weg(os.path.join(ABLAGE, x))
         for b in eintrag.get("belege") or []:
