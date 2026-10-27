@@ -79,9 +79,9 @@ automation:
             (jetzt {{ states(trigger.entity_id) }} °C).
             {{ ('Wärmepumpe: ' ~ wp ~ '.') if wp | trim else '' }}
             Prüfen: Berker-Regler im Raum hochgedreht? Stellmotor am Heizkreisverteiler offen? Fenster auf?
-  # Bad lüften: über 70 % Luftfeuchte länger als 45 Minuten (z. B. nach dem Duschen) → eine Telegram-Erinnerung.
-  # Meldet sich erst wieder, nachdem die Feuchte zwischendurch gefallen ist. Schlafzimmer (Fenster abends offen) und
-  # Terrasse (draußen) sind bewusst nicht dabei.
+  # Bad lüften: über 70 % Luftfeuchte länger als 20 Minuten (z. B. nach dem Duschen) → Telegram an alle, die dem Bot
+  # schreiben (Marco, Mirka …). Solange es feucht bleibt, alle 20 Minuten nochmal (höchstens 4-mal), dann Ruhe, bis die
+  # Feuchte wieder gefallen ist. Schlafzimmer (Fenster abends offen) und Terrasse (draußen) sind bewusst nicht dabei.
   - id: raumklima_bad_lueften
     alias: "Raumklima: Bad lüften"
     mode: single
@@ -89,19 +89,32 @@ automation:
       - trigger: numeric_state
         entity_id: sensor.luftfeuchte_badezimmer
         above: 70
-        for: "00:45:00"
+        for: "00:20:00"
     conditions:
       - condition: time
         after: "07:00:00"
         before: "22:00:00"
     actions:
-      - action: telegram_bot.send_message
-        continue_on_error: true
-        data:
-          chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
-          message: >-
-            💧 Bad lüften: Die Luftfeuchte liegt seit 45 Minuten bei {{ states('sensor.luftfeuchte_badezimmer') }} %.
-            Kurz Fenster auf (5–10 Minuten Stoßlüften), Tür zum Flur dabei zu.
+      - repeat:
+          while:
+            - condition: numeric_state
+              entity_id: sensor.luftfeuchte_badezimmer
+              above: 70
+            - condition: template
+              value_template: "{{ repeat.index <= 4 and now().hour < 22 }}"
+          sequence:
+            - repeat:
+                for_each: >-
+                  {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+                sequence:
+                  - action: telegram_bot.send_message
+                    continue_on_error: true
+                    data:
+                      chat_id: "{{ repeat.item | int }}"
+                      message: >-
+                        💧 Bad lüften: Die Luftfeuchte liegt bei {{ states('sensor.luftfeuchte_badezimmer') | float(0) | round(0) | int }} %.
+                        Bitte 5–10 Minuten Fenster ganz auf (Stoßlüften), Tür zum Flur dabei zu.
+            - delay: "00:20:00"
   - id: raumklima_homepod_anstossen
     alias: "Raumklima: HomePods alle 15 Minuten abfragen"
     mode: single

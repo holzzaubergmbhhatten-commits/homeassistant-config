@@ -1,0 +1,44 @@
+# Rückblick von Viessmann für die Energie-Seite (www/energie.html): claude_tools/viessmann_verlauf.py holt einmal am Tag
+# die Tages-, Monats- und Jahreslisten der Anlage (Strom und Wärme der Wärmepumpe …) und archiviert sie in
+# /config/viessmann_verlauf.json. So zeigt die Seite auch Monate vor der Einrichtung.
+shell_command:
+  viessmann_verlauf: python3 /config/claude_tools/viessmann_verlauf.py {{ aktion }}
+
+script:
+  energie_verlauf:
+    alias: Energie Rückblick von Viessmann
+    icon: mdi:chart-bar
+    mode: queued
+    fields:
+      aktion:
+        description: "lesen (Archiv) oder holen (jetzt bei Viessmann abrufen)"
+    sequence:
+      - action: shell_command.viessmann_verlauf
+        continue_on_error: true
+        data:
+          aktion: "{{ 'holen' if aktion | default('lesen') == 'holen' else 'lesen' }}"
+        response_variable: antwort
+      - variables:
+          ergebnis: >-
+            {% set a = antwort.stdout | default('') if antwort is defined and antwort is mapping else '' %}
+            {{ a | from_json if (a | string).startswith('{') else {'ok': false, 'fehler': 'keine Antwort'} }}
+      - stop: fertig
+        response_variable: ergebnis
+
+automation:
+  - id: energie_viessmann_rueckblick_holen
+    alias: "Energie: Rückblick von Viessmann holen"
+    mode: single
+    triggers:
+      - trigger: time
+        at: "03:17:00"
+      - trigger: homeassistant
+        event: start
+    actions:
+      - if: "{{ trigger.platform == 'homeassistant' }}"
+        then:
+          - delay: "00:05:00"
+      - action: shell_command.viessmann_verlauf
+        continue_on_error: true
+        data:
+          aktion: holen

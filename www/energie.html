@@ -384,6 +384,78 @@ function zeitraumHinweis(s) {
 }
 
 /* ---------- Seiten ---------- */
+/* ---------- Rückblick von Viessmann (Monate/Jahre vor der Aufzeichnung, packages/energie.yaml) ---------- */
+let RUECK = null, RUECK_LAEDT = false;
+const R_NAMEN = [
+  [/^heating\.power\.consumption\.(summary\.)?total$/, "Wärmepumpe Strom gesamt", "var(--wp)"],
+  [/^heating\.power\.consumption\.(summary\.)?heating$/, "Strom Heizen", "#FF6B5E"],
+  [/^heating\.power\.consumption\.(summary\.)?dhw$/, "Strom Warmwasser", "#5AC8FA"],
+  [/^heating\.heat\.production\.(summary\.)?(total)?$/, "Wärme erzeugt gesamt", "#FF9500"],
+  [/^heating\.heat\.production\.(summary\.)?heating$/, "Wärme Heizen", "#FFB340"],
+  [/^heating\.heat\.production\.(summary\.)?dhw$/, "Wärme Warmwasser", "#64D2FF"],
+  [/photovoltaic/, "PV erzeugt", "var(--pv)"],
+  [/heatingRod/, "Heizstab", "#FF3B30"],
+];
+function rName(f) { for (const [re, n, farbe] of R_NAMEN) if (re.test(f)) return [n, farbe]; return [f, "var(--grau)"]; }
+async function ladeRueck(holen) {
+  const h = hass(); if (!h || RUECK_LAEDT) return;
+  RUECK_LAEDT = true; if (holen) zeichnen();
+  try {
+    if (holen) await h.callWS({ type: "call_service", domain: "script", service: "energie_verlauf", service_data: { aktion: "holen" }, return_response: true });
+    const r = await h.callWS({ type: "call_service", domain: "script", service: "energie_verlauf", service_data: { aktion: "lesen" }, return_response: true });
+    RUECK = (r && r.response) || { ok: false, fehler: "keine Antwort" };
+  } catch (e) { RUECK = { ok: false, fehler: String(e.message || e) }; }
+  RUECK_LAEDT = false; zeichnen();
+}
+function rueckblick(nurWp) {
+  if (!RUECK) return `<div class="karte"><h2>Rückblick von Viessmann</h2><div class="klein">${RUECK_LAEDT ? "Lade …" : "Noch nicht geladen."}</div></div>`;
+  const archiv = RUECK.archiv || {};
+  // je Name nur ein Merkmal (Liste vor Summe)
+  const reihen = {};
+  Object.entries(archiv).forEach(([f, a]) => {
+    const [n, farbe] = rName(f); if (nurWp && /PV/.test(n)) return;
+    if (!Object.keys(a.monat || {}).length && !Object.keys(a.jahr || {}).length) return;
+    if (!reihen[n] || /summary/.test(reihen[n].f)) reihen[n] = { f, n, farbe, a };
+  });
+  const liste = Object.values(reihen).sort((x, y) => R_NAMEN.findIndex(([re]) => re.test(x.f)) - R_NAMEN.findIndex(([re]) => re.test(y.f)));
+  const knopf = `<button class="heute" data-rueck="1">${RUECK_LAEDT ? "Hole …" : "Jetzt von Viessmann holen"}</button>`;
+  if (!liste.length) return `<div class="karte"><h2>Rückblick von Viessmann</h2><div class="klein">${RUECK.ok === false ? esc(RUECK.fehler) :
+    "Noch nichts abgeholt. Das passiert jede Nacht von selbst."}</div><div style="margin-top:8px">${knopf}</div></div>`;
+  const jetzt = new Date(), monate = [];
+  for (let i = 12; i >= 0; i--) { const d = new Date(jetzt.getFullYear(), jetzt.getMonth() - i, 1); monate.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); }
+  const W = 640, H = 190, L = 34, R = 6, T = 20, U = 22, breit = (W - L - R) / monate.length;
+  let max = 0; liste.forEach(x => monate.forEach(m => { max = Math.max(max, (x.a.monat || {})[m] || 0); }));
+  const stufe = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000].find(v => max / v <= 4) || 5000, oben = Math.max(stufe, Math.ceil(max / stufe) * stufe);
+  const y = v => T + (H - T - U) * (1 - v / oben), sb = Math.min(12, (breit - 4) / liste.length);
+  let svg = "";
+  for (let v = 0; v <= oben + 1e-9; v += stufe) svg += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--linie)"/><text x="${L - 5}" y="${y(v) + 4}" text-anchor="end">${fmt(v, 0)}</text>`;
+  monate.forEach((m, i) => {
+    const x0 = L + i * breit + (breit - sb * liste.length) / 2;
+    liste.forEach((x, j) => { const v = (x.a.monat || {})[m]; if (v == null) return;
+      svg += `<rect x="${x0 + j * sb + 0.5}" y="${y(v)}" width="${sb - 1}" height="${Math.max(0.5, y(0) - y(v))}" fill="${x.farbe}" rx="1.5"/>`; });
+    svg += `<text x="${L + i * breit + breit / 2}" y="${H - 6}" text-anchor="middle">${MONATE[+m.slice(5) - 1]}</text>`;
+  });
+  const jahre = [...new Set(liste.flatMap(x => Object.keys(x.a.jahr || {})))].sort().reverse().slice(0, 3);
+  const tabelle = `<table class="werte" style="margin-top:10px"><tr><td></td>${jahre.map(j => `<td>${j}</td>`).join("")}</tr>${liste.map(x =>
+    `<tr><td><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${x.farbe};margin-right:6px"></i>${esc(x.n)}</td>${
+      jahre.map(j => `<td>${(x.a.jahr || {})[j] == null ? "–" : fmt(x.a.jahr[j], 0) + " " + esc(x.a.einheit || "")}</td>`).join("")}</tr>`).join("")}</table>`;
+  // Jahresarbeitszahl je Monat, wenn Viessmann Strom und Wärme liefert
+  const strom = reihen["Wärmepumpe Strom gesamt"], waerme = reihen["Wärme erzeugt gesamt"];
+  let jaz = "";
+  if (strom && waerme) {
+    const z = monate.filter(m => (strom.a.monat || {})[m] > 0 && (waerme.a.monat || {})[m] != null).slice(-6)
+      .map(m => `${MONATE[+m.slice(5) - 1]} ${fmt(waerme.a.monat[m] / strom.a.monat[m], 1)}`);
+    if (z.length) jaz = `<div class="klein" style="margin-top:6px">Arbeitszahl je Monat (Wärme ÷ Strom): ${z.join(" · ")}</div>`;
+  }
+  return `<div class="karte"><h2>Rückblick von Viessmann · letzte 13 Monate</h2>
+    <div class="diagramm"><svg viewBox="0 0 ${W} ${H}">${svg}<text x="2" y="10">${esc(liste[0].a.einheit || "kWh")}</text></svg></div>
+    <div class="legende">${liste.map(x => `<span><i style="background:${x.farbe}"></i>${esc(x.n)}</span>`).join("")}</div>
+    ${tabelle}${jaz}
+    <div class="klein" style="margin-top:8px">Diese Werte speichert Viessmann selbst, auch aus der Zeit vor Home Assistant. Für PV, Speicher und Netz gibt Viessmann leider keine alten Monate heraus.
+      Abgeholt ${RUECK.stand ? esc(new Date(RUECK.stand).toLocaleString("de-DE", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })) : "–"}, danach jede Nacht.</div>
+    <div style="margin-top:8px">${knopf}</div></div>`;
+}
+
 function uebersicht() {
   const b = bereich();
   let unten = `<div class="leer">Lade Verlauf …</div>`;
@@ -419,7 +491,7 @@ function uebersicht() {
         ${kachel(gradT(E.warmwasser), "Warmwasser")}${kachel(gradT(E.vorlauf), "Vorlauf")}
       </div></div>
     </div>
-    <div class="karte">${navi()}${unten}</div>`;
+    <div class="karte">${navi()}${unten}</div>${rueckblick(false)}`;
 }
 
 function waermepumpe() {
@@ -441,7 +513,7 @@ function waermepumpe() {
       ${z("starts", "Kompressor-Starts", "", 0)}${z("stunden", "Betriebsstunden", " h", 0)}
       ${kachel(kwhT(kwh(E.heizen7)), "Heizen letzte 7 Tage")}${kachel(kwhT(kwh(E.ww7)), "Warmwasser letzte 7 Tage")}
     </div><div class="klein" style="margin-top:6px">JAZ = Jahresarbeitszahl: aus 1 kWh Strom werden so viele kWh Wärme. Über 3,5 ist gut, über 4 sehr gut.</div></div>
-    <div class="karte">${navi()}${unten}</div>`;
+    <div class="karte">${navi()}${unten}</div>${rueckblick(true)}`;
 }
 function wasser() {
   if (!Object.keys(EW).length) return `<div class="karte leer">Kein Wasserzähler gefunden. Ist „SYR Connect“ (Conel) eingerichtet?</div>`;
@@ -489,7 +561,8 @@ function live() {     // nur die Live-Teile neu, damit Antippen und Blättern ni
   else if (reiter !== "uebersicht") zeichnen();
 }
 document.addEventListener("click", ev => {
-  const t = ev.target.closest("[data-reiter],[data-art],[data-blaettern],[data-heute],[data-fach]"); if (!t) return;
+  const t = ev.target.closest("[data-reiter],[data-art],[data-blaettern],[data-heute],[data-fach],[data-rueck]"); if (!t) return;
+  if (t.dataset.rueck) { ladeRueck(true); return; }
   if (t.dataset.reiter) { reiter = t.dataset.reiter; zeichnen(); }
   else if (t.dataset.art) { art = t.dataset.art; AUSWAHL = null; ladeStat(); }
   else if (t.dataset.blaettern) blaettern(+t.dataset.blaettern);
@@ -507,6 +580,7 @@ async function start() {
   design();
   try { await finden(); } catch (e) { $("inhalt").innerHTML = `<div class="hinweis">Viessmann-Werte nicht lesbar: ${esc(e.message || e)}</div>`; return; }
   zeichnen();
+  ladeRueck(false);
   await Promise.all([vorzeichen().catch(() => {}), ersterTag()]);
   ladeStat();
   setInterval(() => { design(); live(); }, 5000);
