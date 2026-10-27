@@ -1555,6 +1555,52 @@ views:
         {%- else %}
         Noch keine Werte – die HomePods melden sich alle 15 Minuten.
         {%- endif %}
+    # Wärmepumpe und Stromspeicher (Viessmann ViCare) – sucht sich die Werte über die Namen selbst zusammen
+    - type: markdown
+      grid_options:
+        columns: full
+      content: |-
+        ## <ha-icon icon="mdi:heat-pump"></ha-icon> Wärmepumpe & Speicher
+        {%- set alle = integration_entities('vicare') | select('match', '^(sensor|binary_sensor|number|climate|water_heater|select)\\.') | list %}
+        {%- set gesucht = [
+             ('Außentemperatur', 'au(ß|ss)en|outside'),
+             ('Vorlauf', 'vorlauf|supply'),
+             ('Rücklauf', 'r(ü|ue)cklauf|return'),
+             ('Warmwasser', 'warmwasser|dhw|hot water'),
+             ('Kompressor', 'kompressor|verdichter|compressor'),
+             ('Heizkurve Neigung', 'neigung|slope'),
+             ('Heizkurve Niveau', 'niveau|shift'),
+             ('Speicher Ladestand', 'ladezustand|ladestand|state of charge|soc'),
+             ('PV-Leistung', 'photovoltaik|pv|erzeugung|production'),
+             ('Netz', 'netz|grid')] %}
+        {%- set ns = namespace(zeilen=[], benutzt=[]) %}
+        {%- for titel, muster in gesucht %}
+        {%- set ns2 = namespace(e='') %}
+        {%- for e in alle if not ns2.e and e not in ns.benutzt %}
+        {%- set n = (state_attr(e, 'friendly_name') or e) | lower %}
+        {%- if n is search(muster) and not (titel in ['Vorlauf', 'Rücklauf', 'Warmwasser', 'Außentemperatur'] and n is search('soll|min|max|offset|hysterese|einstellung|target')) and states(e) not in ['unknown', 'unavailable'] %}
+        {%- set ns2.e = e %}
+        {%- endif %}
+        {%- endfor %}
+        {%- if ns2.e %}
+        {%- set ns.benutzt = ns.benutzt + [ns2.e] %}
+        {%- set w = states(ns2.e) %}
+        {%- set einheit = state_attr(ns2.e, 'unit_of_measurement') or '' %}
+        {%- set ns.zeilen = ns.zeilen + [(titel, (w | float | round(1) | string | replace('.', ',')) ~ ' ' ~ einheit if w | is_number else (state_translated(ns2.e) if ns2.e.startswith('sensor') or ns2.e.startswith('binary') else w))] %}
+        {%- endif %}
+        {%- endfor %}
+        {%- if ns.zeilen %}
+
+        | | |
+        |:--|--:|
+        {%- for t, w in ns.zeilen %}
+        | **{{ t }}** | {{ w }} |
+        {%- endfor %}
+
+        <font color="#8E8E93">Viessmann aktualisiert alle paar Minuten · alle {{ alle | count }} Werte unter Einstellungen → Viessmann ViCare</font>
+        {%- else %}
+        Noch keine Werte von Viessmann – die Integration meldet sich in ein paar Minuten.
+        {%- endif %}
   - type: grid
     cards:
     - type: history-graph

@@ -13,12 +13,73 @@ homekit:
       include_entities:
         - input_boolean.homepod_abfrage
 
+input_number:
+  # Unter dieser Temperatur (2 Stunden lang, tagsüber in der Heizzeit) meldet sich der Bot: „Raum wird nicht warm“
+  raumklima_mindesttemperatur:
+    name: Raumklima Mindesttemperatur
+    icon: mdi:thermometer-alert
+    min: 15
+    max: 23
+    step: 0.5
+    initial: 19
+    unit_of_measurement: "°C"
+    mode: box
+
 input_boolean:
   homepod_abfrage:
     name: HomePod-Abfrage
     icon: mdi:home-thermometer-outline
 
 automation:
+  # Raum wird nicht warm: 2 Stunden unter der Mindesttemperatur (Oktober–April, 7–22 Uhr) → Telegram mit Außentemperatur,
+  # Vorlauf und Kompressor aus der Wärmepumpe (Viessmann ViCare), damit man sieht, ob es an der Anlage oder am Raum liegt.
+  # Meldet sich je Raum erst wieder, nachdem der Raum zwischendurch warm war.
+  - id: raumklima_raum_wird_nicht_warm
+    alias: "Raumklima: Raum wird nicht warm"
+    mode: queued
+    triggers:
+      - trigger: numeric_state
+        entity_id:
+          - sensor.temperatur_kuche
+          - sensor.temperatur_wohnzimmer
+          - sensor.temperatur_schlafzimmer
+          - sensor.temperatur_muckis_zimmer
+          - sensor.temperatur_buro
+          - sensor.temperatur_badezimmer
+          - sensor.temperatur_badezimmer_2
+          - sensor.temperatur_diele
+          - sensor.temperatur_flur
+        below: input_number.raumklima_mindesttemperatur
+        for: "02:00:00"
+    conditions:
+      - condition: time
+        after: "07:00:00"
+        before: "22:00:00"
+      - condition: template
+        value_template: "{{ now().month in [10, 11, 12, 1, 2, 3, 4] }}"
+    actions:
+      - variables:
+          raum: "{{ state_attr(trigger.entity_id, 'friendly_name') | replace('Temperatur ', '') }}"
+          wp: >-
+            {% set ns = namespace(t=[]) %}
+            {% for e in integration_entities('vicare') | select('match', '^(sensor|binary_sensor)\\.') %}
+              {% set n = (state_attr(e, 'friendly_name') or '') | lower %}
+              {% if states(e) not in ['unknown', 'unavailable'] and not (n is search('soll|min|max|offset|hysterese|target')) %}
+                {% if n is search('au(ß|ss)en|outside') and 'außen' not in ns.t | join %}{% set ns.t = ns.t + ['außen ' ~ states(e) ~ ' °C'] %}{% endif %}
+                {% if n is search('vorlauf|supply') and 'Vorlauf' not in ns.t | join %}{% set ns.t = ns.t + ['Vorlauf ' ~ states(e) ~ ' °C'] %}{% endif %}
+                {% if n is search('kompressor|verdichter|compressor') and 'Kompressor' not in ns.t | join %}{% set ns.t = ns.t + ['Kompressor ' ~ state_translated(e)] %}{% endif %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.t | join(', ') }}
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
+          message: >-
+            🌡 {{ raum }} wird nicht warm: seit 2 Stunden unter {{ states('input_number.raumklima_mindesttemperatur') }} °C
+            (jetzt {{ states(trigger.entity_id) }} °C).
+            {{ ('Wärmepumpe: ' ~ wp ~ '.') if wp | trim else '' }}
+            Prüfen: Berker-Regler im Raum hochgedreht? Stellmotor am Heizkreisverteiler offen? Fenster auf?
   - id: raumklima_homepod_anstossen
     alias: "Raumklima: HomePods alle 15 Minuten abfragen"
     mode: single
