@@ -39,6 +39,7 @@ einfach so. Möglichkeiten für Punkt 7:
 ## Stand 27.09.2026 abends
 Erledigt:
 - Mini-PC (192.168.0.191) mit HAOS, Backup wiederhergestellt, Git pull aktiv (Repo öffentlich)
+- 28.10.2026 Umzug auf Lenovo ThinkCentre M720q (i5-9500T, 512-GB-NVMe): HAOS 18.4 per Ubuntu-Live-Stick + „Laufwerke“ aufgespielt, Secure Boot aus, Backup „Umzug“ wiederhergestellt, feste IP 192.168.0.191 (Gateway/DNS 192.168.0.1). Alter Shuttle aus – nicht mehr mit HAOS ans Netz (doppelte IP/Bot); später als Küchenanzeige neu aufsetzen.
 - Touchmonitor über „HAOS Kiosk Display“, Dashboard „Flur“ (`/flur-display/start`) im Apple-Stil, Deutsch
 - Startseite: Termine heute/morgen/übermorgen, Ferienwohnung (Holidu) & Stellplätze (Portal),
   Einkaufsliste (nur offene), Schnellzugriff (Hoftor, Lichter, Einkauf, Kameras, Amazon, Stellplätze verwalten)
