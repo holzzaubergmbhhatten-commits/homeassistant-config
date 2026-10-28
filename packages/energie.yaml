@@ -47,3 +47,24 @@ automation:
         continue_on_error: true
         data:
           aktion: holen
+
+  # Einmalige Erinnerung an Marco: Home Assistant Cloud (Nabu Casa) bezahlen – Testphase endet am 31.10.2026.
+  # Kommt am 29. und 30.10. abends (kann danach gelöscht werden).
+  - id: erinnerung_nabu_casa_2026
+    alias: "Erinnerung: Home Assistant Cloud aktivieren"
+    mode: single
+    triggers:
+      - trigger: time
+        at: "18:31:00"
+    conditions:
+      - condition: template
+        value_template: "{{ now().strftime('%Y-%m-%d') in ['2026-10-29', '2026-10-30'] }}"
+    actions:
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
+          message: >-
+            ☁️ Erinnerung: Die Testphase von Home Assistant Cloud (Nabu Casa) endet am 31.10.
+            Bitte in Home Assistant unter Einstellungen → Home Assistant Cloud das Abo abschließen (Jahresabo ist günstiger).
+            Wichtig auch für den Umzug auf den neuen Rechner (Sicherung über die Cloud).
