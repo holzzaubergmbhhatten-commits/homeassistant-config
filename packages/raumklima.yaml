@@ -127,6 +127,11 @@ automation:
       - trigger: time_pattern
         minutes: "/15"
     actions:
+      # erst sicher aus (falls er nach einem Neustart auf „ein“ hängen geblieben ist), dann ein → löst die Home-App aus
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.homepod_abfrage
+      - delay: "00:00:02"
       - action: input_boolean.turn_on
         target:
           entity_id: input_boolean.homepod_abfrage
@@ -134,6 +139,36 @@ automation:
       - action: input_boolean.turn_off
         target:
           entity_id: input_boolean.homepod_abfrage
+  # Wachhund: Nach einem Neustart von Home Assistant hört die Steuerzentrale der Home-App manchmal nicht mehr auf den
+  # Schalter (bis jemand die Home-App öffnet). Kommt 40 Minuten lang nichts von den HomePods, die HomeKit-Brücke neu
+  # laden – dann verbindet sich die Steuerzentrale neu – und gleich nochmal anstoßen. Höchstens einmal pro Stunde.
+  - id: raumklima_homepod_wachhund
+    alias: "Raumklima: HomePods wieder wecken"
+    mode: single
+    triggers:
+      - trigger: time_pattern
+        minutes: "/10"
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ (now() - (states('sensor.raumklima_homepods') | as_datetime(now() - timedelta(days=1)))).total_seconds() > 2400
+             and (now() - (states('sensor.uptime') | as_datetime(now() - timedelta(days=1)))).total_seconds() > 600 }}
+    actions:
+      - action: homekit.reload
+        continue_on_error: true
+      - delay: "00:01:30"
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.homepod_abfrage
+      - delay: "00:00:02"
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.homepod_abfrage
+      - delay: "00:00:30"
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.homepod_abfrage
+      - delay: "01:00:00"
 
 template:
   - triggers:
