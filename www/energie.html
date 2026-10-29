@@ -145,7 +145,9 @@ async function finden() {
   REG = alle.filter(e => e.platform === "vicare" && !e.disabled_by);
   REG_W = alle.filter(e => e.platform === "syr_connect" && !e.disabled_by);
   for (const [k, namen] of Object.entries(KW)) {
-    const t = namen.map(n => REG_W.find(e => e.translation_key === n || new RegExp("[-_]" + n + "$").test(e.unique_id || ""))).find(Boolean);
+    // Schlüssel heißen bei SYR „getVOL“ (unique_id …_getVOL, entity_id …_getvol) – Groß/klein egal
+    const t = namen.map(n => REG_W.find(e => (e.translation_key || "").toLowerCase() === n
+      || new RegExp("[-_.]" + n + "$", "i").test(e.unique_id || "") || new RegExp("_" + n + "$", "i").test(e.entity_id || ""))).find(Boolean);
     if (t) EW[k] = t.entity_id;
   }
   try { (await h.callWS({ type: "config/device_registry/list" })).forEach(d => { GERAETE[d.id] = d.name_by_user || d.name; }); } catch (e) { /* egal */ }
@@ -713,7 +715,10 @@ function waermepumpe() {
     <div class="karte">${navi()}${unten}</div>${rueckblick(true)}`;
 }
 function wasser() {
-  if (!Object.keys(EW).length) return `<div class="karte leer">Kein Wasserzähler gefunden. Ist „SYR Connect“ (Conel) eingerichtet?</div>`;
+  if (!Object.keys(EW).length) return REG_W.length
+    ? `<div class="karte"><h2>Wasser (Conel)</h2><table class="werte">${REG_W.filter(e => st(e.entity_id)).map(e =>
+        `<tr><td>${esc(st(e.entity_id).attributes.friendly_name || e.entity_id)}</td><td>${esc(st_text(e.entity_id))}</td></tr>`).join("")}</table></div>`
+    : `<div class="karte leer">Kein Wasserzähler gefunden. Ist „SYR Connect“ (Conel) eingerichtet?</div>`;
   const z = (k, n) => EW[k] ? kachel(esc(st_text(EW[k])), n) : "";
   let unten = `<div class="leer">Lade Verlauf …</div>`;
   if (STAT && STAT.fehler) unten = `<div class="hinweis">Verlauf nicht lesbar: ${esc(STAT.fehler)}</div>`;
