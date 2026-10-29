@@ -94,12 +94,17 @@ automation:
       - condition: time
         after: "07:00:00"
         before: "22:00:00"
+      # nur bei frischen Werten – melden sich die HomePods nicht, bleibt der alte Wert stehen (kein Alarm darauf)
+      - condition: template
+        value_template: "{{ (now() - states.sensor.luftfeuchte_badezimmer.last_reported).total_seconds() < 1800 }}"
     actions:
       - repeat:
           while:
             - condition: numeric_state
               entity_id: sensor.luftfeuchte_badezimmer
               above: 70
+            - condition: template
+              value_template: "{{ (now() - states.sensor.luftfeuchte_badezimmer.last_reported).total_seconds() < 1800 }}"
             - condition: template
               value_template: "{{ repeat.index <= 4 and now().hour < 22 }}"
           sequence:
