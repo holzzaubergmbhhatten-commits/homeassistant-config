@@ -65,6 +65,8 @@
   table.werte td { padding: 6px 2px; border-bottom: 1px solid var(--linie); }
   table.werte.raum td { text-align: left; font-weight: 400; } table.werte.raum td:nth-child(2), table.werte.raum td:nth-child(3) { text-align: right; font-weight: 600; }
   table.werte td:last-child { text-align: right; font-weight: 600; white-space: nowrap; }
+  .lueften { border-radius: 12px; padding: 9px 12px; font-size: 13.5px; line-height: 1.45; margin-bottom: 8px; background: var(--bg); }
+  .lueften.gut { background: rgba(52,199,89,.14); }
   .leer { text-align: center; padding: 30px 10px; color: var(--grau); }
 </style>
 <link rel="stylesheet" href="apple-glas.css?v=1">
@@ -372,15 +374,42 @@ function linien(reihen, einheit, schritt, H = 190) {
   });
   return `<svg viewBox="0 0 ${W} ${H}">${svg}</svg><div class="legende">${daten.map(r => `<span><i style="background:${r.farbe}"></i>${esc(r.name)}</span>`).join("")}</div>`;
 }
+// Wasser in der Luft (absolute Feuchte, g/m³) – nur damit lassen sich drinnen und draußen vergleichen
+const saettigung = t => 6.112 * Math.exp(17.67 * t / (t + 243.5)) * 216.74 / (273.15 + t);   // g/m³ bei 100 %
+const luftWasser = (t, rh) => t == null || rh == null ? null : saettigung(t) * rh / 100;
+function aussenLuft(liste) {
+  const ter = liste.find(x => x.draussen && !x.alt && x.h);
+  if (ter) return { t: zahl(ter.t), rh: zahl(ter.h), quelle: "Terrasse" };
+  const w = st("weather.touchmonitor_home"), a = w && w.attributes;
+  if (a && a.humidity != null) return { t: zahl(E.aussen) ?? a.temperature, rh: a.humidity, quelle: "Wetter" };
+  return null;
+}
 function raeumeSeite() {
-  const liste = raeume();
+  const liste = raeume(), aussen = aussenLuft(liste), wa = aussen ? luftWasser(aussen.t, aussen.rh) : null;
+  const innen = liste.filter(x => !x.draussen && !x.alt && x.h).map(x => luftWasser(zahl(x.t), zahl(x.h))).filter(v => v != null);
   const zeilen = liste.map(x => {
-    const t = zahl(x.t), f = x.h ? zahl(x.h) : null;
-    const hinweis = x.draussen ? `<span class="klein">draußen</span>` : f == null ? "" : f > 65 ? `<b style="color:var(--orange)">${/bad/i.test(x.name) ? "feucht – lüften" : "feucht"}</b>`
-      : f < 35 ? `<b style="color:var(--orange)">trocken</b>` : `<span style="color:var(--gruen)">gut</span>`;
+    const t = zahl(x.t), f = x.h ? zahl(x.h) : null, wi = luftWasser(t, f);
+    // was die Außenluft hier drin aufgewärmt hätte
+    const nachher = wa != null && t != null ? Math.min(100, wa / saettigung(t) * 100) : null;
+    const hilft = wa != null && wi != null && wa < wi - 1;
+    let hinweis;
+    if (x.draussen) hinweis = `<span class="klein">draußen</span>`;
+    else if (f == null) hinweis = "";
+    else if (f > 60) hinweis = hilft ? `<b style="color:var(--orange)">lüften hilft</b><div class="klein">→ ca. ${fmt(nachher, 0)} %</div>`
+      : `<b style="color:var(--orange)">feucht</b><div class="klein">draußen nicht trockener</div>`;
+    else if (f < 35) hinweis = `<b style="color:var(--orange)">trocken</b>`;
+    else hinweis = `<span style="color:var(--gruen)">gut</span>`;
     return `<tr${x.alt ? ' style="opacity:.5"' : ""}><td><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${x.farbe};margin-right:6px"></i><b>${esc(x.name)}</b></td>
-      <td>${fmt(t, 1)} °C</td><td>${f == null ? "–" : fmt(f, 0) + " %"}</td><td>${hinweis}</td></tr>`;
+      <td>${fmt(t, 1)} °C</td><td>${f == null ? "–" : fmt(f, 0) + " %"}${wi == null ? "" : `<div class="klein">${fmt(wi, 1)} g/m³</div>`}</td><td>${hinweis}</td></tr>`;
   }).join("");
+  let lueften = "";
+  if (wa != null && innen.length) {
+    const max = Math.max(...innen), min = Math.min(...innen);
+    lueften = wa < max - 1
+      ? `<div class="lueften gut"><b>Lüften lohnt sich jetzt.</b> Die Luft draußen (${esc(aussen.quelle)}, ${fmt(aussen.t, 0)} °C, ${fmt(aussen.rh, 0)} %) enthält nur
+          ${fmt(wa, 1)} g Wasser pro m³, drinnen sind es ${fmt(min, 1)}–${fmt(max, 1)} g. Aufgewärmt ist frische Luft viel trockener, als die Prozentzahl draußen vermuten lässt.</div>`
+      : `<div class="lueften">Lüften bringt gerade keine trockenere Luft: draußen ${fmt(wa, 1)} g Wasser pro m³, drinnen ${fmt(min, 1)}–${fmt(max, 1)} g.</div>`;
+  }
   const meldung = st("sensor.raumklima_homepods"), letzteMeldung = meldung && Date.parse(meldung.state);
   const letzte = isFinite(letzteMeldung) ? new Date(letzteMeldung) : liste.length ? new Date(Math.max(...liste.map(x => +x.zeit))) : null;
   const still = letzte && Date.now() - letzte > 45 * 60e3;
@@ -394,10 +423,11 @@ function raeumeSeite() {
     const rh = liste.filter(x => x.h).map(x => ({ id: x.h, farbe: x.farbe, name: x.name, gestrichelt: x.draussen }));
     unten = `<h2 style="font-size:15px">Temperatur</h2><div class="diagramm">${linien(rt, "°", 5)}</div>
       <h2 style="font-size:15px;margin-top:14px">Luftfeuchte</h2><div class="diagramm">${linien(rh, " %", 10)}</div>
-      <div class="klein" style="margin-top:6px">Gut sind 40–60 % Luftfeuchte. Über 65 % länger als 20 Minuten im Bad kommt eine Erinnerung per Telegram.</div>`;
+      <div class="klein" style="margin-top:6px">Gut sind 40–60 % Luftfeuchte. Über 70 % länger als 20 Minuten im Bad kommt eine Erinnerung per Telegram.
+        Die Prozentzahl hängt von der Temperatur ab – vergleichbar sind nur die g/m³ (Wasser pro Kubikmeter Luft).</div>`;
   }
   return `<div class="zwei">
-      <div class="karte"><h2>${ic("haus")} Räume jetzt</h2>${liste.length ? `<table class="werte raum"><tr><td></td><td>Temperatur</td><td>Feuchte</td><td></td></tr>${zeilen}</table>
+      <div class="karte"><h2>${ic("haus")} Räume jetzt</h2>${liste.length ? `${lueften}<table class="werte raum"><tr><td></td><td>Temperatur</td><td>Feuchte</td><td></td></tr>${zeilen}</table>
         ${still ? `<div class="hinweis">Die HomePods melden sich seit ${esc(wann(letzte))} nicht mehr – die Werte oben sind von da.
           In der Home-App prüfen, ob der Schalter „HomePod-Abfrage“ erreichbar ist.</div>`
           : `<div class="klein" style="margin-top:6px">Aus den HomePods, alle 15 Minuten${letzte ? " · zuletzt " + esc(wann(letzte)) : ""}</div>`}`
