@@ -1,8 +1,8 @@
 # Ruhezeiten des Touchmonitors (Kiosk-App REST-API):
 # In der Ruhezeit geht der Bildschirm nach 1 Minute ohne Berührung aus, ein Antippen weckt ihn wieder.
 # Sonst bleibt er an. Klingelt es, geht er sofort an (siehe klingel.yaml).
-# Ruhezeiten: jede Nacht 22:30–6:30, zusätzlich Montag bis Freitag 8:00–14:00 (Strom sparen).
-# Am Wochenende tagsüber durchgehend an.
+# Ruhezeit: nur nachts 22:30–6:30. Tagsüber bleibt er an und zeigt nach 7 Minuten das Ruhebild mit Wappen
+# (www/ruhemodus.js) – auf dem neuen Rechner schaltet der Monitor wirklich ab, das war tagsüber nur schwarz.
 rest_command:
   kiosk_display_on:
     url: "http://localhost:8080/display_on"
@@ -46,8 +46,7 @@ template:
         icon: mdi:weather-night
         state: >-
           {% set t = now().strftime('%H:%M') %}
-          {{ t >= '22:30' or t < '06:30'
-             or (now().weekday() < 5 and '08:00' <= t < '14:00') }}
+          {{ t >= '22:30' or t < '06:30' }}
 
 automation:
   - id: monitor_nachtmodus
