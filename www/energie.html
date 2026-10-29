@@ -158,6 +158,10 @@ async function finden() {
       if (t) { E[k] = t.entity_id; break; }
     }
   }
+  // Warmwasser: es gibt mehrere Speicherfühler (oben/unten) – den wärmsten nehmen, so zeigt es auch die ViCare-App
+  const ww = REG.filter(e => /dhw_storage|hotwater_out|dhw.*temperature/.test((e.translation_key || "") + " " + (e.unique_id || ""))
+    && !/target|soll|hysteresis|min|max/i.test((e.translation_key || "") + (e.unique_id || "")) && zahl(e.entity_id) != null);
+  if (ww.length) E.warmwasser = ww.sort((x, y) => zahl(y.entity_id) - zahl(x.entity_id))[0].entity_id;
 }
 
 // Vorzeichen von Netz und Speicher aus den Zählern der letzten zwei Tage ableiten (Viessmann sagt es nicht dazu)
