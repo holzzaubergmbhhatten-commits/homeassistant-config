@@ -348,9 +348,10 @@ function raeume() {   // alle Räume mit Temperatur aus den HomePods, die sich i
     const s = h.states[id], hid = id.replace("temperatur_", "luftfeuchte_");
     return { t: id, h: h.states[hid] ? hid : null, name: String(s.attributes.friendly_name || id).replace(/^Temperatur /, ""),
       zeit: new Date(s.last_reported || s.last_updated) };
-  }).filter(x => zahl(x.t) != null && Date.now() - x.zeit < 3 * 3600e3)
+  }).filter(x => zahl(x.t) != null && Date.now() - x.zeit < 7 * 864e5)   // Räume der letzten Woche (alte Testwerte fallen raus)
     .sort((a, b) => (a.name === "Terrasse") - (b.name === "Terrasse") || a.name.localeCompare(b.name, "de"))
-    .map((x, i) => ({ ...x, farbe: RAUM_FARBEN[i % RAUM_FARBEN.length], draussen: /terrasse/i.test(x.name) }));
+    .map((x, i) => ({ ...x, farbe: RAUM_FARBEN[i % RAUM_FARBEN.length], draussen: /terrasse/i.test(x.name),
+      alt: Date.now() - x.zeit > 45 * 60e3 }));
 }
 function linien(reihen, einheit, schritt, H = 190) {
   const b = STAT.b, W = svgBreite(), L = 34, R = 6, T = 10, U = 22, daten = reihen.filter(x => (STAT.temp || {})[x.id] && STAT.temp[x.id].length);
@@ -377,10 +378,14 @@ function raeumeSeite() {
     const t = zahl(x.t), f = x.h ? zahl(x.h) : null;
     const hinweis = x.draussen ? `<span class="klein">draußen</span>` : f == null ? "" : f > 65 ? `<b style="color:var(--orange)">${/bad/i.test(x.name) ? "feucht – lüften" : "feucht"}</b>`
       : f < 35 ? `<b style="color:var(--orange)">trocken</b>` : `<span style="color:var(--gruen)">gut</span>`;
-    return `<tr><td><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${x.farbe};margin-right:6px"></i><b>${esc(x.name)}</b></td>
+    return `<tr${x.alt ? ' style="opacity:.5"' : ""}><td><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${x.farbe};margin-right:6px"></i><b>${esc(x.name)}</b></td>
       <td>${fmt(t, 1)} °C</td><td>${f == null ? "–" : fmt(f, 0) + " %"}</td><td>${hinweis}</td></tr>`;
   }).join("");
-  const letzte = liste.length ? new Date(Math.max(...liste.map(x => +x.zeit))) : null;
+  const meldung = st("sensor.raumklima_homepods"), letzteMeldung = meldung && Date.parse(meldung.state);
+  const letzte = isFinite(letzteMeldung) ? new Date(letzteMeldung) : liste.length ? new Date(Math.max(...liste.map(x => +x.zeit))) : null;
+  const still = letzte && Date.now() - letzte > 45 * 60e3;
+  const wann = d => (new Date().toDateString() === d.toDateString() ? "heute" : new Date(Date.now() - 864e5).toDateString() === d.toDateString() ? "gestern" : d.toLocaleDateString("de-DE"))
+    + " " + d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) + " Uhr";
   let unten = `<div class="leer">Lade Verlauf …</div>`;
   if (STAT && STAT.fehler) unten = `<div class="hinweis">Verlauf nicht lesbar: ${esc(STAT.fehler)}</div>`;
   else if (STAT && STAT.temp) {
@@ -393,8 +398,10 @@ function raeumeSeite() {
   }
   return `<div class="zwei">
       <div class="karte"><h2>${ic("haus")} Räume jetzt</h2>${liste.length ? `<table class="werte raum"><tr><td></td><td>Temperatur</td><td>Feuchte</td><td></td></tr>${zeilen}</table>
-        <div class="klein" style="margin-top:6px">Aus den HomePods, alle 15 Minuten${letzte ? " · zuletzt " + letzte.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) + " Uhr" : ""}</div>`
-        : `<div class="klein">Die HomePods haben sich in den letzten 3 Stunden nicht gemeldet.</div>`}</div>
+        ${still ? `<div class="hinweis">Die HomePods melden sich seit ${esc(wann(letzte))} nicht mehr – die Werte oben sind von da.
+          In der Home-App prüfen, ob der Schalter „HomePod-Abfrage“ erreichbar ist.</div>`
+          : `<div class="klein" style="margin-top:6px">Aus den HomePods, alle 15 Minuten${letzte ? " · zuletzt " + esc(wann(letzte)) : ""}</div>`}`
+        : `<div class="klein">Von den HomePods ist noch nichts angekommen.</div>`}</div>
       <div class="karte"><h2>${ic("wp")} Heizung &amp; Strom jetzt</h2><div class="kacheln">
         ${kachel(gradT(E.aussen), "Außen")}${kachel(gradT(E.vorlauf), "Vorlauf")}${kachel(gradT(E.warmwasser), "Warmwasser")}
         ${kachel(kwT(Math.max(0, kw(E.pvLeistung) || 0)), "PV jetzt")}${kachel(zahl(E.akkuStand) == null ? "–" : fmt(zahl(E.akkuStand), 0) + " %", "Speicher", zahl(E.akkuStand))}
