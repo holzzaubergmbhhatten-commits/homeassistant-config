@@ -502,6 +502,8 @@ const R_NAMEN = [
   [/^heating\.heat\.production\.(summary\.)?heating$/, "Wärme Heizen", "#FFB340"],
   [/^heating\.heat\.production\.(summary\.)?dhw$/, "Wärme Warmwasser", "#64D2FF"],
   [/photovoltaic/, "PV erzeugt", "var(--pv)"],
+  [/^ess\.transfer\.charge/, "Speicher geladen", "#8FD9A0"],
+  [/^ess\.transfer\.discharge/, "Speicher entladen", "var(--akku)"],
   [/heatingRod/, "Heizstab", "#FF3B30"],
 ];
 function rName(f) { for (const [re, n, farbe] of R_NAMEN) if (re.test(f)) return [n, farbe]; return [f, "var(--grau)"]; }
@@ -562,7 +564,7 @@ function rueckblick(nurWp) {
     <div class="legende">${liste.map(x => `<span><i style="background:${x.farbe}"></i>${esc(x.n)}</span>`).join("")}</div>
     ${tabelle}${jaz}
     <div class="klein" style="margin-top:8px">Diese Werte speichert Viessmann selbst, auch aus der Zeit vor Home Assistant. Für PV, Speicher und Netz gibt Viessmann leider keine alten Monate heraus.
-      Abgeholt ${RUECK.stand ? esc(new Date(RUECK.stand).toLocaleString("de-DE", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })) : "–"}, danach jede Nacht.</div>
+      ${(RUECK.geraete || []).length ? "Geräte: " + esc(RUECK.geraete.join(", ")) + ". " : ""}Abgeholt ${RUECK.stand ? esc(new Date(RUECK.stand).toLocaleString("de-DE", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })) : "–"}, danach jede Nacht.</div>
     <div style="margin-top:8px">${knopf}</div></div>`;
 }
 
@@ -644,7 +646,8 @@ function importKarte() {
   const m = HIST ? Object.keys(HIST.monat || {}).sort() : [], t = HIST ? Object.keys(HIST.tag || {}).sort() : [];
   const bestand = m.length ? `Schon eingelesen: ${m.length} Monate (${MONATE[+m[0].slice(5) - 1]} ${m[0].slice(0, 4)} bis ${MONATE[+m[m.length - 1].slice(5) - 1]} ${m[m.length - 1].slice(0, 4)})${t.length ? `, ${t.length} Tage` : ""}.` : "Noch nichts eingelesen.";
   return `<div class="karte"><h2>Ältere Werte aus dem Viessmann-Energieportal</h2>
-    <div class="klein">Im Portal unter Verlauf die Daten als CSV exportieren (Monat oder Tag) und hier auswählen. Die Werte erscheinen dann in den Säulen
+    ${RUECK && RUECK.aus_akte ? `<div class="auswahl"><b>${RUECK.aus_akte} Export(e) aus der Akte übernommen.</b></div>` : ""}
+    <div class="klein">Exporte, die in der Akte oder im Eingang liegen (CSV aus dem Portal), übernimmt die Seite von selbst. Sonst: im Portal unter Verlauf die Daten als CSV exportieren (Monat oder Tag) und hier auswählen. Die Werte erscheinen dann in den Säulen
       für die Zeit, bevor Home Assistant aufgezeichnet hat. ${esc(bestand)}</div>
     <label class="heute" style="display:inline-block;margin-top:8px;cursor:pointer">CSV-Datei auswählen
       <input type="file" id="csvdatei" accept=".csv,text/csv" style="display:none"></label>

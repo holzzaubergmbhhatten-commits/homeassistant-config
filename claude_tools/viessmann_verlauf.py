@@ -11,10 +11,13 @@ Dazu kommen eingelesene Exporte aus dem Viessmann-Energieportal (gridX, CSV): Mo
 Speicher, Wärmepumpe und Haushalt (/config/energie_historie.json, nur lokal). Die Energie-Seite liest die CSV, schickt
 die Werte als JSON (base64, in Stücken) und zeigt sie dort, wo Home Assistant selbst noch nichts aufgezeichnet hat.
 
+Exporte, die schon in der Akte oder im Eingang liegen (CSV mit „measuredAt“), werden beim Lesen von selbst übernommen.
+
 Aufruf: viessmann_verlauf.py holen | lesen | import <base64-Stücke …>   → JSON auf stdout"""
 import base64
 import datetime
 import json
+import os
 import sys
 import time
 import urllib.request
@@ -117,7 +120,7 @@ def holen():
     daten = laden()
     archiv = daten.setdefault("archiv", {})
     anlagen = holen_url("/equipment/installations?includeGateways=true", token).get("data") or []
-    abrufe = 0
+    abrufe, geraete = 0, []
     for anlage in anlagen:
         for gw in anlage.get("gateways") or []:
             for geraet in gw.get("devices") or []:
@@ -130,10 +133,12 @@ def holen():
                 except Exception:  # noqa: BLE001 – ein Gerät ohne Antwort soll die anderen nicht aufhalten
                     continue
                 name = geraet.get("modelId") or geraet.get("deviceType") or geraet.get("id")
+                geraete.append(f"{name}: {len(merkmale)} Werte")
                 for m in merkmale:
                     if m.get("isEnabled", True) and isinstance(m.get("properties"), dict):
                         eintragen(archiv, m.get("feature", ""), name, m["properties"])
     daten["stand"] = datetime.datetime.now().isoformat(timespec="minutes")
+    daten["geraete"] = geraete
     with open(ARCHIV, "w", encoding="utf-8") as f:
         json.dump(daten, f, ensure_ascii=False)
     return {"ok": True, "stand": daten["stand"], "merkmale": len(archiv)}
@@ -145,6 +150,107 @@ def historie_laden():
             return json.load(f)
     except (OSError, ValueError):
         return {"monat": {}, "tag": {}}
+
+
+SUCHORTE = ("/config/akte_ablage", "/media/Akte-Eingang", "/media/akte", "/media/eingang", "/share")
+SPALTEN = (("einsp", "einspeis"), ("bezug", "bezug"), ("wp", "rmepumpe"), ("pv", "pv"), ("haus", "haushalt"),
+           ("entladen", "entladung"), ("laden", "batterieladung"))
+
+
+def csv_lesen(text):
+    """Export aus dem Viessmann-Energieportal (gridX) → {monat: {JJJJ-MM: {…}}, tag: {…}} in kWh, Zeit in deutscher Zeit."""
+    import csv
+    from zoneinfo import ZoneInfo
+    zeilen = [z for z in csv.reader(text.splitlines()) if z]
+    kopf = [k.lower() for k in zeilen[0]]
+    if not kopf or "measuredat" not in kopf[0]:
+        return None
+    sp = {}
+    for feld, wort in SPALTEN:
+        i = next((i for i, k in enumerate(kopf) if wort in k and i not in sp.values()), None)
+        if i is not None:
+            sp[feld] = i
+    werte = []
+    for z in zeilen[1:]:
+        try:
+            t = datetime.datetime.fromisoformat(z[0].replace("Z", "+00:00")).astimezone(ZoneInfo("Europe/Berlin"))
+        except (ValueError, IndexError):
+            continue
+        w = {}
+        for feld, i in sp.items():
+            roh = (z[i] if i < len(z) else "").strip()
+            if roh:
+                faktor = 1 if "(kwh)" in kopf[i] else 0.001
+                w[feld] = float(roh.replace(".", "").replace(",", ".") if "," in roh else roh) * faktor
+        if w:
+            werte.append((t, w))
+    if not werte:
+        return {"monat": {}, "tag": {}}
+    schritt = (werte[1][0] - werte[0][0]).total_seconds() / 3600 if len(werte) > 1 else 24 * 30
+    art = "monat" if schritt >= 24 * 27 else "tag"
+    erg = {"monat": {}, "tag": {}}
+    for t, w in werte:
+        k = t.strftime("%Y-%m") if art == "monat" else t.strftime("%Y-%m-%d")
+        ziel = erg[art].setdefault(k, {})
+        for f, v in w.items():
+            ziel[f] = ziel.get(f, 0) + v
+    if art == "tag":
+        for k, w in erg["tag"].items():
+            z = erg["monat"].setdefault(k[:7], {})
+            for f, v in w.items():
+                z[f] = z.get(f, 0) + v
+    return erg
+
+
+def akte_durchsuchen():
+    """CSV-Exporte, die in Akte, Eingang oder Medien liegen, einmal übernehmen (gemerkt an Pfad und Änderungszeit)."""
+    h = historie_laden()
+    bekannt = h.setdefault("dateien", {})
+    neu = 0
+    for ort in SUCHORTE:
+        for wurzel, _ordner, dateien in os.walk(ort):
+            if wurzel.count("/") - ort.count("/") > 4:
+                continue
+            for name in dateien:
+                pfad = os.path.join(wurzel, name)
+                if not name.lower().endswith((".csv", ".txt")):
+                    continue
+                try:
+                    st = os.stat(pfad)
+                    if st.st_size > 3_000_000 or bekannt.get(pfad) == st.st_mtime:
+                        continue
+                    with open(pfad, encoding="utf-8", errors="replace") as f:
+                        text = f.read()
+                    erg = csv_lesen(text[text.find("measuredAt"):] if "measuredAt" in text else "")
+                except (OSError, ValueError):
+                    continue
+                bekannt[pfad] = st.st_mtime
+                if erg:
+                    _uebernehmen(h, erg)
+                    neu += 1
+    if neu or bekannt:
+        _speichern(h)
+    return neu
+
+
+def _uebernehmen(h, neu):
+    zahl = 0
+    for art in ("monat", "tag"):
+        for k, werte in (neu.get(art) or {}).items():
+            if not isinstance(werte, dict):
+                continue
+            sauber = {f: round(float(werte[f]), 3) for f in FELDER if isinstance(werte.get(f), (int, float))}
+            if sauber:
+                h.setdefault(art, {})[str(k)[:10]] = sauber
+                zahl += 1
+    return zahl
+
+
+def _speichern(h):
+    h["tag"] = dict(sorted(h.get("tag", {}).items())[-1500:])
+    h["stand"] = datetime.datetime.now().isoformat(timespec="minutes")
+    with open(HISTORIE, "w", encoding="utf-8") as f:
+        json.dump(h, f, ensure_ascii=False)
 
 
 def importieren(stuecke):
@@ -174,7 +280,12 @@ def main():
         print(json.dumps(importieren(sys.argv[2:]), ensure_ascii=False))
     else:
         d = laden()
+        try:
+            d["aus_akte"] = akte_durchsuchen()
+        except Exception:  # noqa: BLE001 – Lesen soll nie daran scheitern
+            d["aus_akte"] = 0
         d["historie"] = historie_laden()
+        d["historie"].pop("dateien", None)
         d["ok"] = True
         print(json.dumps(d, ensure_ascii=False, separators=(",", ":")))
 
