@@ -167,7 +167,7 @@ automation:
         {% set ev = vorhanden['calendar.geburtstage'].events
            if vorhanden is defined and 'calendar.geburtstage' in vorhanden else [] %}
         {%- for e in ev[:80] %}
-        - {{ e.start[:10] }}{{ ' ' ~ e.start[11:16] if 'T' in e.start else ' ganztägig' }}: {{ e.summary }}
+        - {{ e.start[:10] }}{{ ' ' ~ e.start[11:16] ~ '–' ~ e.end[11:16] if 'T' in e.start else ' ganztägig' }}: {{ e.summary }}
         {%- else %}
         (keine)
         {%- endfor %}
@@ -206,6 +206,18 @@ automation:
         - "keine": alles andere (Fragen, Licht, Musik, Sonstiges).
         Frage nie nach, wenn du die Absicht aus Nachricht, vorheriger Nachricht und letzter Antwort erkennen kannst –
         handle einfach. Im Zweifel zwischen Termin und Aufgabe: mit Datum UND Uhrzeit = Termin, sonst Aufgabe.
+        AUSNAHME – Bezug auf einen Termin: Knüpft die Nachricht zeitlich an einen vorhandenen oder gerade eingetragenen
+        Termin an ("danach", "im Anschluss", "anschließend", "direkt dahinter", "am selben Tag", "davor", "genau wie
+        beim …"), ist es ein TERMIN ("neu"), keine Aufgabe: gleiches Datum wie der Bezugstermin; Beginn = Ende des
+        Bezugstermins (bei "davor": so, dass er zum Beginn des Bezugstermins endet); ist der Bezugstermin ganztägig,
+        dann ebenfalls ganztägig. Titel kurz und passend (z. B. "Citroën wird aufgearbeitet").
+        KORREKTUREN der letzten Eintragung (siehe "Letzte Antwort des Bots"):
+        - "das ist ein Termin", "als Termin", "keine Aufgabe", "genau wie bei …": aktion "neu" mit den Angaben aus der
+          vorherigen Nachricht (Bezugstermin-Regel oben) UND die falsch angelegte Aufgabe GENAU wie in der Liste der
+          offenen Aufgaben in "entfernen".
+        - "… sollte es heißen", "Titel ist …", "nicht X sondern Y" nach einem eingetragenen Termin: aktion "aendern",
+          alt_titel/alt_datum des gerade eingetragenen Termins, neuer Titel in "titel" (sinnvoll eingesetzt, z. B.
+          aus "Abschluss" wird "Anschluss" → der Titel wird entsprechend korrigiert, nicht einfach nur dieses Wort).
         Relative Angaben wie "morgen", "übermorgen" oder "nächsten Dienstag" rechnest du in ein Datum um.
         Enthält die Nachricht zusätzlich andere Wünsche (z. B. Einkaufsliste), schreibe diese in das Feld rest.
 
@@ -232,7 +244,7 @@ automation:
           selector:
             text: null
         entfernen:
-          description: Bei aufgabe (Korrektur/Löschen) die zu entfernenden offenen Aufgaben, genau wie in der Liste, mit ; getrennt
+          description: Bei aufgabe oder neu (Korrektur/Löschen) die zu entfernenden offenen Aufgaben, genau wie in der Liste, mit ; getrennt
           selector:
             text: null
         beschreibung:
@@ -288,6 +300,22 @@ automation:
     - conditions: '{{ aktion == ''neu'' }}'
       sequence:
       - variables:
+          weg: >-
+            {{ (d.entfernen | default('', true) | string).split(';') | map('trim') | reject('eq', '') | list }}
+      - if: "{{ weg | count > 0 and aufgaben_entity != '' }}"
+        then:
+        - action: todo.remove_item
+          continue_on_error: true
+          target:
+            entity_id: '{{ aufgaben_entity }}'
+          data:
+            item: '{{ weg }}'
+        - action: telegram_bot.send_message
+          continue_on_error: true
+          data:
+            chat_id: '{{ chat }}'
+            message: "🗑️ Als Aufgabe entfernt: {{ weg | join(', ') }}"
+      - variables:
           titel: '{{ d.titel | default(''Termin'', true) }}'
           datum: '{{ d.datum }}'
           uhr: '{{ d.uhrzeit | default('''', true) | string | trim }}'
@@ -306,6 +334,12 @@ automation:
             start_date_time: '{{ beginn }}'
             end_date_time: >-
               {{ (strptime(beginn, '%Y-%m-%d %H:%M:%S') + timedelta(minutes=minuten)).strftime('%Y-%m-%d %H:%M:%S') }}
+        - action: input_text.set_value
+          continue_on_error: true
+          target:
+            entity_id: input_text.telegram_letzte_antwort
+          data:
+            value: "{{ (chat ~ '~📅 Eingetragen: ' ~ titel ~ ' am ' ~ datum ~ ' um ' ~ beginn[11:16] ~ ' Uhr')[:250] }}"
         - action: telegram_bot.send_message
           data:
             chat_id: '{{ chat }}'
@@ -321,6 +355,12 @@ automation:
             summary: '{{ titel }}'
             start_date: '{{ datum }}'
             end_date: '{{ (strptime(datum, ''%Y-%m-%d'') + timedelta(days=1)).strftime(''%Y-%m-%d'') }}'
+        - action: input_text.set_value
+          continue_on_error: true
+          target:
+            entity_id: input_text.telegram_letzte_antwort
+          data:
+            value: "{{ (chat ~ '~📅 Eingetragen: ' ~ titel ~ ' am ' ~ datum ~ ' (ganztägig)')[:250] }}"
         - action: telegram_bot.send_message
           data:
             chat_id: '{{ chat }}'
