@@ -1,0 +1,58 @@
+# Gedächtnis des Telegram-Bots (claude_tools/chatverlauf.py): jede Nachricht der Familie und jede Antwort des Bots
+# wird je Chat gemerkt (lokal in /config/telegram_verlauf.json, 14 Tage). packages/telegram.yaml gibt den Verlauf bei
+# jeder neuen Nachricht an Claude mit – so versteht der Bot „danach“, „das war falsch“, „genau wie beim …“.
+shell_command:
+  chatverlauf: python3 /config/claude_tools/chatverlauf.py {{ aktion }} {{ wert }}
+
+automation:
+  - id: chatverlauf_eingang
+    alias: "Telegram-Gedächtnis: Nachricht der Familie merken"
+    mode: queued
+    max: 50
+    triggers:
+      - trigger: event
+        event_type: telegram_text
+      - trigger: event
+        event_type: telegram_command
+    actions:
+      - action: shell_command.chatverlauf
+        continue_on_error: true
+        data:
+          aktion: add
+          wert: >-
+            {{ {'chat': trigger.event.data.chat_id | string,
+                'wer': trigger.event.data.from_first | default('Familie', true),
+                'text': (trigger.event.data.text | default('', true)) or (trigger.event.data.command | default('', true))}
+               | to_json | base64_encode }}
+
+  # Antworten des Bots: jede gesendete Telegram-Nachricht (egal aus welchem Paket) wird mitgeschrieben
+  - id: chatverlauf_ausgang
+    alias: "Telegram-Gedächtnis: Antwort des Bots merken"
+    mode: queued
+    max: 50
+    triggers:
+      - trigger: event
+        event_type: call_service
+        event_data:
+          domain: telegram_bot
+          service: send_message
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.event.data.service_data.message is defined }}"
+    actions:
+      - variables:
+          chats: >-
+            {% set c = trigger.event.data.service_data.chat_id | default(trigger.event.data.service_data.target | default([], true), true) %}
+            {{ (c if c is list else [c]) | map('string') | list }}
+      - repeat:
+          for_each: "{{ chats }}"
+          sequence:
+            - action: shell_command.chatverlauf
+              continue_on_error: true
+              data:
+                aktion: add
+                wert: >-
+                  {{ {'chat': repeat.item, 'wer': 'Bot',
+                      'text': trigger.event.data.service_data.message | string | regex_replace('<[^>]+>', '')
+                              | replace('&amp;', '&') | replace('&lt;', '<') | replace('&gt;', '>')}
+                     | to_json | base64_encode }}

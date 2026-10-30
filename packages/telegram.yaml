@@ -127,6 +127,16 @@ automation:
         {% set frisch = states.input_text.telegram_letzte_antwort is not none and
            (now() - states.input_text.telegram_letzte_antwort.last_changed).total_seconds() < 900 %}
         {{ v.split('~', 1)[1] if frisch and v.startswith(chat ~ '~') else '' }}
+  # Gedächtnis: bisheriger Chat (packages/chatverlauf.yaml)
+  - action: shell_command.chatverlauf
+    continue_on_error: true
+    data:
+      aktion: get
+      wert: "{{ {'chat': chat | string, 'ohne': text} | to_json | base64_encode }}"
+    response_variable: verlauf_roh
+  - variables:
+      verlauf: >-
+        {{ (verlauf_roh.stdout | default('', true) | trim) if verlauf_roh is defined and verlauf_roh is mapping else '' }}
   - action: input_text.set_value
     continue_on_error: true
     target:
@@ -226,6 +236,10 @@ automation:
         Vorhandene Termine (Datum Uhrzeit: Titel):
         {{ terminliste }}
 
+        {% if verlauf %}BISHERIGER CHAT (älteste zuerst, „Bot“ = deine früheren Antworten). Lies ihn, bevor du entscheidest:
+        worauf bezieht sich die neue Nachricht? Korrigiert sie etwas, das du gerade eingetragen hast?
+        {{ verlauf }}
+        {% endif %}
         {% if vorher %}Vorherige Nachricht aus diesem Chat (nur als Zusammenhang, z. B. wenn jetzt
         "als Aufgabe eintragen" oder "ja" kommt – dann gilt der Inhalt der vorherigen Nachricht): {{ vorher }}
         {% endif %}
@@ -503,7 +517,12 @@ automation:
           parse_mode: html
     - action: conversation.process
       data:
-        text: '{{ text }}'
+        text: >-
+          {% if verlauf %}(Zusammenhang – bisheriger Telegram-Chat, älteste zuerst, „Bot“ = deine Antworten:
+          {{ verlauf }}
+          )
+
+          Neue Nachricht: {% endif %}{{ text }}
         language: de
         agent_id: '{{ agent }}'
         conversation_id: 'telegram_{{ chat }}'
