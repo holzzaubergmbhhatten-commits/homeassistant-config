@@ -13,7 +13,7 @@
 -->
 <style>
   .ic { width: 1.05em; height: 1.05em; vertical-align: -0.17em; display: inline-block; }
-  :root { --blau: #007AFF; --gruen: #34C759; --rot: #FF3B30; --grau: #8E8E93; --trenn: #E5E5EA; --hell: #F2F2F7; --text: #1C1C1E; }
+  :root { --blau: #536b45; --gruen: #34C759; --rot: #FF3B30; --grau: #8E8E93; --trenn: #E5E5EA; --hell: #F2F2F7; --text: #1C1C1E; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: transparent;
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", Roboto, sans-serif;
@@ -121,6 +121,7 @@
     padding: 0.7vw 1.3vw; border-radius: 2vw; font-size: 1.05vw; z-index: 20; display: none; }
 </style>
 <link rel="stylesheet" href="apple-glas.css?v=1">
+<link rel="stylesheet" href="/local/hausstil.css?v=1">
 </head>
 <body>
   <div class="karte" id="plan">
@@ -439,7 +440,7 @@ function zeichneTafel() {
     `<span>Taschengeld pro Woche</span><span class="betrag">${euro(grund)}</span>`
     + tg.posten.map(p => `<span><span class="punkt" style="background:${farbe(p.farbe)}"></span>${esc(p.name)}</span><span class="betrag minus">− ${euro(zahl(p.betrag))}</span>`).join("")
     + `<span>Verdient diese Woche (${felder.length} × ${cent} Cent)</span><span class="betrag plus">+ ${euro(felder.length * cent / 100)}</span>`
-    + (lernBonus > 0 ? `<span>${ic("buch", "#007AFF")} Lern-Challenge (${lernAnz} von 3)</span><span class="betrag plus">${lernGeld ? "+ " + euro(lernGeld) : "noch offen"}</span>` : "")
+    + (lernBonus > 0 ? `<span>${ic("buch", "#536b45")} Lern-Challenge (${lernAnz} von 3)</span><span class="betrag plus">${lernGeld ? "+ " + euro(lernGeld) : "noch offen"}</span>` : "")
     + (bonusMoeglich ? `<span>${ic("geschenk", "#FF9500")} Bonus: 2 Wochen hintereinander alles geschafft</span><span class="betrag plus">${bonus ? "+ " + euro(bonus) : "noch offen"}</span>` : "")
     + `<div class="linie"></div><span class="gesamt">Bekommst du diese Woche</span><span class="betrag gesamt">${euro(bleibt + extra + bonus)}</span>`
     + `<span style="color:#8E8E93">höchstens möglich</span><span class="betrag" style="color:#8E8E93">${euro(max)}</span>`
@@ -454,14 +455,14 @@ function zeichneTafel() {
     // Lern-Challenge der Woche (alle 3 geschafft) zählt mit – steht im Verlauf unter "lernen"
     const lernFertig = n > 0 && Number((verlauf.lernen || {})[kw] || 0) >= 3;
     const geld = bleibt + anz * cent / 100 + (anz >= ANZAHL_FELDER && voll(wocheDavor(kw, 1)) ? bonusBetrag : 0) + (lernFertig ? lernBonus : 0);
-    vh += `<div class="woche ${anz >= ANZAHL_FELDER ? "voll" : ""} ${n === 0 ? "jetzt" : ""}">KW ${Number(kw.split("-W")[1])}<b>${anz}/${ANZAHL_FELDER}${anz >= ANZAHL_FELDER ? " " + ic("stern", "#FFB800") : ""}</b>${n === 0 ? "läuft" : euro(geld) + (lernFertig ? " " + ic("buch", "#007AFF") : "")}</div>`;
+    vh += `<div class="woche ${anz >= ANZAHL_FELDER ? "voll" : ""} ${n === 0 ? "jetzt" : ""}">KW ${Number(kw.split("-W")[1])}<b>${anz}/${ANZAHL_FELDER}${anz >= ANZAHL_FELDER ? " " + ic("stern", "#FFB800") : ""}</b>${n === 0 ? "läuft" : euro(geld) + (lernFertig ? " " + ic("buch", "#536b45") : "")}</div>`;
   }
   vh += `<div class="woche serie">${serie >= 2 ? `${ic("feuer", "#FF6B00")} ${serie} Wochen alles geschafft!` : serie === 1 ? `${ic("stern", "#FFB800")} Noch 1 Woche voll = Bonus!` : `6 Felder voll = ${ic("stern", "#FFB800")}`}</div>`;
   $("verlauf").innerHTML = vh;
   const la = lernAufgaben(jetzt), geloest = rechnenGeloest(jetzt);
   $("lern-titel").textContent = `Lern-Challenge der Woche – alle 3 geschafft = + ${euro(lernBonus)}`;
   $("lernen").innerHTML = la.map((a, i) => `<div class="lern ${lern[i] ? "fertig" : ""}" data-lern="${i}"><div class="art">${a.art}</div>`
-    + `<div class="was">${i === 0 ? a.was.split("\n").map((z, k) => (geloest[k] || lern[0]) ? `<span style="color:#1f9d3a">${ic("haken", "#34C759")} ${esc(z)}</span>` : esc(z)).join("\n") : esc(a.was)}</div><div class="haken" data-haken="${i}">${lern[i] ? ic("kastenok", "#34C759") : ic("kasten", "#AEAEB2")}</div><div class="stift" data-stift="${i}">${ic("stift", "#007AFF")}</div></div>`).join("");
+    + `<div class="was">${i === 0 ? a.was.split("\n").map((z, k) => (geloest[k] || lern[0]) ? `<span style="color:#1f9d3a">${ic("haken", "#34C759")} ${esc(z)}</span>` : esc(z)).join("\n") : esc(a.was)}</div><div class="haken" data-haken="${i}">${lern[i] ? ic("kastenok", "#34C759") : ic("kasten", "#AEAEB2")}</div><div class="stift" data-stift="${i}">${ic("stift", "#536b45")}</div></div>`).join("");
   $("lernen").querySelectorAll("[data-lern]").forEach(el => tippen(el, ev => {
     const i = +el.dataset.lern, ziel = ev && ev.target && ev.target.closest ? ev.target : null;
     if (ziel && ziel.closest("[data-stift]")) return lernBearbeiten(jetzt, i);
@@ -478,7 +479,7 @@ function zeichneTafel() {
   $("felder").innerHTML = fh;
   $("vorrat").innerHTML = daten.aufgaben.map((a, i) =>
     `<div class="magnet" data-aufgabe="${i}" style="background:${farbe(a.farbe)}">${esc(a.name)}</div>`).join("")
-    + (bearbeiten ? `<div class="magnet" data-neu="1" style="background:#fff;border:0.12vw dashed #C7C7CC;color:#007AFF">＋ Neue Aufgabe</div>` : "");
+    + (bearbeiten ? `<div class="magnet" data-neu="1" style="background:#fff;border:0.12vw dashed #C7C7CC;color:#536b45">＋ Neue Aufgabe</div>` : "");
   // Feld antippen (oder das ✕) = falsch getippt, wieder raus
   $("felder").querySelectorAll("[data-feld]").forEach(el => tippen(el, () => {
     const i = +el.dataset.feld, l = felderLesen();
@@ -615,7 +616,7 @@ let ansageLaeuft = false;
 tippen($("b-ansage"), async () => {
   const h = hass(); if (!h || ansageLaeuft) return;
   ansageLaeuft = true; $("b-ansage").textContent = "Ansage läuft …";
-  meldung("Jarvis sagt an, was Mucki geschafft hat …", "haken", "#007AFF");
+  meldung("Jarvis sagt an, was Mucki geschafft hat …", "haken", "#536b45");
   try {
     const r = await h.callWS({ type: "call_service", domain: "script", service: "mucki_ansage", service_data: {}, return_response: true });
     const a = (r && r.response) || {};

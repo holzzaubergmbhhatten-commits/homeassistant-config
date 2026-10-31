@@ -1,6 +1,14 @@
 // Ruhemodus für den Touchmonitor im Flur: nach 7 Minuten ohne Berührung zeigt er das Ruhebild (Wappen, Uhr, Wetter,
 // /flur-display/ruhe → www/ruhe.html). Antippen bringt die vorherige Seite zurück.
 // Gilt nur für den Kiosk-Browser am Monitor (der öffnet Home Assistant über "localhost"), nicht für Handy/Laptop.
+// Hausschriften (Cormorant Garamond + Montserrat, wie das Handbuch „Zuhause“) für das Theme – auf allen Geräten
+(function () {
+  if (document.getElementById("hausschrift")) return;
+  const l = document.createElement("link");
+  l.id = "hausschrift"; l.rel = "stylesheet";
+  l.href = "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Montserrat:wght@400;500;600;700&display=swap";
+  document.head.appendChild(l);
+})();
 (function () {
   if (location.hostname !== "localhost" || window.__ruhemodus) return;
   window.__ruhemodus = true;

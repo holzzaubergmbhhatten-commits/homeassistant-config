@@ -800,7 +800,7 @@ views:
   type: panel
   cards:
   - type: iframe
-    url: /local/mucki.html?v=15
+    url: /local/mucki.html?v=16
     aspect_ratio: 53.3%
 - title: Musik
   path: musik
@@ -1580,7 +1580,7 @@ views:
   # Essensplan der Woche (Claude), Rezepte mit Kochmodus, Vorrat & Ernte, Einkauf – packages/kueche.yaml
   cards:
   - type: iframe
-    url: /local/kueche.html?v=4
+    url: /local/kueche.html?v=5
     aspect_ratio: 53.3%
 - title: Klima & Energie
   path: energie
@@ -1589,7 +1589,7 @@ views:
   # Räume (HomePods), Energie wie das Energiecockpit der ViCare-App, Wärmepumpe, Wasser (Conel), alle Werte – Tag/Woche/Monat/Jahr
   cards:
   - type: iframe
-    url: /local/energie.html?v=14
+    url: /local/energie.html?v=15
     aspect_ratio: 53.3%
 - title: Grundriss
   path: grundriss
@@ -1597,7 +1597,7 @@ views:
   type: panel
   cards:
   - type: iframe
-    url: /local/grundriss.html?v=18
+    url: /local/grundriss.html?v=19
     aspect_ratio: 53.3%
 - title: Garten
   path: garten
@@ -1605,7 +1605,7 @@ views:
   type: panel
   cards:
   - type: iframe
-    url: /local/garten.html?v=15
+    url: /local/garten.html?v=16
     aspect_ratio: 53.3%
 - title: Wartung
   path: wartung
@@ -1613,7 +1613,7 @@ views:
   type: panel
   cards:
   - type: iframe
-    url: /local/wartung.html?v=3
+    url: /local/wartung.html?v=4
     aspect_ratio: 53.3%
 - title: Eingang
   path: eingang
@@ -1621,7 +1621,7 @@ views:
   type: panel
   cards:
   - type: iframe
-    url: /local/eingang.html?v=3
+    url: /local/eingang.html?v=4
     aspect_ratio: 53.3%
 # Ruhebild (Wappen, Uhr, Wetter) – öffnet sich am Monitor nach 7 Minuten ohne Berührung (www/ruhemodus.js)
 - title: Ruhe
@@ -1639,7 +1639,7 @@ views:
   type: panel
   cards:
   - type: iframe
-    url: /local/akte.html?v=25
+    url: /local/akte.html?v=26
     aspect_ratio: 53.3%
 - title: Infos
   path: infos

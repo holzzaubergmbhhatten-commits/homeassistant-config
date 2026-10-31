@@ -1,0 +1,29 @@
+/* Gemeinsamer Hausstil für alle eigenen Seiten im Dashboard (Küche, Klima & Energie, Garten, Wartung, Akte, Eingang,
+   Grundriss, Mucki): Farben und Schrift wie das Familien-Handbuch „Zuhause“ – Olivgrün, Sand, Creme, Terrakotta,
+   Überschriften in Cormorant Garamond, Text in Montserrat, Wappen vor dem Seitentitel.
+   Wird in jeder Seite NACH deren eigenem <style> eingebunden und überschreibt nur die Farbvariablen und Schriften. */
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Montserrat:wght@400;500;600;700&display=swap');
+
+:root {
+  --haus-gruen: #536b45; --haus-dunkel: #33442b; --haus-sand: #d8c7a3; --haus-creme: #f7f4ed; --haus-braun: #765c3d;
+  --haus-terra: #c96f4a; --haus-tinte: #2d3329; --haus-gold: #b8902f;
+  /* Namen, die die einzelnen Seiten benutzen */
+  --bg: #f7f4ed; --karte: #ffffff; --text: #2d3329; --grau: #6b7266; --linie: #eee8d9; --trenn: #eee8d9; --hell: #f7f4ed;
+  --blau: #536b45; --akzent: #536b45; --gruen: #4f7a3a; --orange: #c96f4a; --rot: #b3412e; --lila: #765c3d;
+}
+:root.dunkel, .dunkel {
+  --bg: #161a13; --karte: #232a1f; --text: #efe9dc; --grau: #a9a493; --linie: #343d2e; --trenn: #343d2e; --hell: #161a13;
+  --blau: #a9be8f; --akzent: #a9be8f; --gruen: #8fb36f; --orange: #e08a63; --rot: #e0705c; --lila: #c9a97f;
+}
+html, body { font-family: "Montserrat", -apple-system, "Segoe UI", Roboto, sans-serif; }
+h1, h2, .serif { font-family: "Cormorant Garamond", Georgia, "Times New Roman", serif; letter-spacing: 0; }
+h1 { font-weight: 700; color: var(--haus-dunkel); }
+.dunkel h1 { color: #e8dfc8; }
+h2 { font-weight: 700; }
+/* Seitentitel mit Wappen und feiner Sandlinie */
+.kopf h1::before { content: ""; display: inline-block; width: 1.05em; height: 1.5em; margin-right: .35em; vertical-align: -.35em;
+  background: url(https://urlaub-wie-zuhause.eu/images/wappen-schlag.png) center / contain no-repeat;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .25)); }
+.kopf { border-bottom: 1px solid var(--haus-sand); padding-bottom: 8px; }
+/* Karten wie im Handbuch: weiß, weich, grünlicher Schatten */
+.karte { box-shadow: 0 4px 16px rgba(51, 68, 43, .08); }

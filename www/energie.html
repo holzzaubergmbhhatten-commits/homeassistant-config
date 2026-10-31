@@ -12,8 +12,8 @@
 -->
 <style>
   :root { --bg: #F2F2F7; --karte: #fff; --text: #1C1C1E; --grau: #8E8E93; --linie: rgba(0,0,0,.08);
-    --gruen: #34C759; --rot: #FF3B30; --orange: #FF9500; --blau: #007AFF;
-    --pv: #F5B400; --akku: #34C759; --netz: #8E8E93; --einsp: #FF9500; --haus: #007AFF; --wp: #AF52DE; }
+    --gruen: #34C759; --rot: #FF3B30; --orange: #FF9500; --blau: #536b45;
+    --pv: #F5B400; --akku: #34C759; --netz: #8E8E93; --einsp: #FF9500; --haus: #536b45; --wp: #AF52DE; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
     font-family: -apple-system, "SF Pro Text", Roboto, "Helvetica Neue", system-ui, sans-serif; }
@@ -70,6 +70,7 @@
   .leer { text-align: center; padding: 30px 10px; color: var(--grau); }
 </style>
 <link rel="stylesheet" href="apple-glas.css?v=1">
+<link rel="stylesheet" href="/local/hausstil.css?v=1">
 </head>
 <body>
 <main id="inhalt"><div class="leer">Lade Werte …</div></main>
@@ -360,7 +361,7 @@ function wpDiagramm() {
   return balken(f, null, 150);
 }
 /* ---------- Räume (HomePods, packages/raumklima.yaml) ---------- */
-const RAUM_FARBEN = ["#007AFF", "#FF9500", "#AF52DE", "#34C759", "#FF2D55", "#5AC8FA", "#A2845E", "#FFCC00"];
+const RAUM_FARBEN = ["#536b45", "#FF9500", "#AF52DE", "#34C759", "#FF2D55", "#5AC8FA", "#A2845E", "#FFCC00"];
 function raeume() {   // alle Räume mit Temperatur aus den HomePods, die sich in den letzten 3 Stunden gemeldet haben
   const h = hass(); if (!h) return [];
   return Object.keys(h.states).filter(id => /^sensor\.temperatur_/.test(id)).map(id => {

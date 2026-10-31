@@ -13,7 +13,7 @@
   Datenschutz am Monitor: nach 3 Minuten ohne Berührung wird die Liste verdeckt.
 -->
 <style>
-  :root { --bg: #F2F2F7; --karte: #fff; --text: #1C1C1E; --grau: #8E8E93; --gruen: #34C759; --rot: #FF3B30; --orange: #FF9500; --blau: #007AFF; --lila: #AF52DE; }
+  :root { --bg: #F2F2F7; --karte: #fff; --text: #1C1C1E; --grau: #8E8E93; --gruen: #34C759; --rot: #FF3B30; --orange: #FF9500; --blau: #536b45; --lila: #AF52DE; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
     font-family: -apple-system, "SF Pro Text", Roboto, "Helvetica Neue", system-ui, sans-serif, "Noto Color Emoji"; }
@@ -35,7 +35,7 @@
   .zeile b { font-size: 16px; min-width: 0; }
   .betrag { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .marken { display: flex; gap: 5px; flex-wrap: wrap; }
-  .marke { font-size: 12px; font-weight: 700; border-radius: 8px; padding: 2px 8px; background: #007AFF1A; color: var(--blau); }
+  .marke { font-size: 12px; font-weight: 700; border-radius: 8px; padding: 2px 8px; background: #536b451A; color: var(--blau); }
   .marke.steuer { background: #34C7591F; color: #1E8E3E; }
   .marke.offen { background: #FF95001F; color: #B25E00; }
   .marke.ok { background: #8E8E931F; color: var(--grau); }
@@ -44,7 +44,7 @@
   .notiz { font-size: 13px; background: #FFF8E1; border-radius: 10px; padding: 6px 9px; }
   .notiz-feld { width: 100%; min-height: 64px; border-radius: 10px; border: 1px solid #D1D1D6; padding: 8px; font: inherit; font-size: 14px; }
   .status { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: 13px; margin: -4px 0 10px; color: var(--grau); }
-  .status .warte { background: #007AFF1A; color: var(--blau); border-radius: 8px; padding: 3px 9px; font-weight: 700; }
+  .status .warte { background: #536b451A; color: var(--blau); border-radius: 8px; padding: 3px 9px; font-weight: 700; }
   .status .fehler { color: var(--rot); }
   :root.dunkel .notiz { background: #3A3320; } :root.dunkel .notiz-feld { background: #2C2C2E; color: #fff; border-color: #48484A; }
   .kurz { font-size: 13px; line-height: 1.45; color: #3A3A3C; max-height: 3.9em; overflow: hidden; }
@@ -98,6 +98,7 @@
   :root.dunkel .kurz { color: #C7C7CC; }
 </style>
 <link rel="stylesheet" href="apple-glas.css?v=1">
+<link rel="stylesheet" href="/local/hausstil.css?v=1">
 </head>
 <body>
 <main id="inhalt"><div class="leer">Akte wird geladen …</div></main>

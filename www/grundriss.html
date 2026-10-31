@@ -14,13 +14,13 @@
 -->
 <style>
   :root {
-    --bg: #E9EBE4; --text: #1C1C1E; --grau: #8E8E93; --akzent: #007AFF; --rot: #FF3B30; --panel: rgba(255,255,255,0.97);
+    --bg: #E9EBE4; --text: #1C1C1E; --grau: #8E8E93; --akzent: #536b45; --rot: #FF3B30; --panel: rgba(255,255,255,0.97);
     --knopf: #FFFFFF; --mauer: #3A3A3C; --boden: #FBF8F2; --fliese: #EDF2F5; --fenster: #9CC7E6; --tuer: #AEAEB2;
     --gebaeude: #D6D2CA; --rasen: #C3D9AC; --hof: #DDD6C8; --kies: #E6DECD; --holz: #DCC6A4;
     --aus: #FFFFFF; --aus-rand: #C7C7CC; --an: #FFCC00; --symbol-aus: #8E8E93;
   }
   :root.dunkel {
-    --bg: #1C1C1E; --text: #F2F2F7; --grau: #98989D; --akzent: #0A84FF; --rot: #FF453A; --panel: rgba(44,44,46,0.97);
+    --bg: #1C1C1E; --text: #F2F2F7; --grau: #98989D; --akzent: #a9be8f; --rot: #FF453A; --panel: rgba(44,44,46,0.97);
     --knopf: #2C2C2E; --mauer: #C7C7CC; --boden: #2C2C2E; --fliese: #27313A; --fenster: #3F6E91; --tuer: #636366;
     --gebaeude: #3A3A3C; --rasen: #25321D; --hof: #34332F; --kies: #3A372F; --holz: #413528;
     --aus: #3A3A3C; --aus-rand: #545458; --an: #FFD60A; --symbol-aus: #AEAEB2;
@@ -135,6 +135,7 @@
   .lampe.gewaehlt circle { stroke: var(--akzent); stroke-width: 0.08; }
   .lampe.nicht-da circle { fill: none; stroke: var(--rot); stroke-dasharray: 0.1 0.08; stroke-width: 0.04; }
 </style>
+<link rel="stylesheet" href="/local/hausstil.css?v=1">
 </head>
 <body>
 <svg id="plan" xmlns="http://www.w3.org/2000/svg">

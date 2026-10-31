@@ -1,4 +1,5 @@
-# Apple-Stil im Look von iOS 26 ("Liquid Glass"): Hintergrund mit sanftem Farbverlauf, Karten aus
+# Hausstil der Familie (Farben/Schrift wie das Handbuch „Zuhause“: Olivgrün, Sand, Creme, Terrakotta; Cormorant Garamond +
+# Montserrat), aufgebaut auf dem Apple-Stil im Look von iOS 26 ("Liquid Glass"): Hintergrund mit sanftem Farbverlauf, Karten aus
 # halbdurchsichtigem "Glas" mit hellem Rand und weichem Schatten, Pillen-Form für Plaketten und Knöpfe.
 # Bewusst OHNE Weichzeichner (backdrop-filter) – der Kiosk-Browser am Monitor hat keine Grafikbeschleunigung,
 # Verläufe, Transparenz und Schatten schafft er aber flüssig.
@@ -6,10 +7,10 @@
 # "Apple Dunkel" die dunkle, "Apple Hell" = wie "Apple". Umschalten: packages/design.yaml (Hell/Dunkel/Automatisch).
 # Dialoge und Menüs bleiben deckend (card-background-color), damit sie ohne Weichzeichner lesbar sind.
 Apple:
-  primary-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", Roboto, "Helvetica Neue", sans-serif
+  primary-font-family: 'Montserrat, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif'
   paper-font-common-base_-_font-family: var(--primary-font-family)
   ha-font-family-body: var(--primary-font-family)
-  ha-font-family-heading: var(--primary-font-family)
+  ha-font-family-heading: '"Cormorant Garamond", Georgia, serif'
   ha-card-border-radius: 28px
   ha-card-border-width: 1px
   ha-tile-border-radius: 24px
@@ -19,39 +20,39 @@ Apple:
   mdc-shape-small: 999px
   ha-section-title-font-size: 24px
   ha-heading-card-title-font-size: 20px
-  state-light-active-color: '#FFCC00'
-  state-switch-active-color: '#34C759'
-  state-script-active-color: '#007AFF'
-  state-icon-active-color: '#FF9F0A'
-  primary-color: '#007AFF'
-  accent-color: '#007AFF'
-  primary-background-color: '#F2F2F7'
+  state-light-active-color: '#e2b44b'
+  state-switch-active-color: '#536b45'
+  state-script-active-color: '#536b45'
+  state-icon-active-color: '#c9a55a'
+  primary-color: '#536b45'
+  accent-color: '#536b45'
+  primary-background-color: '#f7f4ed'
   secondary-background-color: '#FFFFFF'
-  lovelace-background: radial-gradient(ellipse at 8% 0%, #D4E4FF 0%, rgba(212,228,255,0) 55%), radial-gradient(ellipse at 95% 10%, #F3DDF3 0%, rgba(243,221,243,0) 50%), radial-gradient(ellipse at 75% 100%, #FFE7CC 0%, rgba(255,231,204,0) 55%), linear-gradient(165deg, #EDF2FA 0%, #F5F2F8 100%)
+  lovelace-background: radial-gradient(ellipse at 10% 0%, #e9e2cf 0%, rgba(233,226,207,0) 55%), radial-gradient(ellipse at 95% 15%, #dfe6d3 0%, rgba(223,230,211,0) 50%), linear-gradient(170deg, #f7f4ed 0%, #f1ece0 100%)
   card-background-color: '#FFFFFF'
-  ha-card-background: rgba(255, 255, 255, 0.62)
-  ha-card-border-color: rgba(255, 255, 255, 0.9)
-  ha-card-box-shadow: 0 10px 30px rgba(40, 52, 90, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.95)
-  primary-text-color: '#1C1C1E'
-  secondary-text-color: '#6E6E73'
+  ha-card-background: rgba(255, 255, 255, 0.82)
+  ha-card-border-color: rgba(216, 199, 163, 0.55)
+  ha-card-box-shadow: 0 4px 16px rgba(51, 68, 43, 0.08)
+  primary-text-color: '#2d3329'
+  secondary-text-color: '#6b7266'
   disabled-text-color: '#C7C7CC'
-  divider-color: rgba(60, 60, 67, 0.10)
-  app-header-background-color: rgba(244, 245, 250, 0.82)
-  app-header-text-color: '#1C1C1E'
-  sidebar-background-color: '#F2F2F7'
-  sidebar-selected-icon-color: '#007AFF'
-  sidebar-selected-text-color: '#007AFF'
-  switch-checked-color: '#34C759'
+  divider-color: rgba(216, 199, 163, 0.6)
+  app-header-background-color: rgba(247, 244, 237, 0.92)
+  app-header-text-color: '#2d3329'
+  sidebar-background-color: '#f7f4ed'
+  sidebar-selected-icon-color: '#536b45'
+  sidebar-selected-text-color: '#536b45'
+  switch-checked-color: '#536b45'
   switch-checked-button-color: '#FFFFFF'
-  switch-checked-track-color: '#34C759'
-  success-color: '#34C759'
-  warning-color: '#FF9500'
-  error-color: '#FF3B30'
+  switch-checked-track-color: '#536b45'
+  success-color: '#536b45'
+  warning-color: '#c96f4a'
+  error-color: '#b3412e'
 Apple Dunkel:
-  primary-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", Roboto, "Helvetica Neue", sans-serif
+  primary-font-family: 'Montserrat, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif'
   paper-font-common-base_-_font-family: var(--primary-font-family)
   ha-font-family-body: var(--primary-font-family)
-  ha-font-family-heading: var(--primary-font-family)
+  ha-font-family-heading: '"Cormorant Garamond", Georgia, serif'
   ha-card-border-radius: 28px
   ha-card-border-width: 1px
   ha-tile-border-radius: 24px
@@ -61,84 +62,84 @@ Apple Dunkel:
   mdc-shape-small: 999px
   ha-section-title-font-size: 24px
   ha-heading-card-title-font-size: 20px
-  state-light-active-color: '#FFD60A'
-  state-switch-active-color: '#30D158'
-  state-script-active-color: '#0A84FF'
-  state-icon-active-color: '#FFD60A'
-  primary-color: '#0A84FF'
-  accent-color: '#0A84FF'
-  primary-background-color: '#1C1C1E'
-  secondary-background-color: '#2C2C2E'
-  lovelace-background: radial-gradient(ellipse at 8% 0%, #1D2B52 0%, rgba(29,43,82,0) 55%), radial-gradient(ellipse at 95% 10%, #3B1F4A 0%, rgba(59,31,74,0) 50%), radial-gradient(ellipse at 70% 100%, #0F3640 0%, rgba(15,54,64,0) 55%), linear-gradient(165deg, #0D0F15 0%, #16141C 100%)
-  card-background-color: '#2C2C2E'
-  ha-card-background: rgba(58, 58, 68, 0.48)
-  ha-card-border-color: rgba(255, 255, 255, 0.12)
+  state-light-active-color: '#e2b44b'
+  state-switch-active-color: '#8fb36f'
+  state-script-active-color: '#a9be8f'
+  state-icon-active-color: '#e2b44b'
+  primary-color: '#a9be8f'
+  accent-color: '#a9be8f'
+  primary-background-color: '#161a13'
+  secondary-background-color: '#232a1f'
+  lovelace-background: radial-gradient(ellipse at 10% 0%, #2b3824 0%, rgba(43,56,36,0) 55%), radial-gradient(ellipse at 95% 15%, #33301f 0%, rgba(51,48,31,0) 50%), linear-gradient(170deg, #161a13 0%, #12150f 100%)
+  card-background-color: '#232a1f'
+  ha-card-background: rgba(40, 48, 35, 0.62)
+  ha-card-border-color: rgba(216, 199, 163, 0.16)
   ha-card-box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.10)
-  primary-text-color: '#F5F5F7'
-  secondary-text-color: '#A1A1A6'
+  primary-text-color: '#efe9dc'
+  secondary-text-color: '#a9a493'
   disabled-text-color: '#48484A'
   divider-color: rgba(255, 255, 255, 0.10)
-  app-header-background-color: rgba(20, 20, 26, 0.82)
-  app-header-text-color: '#F5F5F7'
-  sidebar-background-color: '#1C1C1E'
-  sidebar-selected-icon-color: '#0A84FF'
-  sidebar-selected-text-color: '#0A84FF'
-  switch-checked-color: '#30D158'
+  app-header-background-color: rgba(22, 26, 19, 0.9)
+  app-header-text-color: '#efe9dc'
+  sidebar-background-color: '#161a13'
+  sidebar-selected-icon-color: '#a9be8f'
+  sidebar-selected-text-color: '#a9be8f'
+  switch-checked-color: '#8fb36f'
   switch-checked-button-color: '#FFFFFF'
-  switch-checked-track-color: '#30D158'
-  success-color: '#30D158'
-  warning-color: '#FF9F0A'
-  error-color: '#FF453A'
+  switch-checked-track-color: '#8fb36f'
+  success-color: '#8fb36f'
+  warning-color: '#e08a63'
+  error-color: '#e0705c'
   # Eingabefelder, Auswahllisten, Dialoge: dunkler Hintergrund mit heller Schrift (sonst hell auf hell, abends unlesbar)
-  input-fill-color: '#2C2C2E'
-  input-disabled-fill-color: '#1C1C1E'
-  input-ink-color: '#F5F5F7'
-  input-label-ink-color: '#A1A1A6'
+  input-fill-color: '#232a1f'
+  input-disabled-fill-color: '#161a13'
+  input-ink-color: '#efe9dc'
+  input-label-ink-color: '#a9a493'
   input-disabled-ink-color: '#6E6E73'
   input-idle-line-color: '#636366'
-  input-hover-line-color: '#A1A1A6'
-  input-disabled-line-color: '#3A3A3C'
+  input-hover-line-color: '#a9a493'
+  input-disabled-line-color: '#2f3829'
   input-outlined-idle-border-color: '#636366'
-  input-outlined-hover-border-color: '#A1A1A6'
-  input-dropdown-icon-color: '#A1A1A6'
-  mdc-text-field-fill-color: '#2C2C2E'
-  mdc-text-field-disabled-fill-color: '#1C1C1E'
-  mdc-text-field-ink-color: '#F5F5F7'
-  mdc-text-field-label-ink-color: '#A1A1A6'
+  input-outlined-hover-border-color: '#a9a493'
+  input-dropdown-icon-color: '#a9a493'
+  mdc-text-field-fill-color: '#232a1f'
+  mdc-text-field-disabled-fill-color: '#161a13'
+  mdc-text-field-ink-color: '#efe9dc'
+  mdc-text-field-label-ink-color: '#a9a493'
   mdc-text-field-disabled-ink-color: '#6E6E73'
   mdc-text-field-idle-line-color: '#636366'
-  mdc-text-field-hover-line-color: '#A1A1A6'
+  mdc-text-field-hover-line-color: '#a9a493'
   mdc-text-field-outlined-idle-border-color: '#636366'
-  mdc-text-field-outlined-hover-border-color: '#A1A1A6'
-  mdc-select-fill-color: '#2C2C2E'
-  mdc-select-ink-color: '#F5F5F7'
-  mdc-select-label-ink-color: '#A1A1A6'
+  mdc-text-field-outlined-hover-border-color: '#a9a493'
+  mdc-select-fill-color: '#232a1f'
+  mdc-select-ink-color: '#efe9dc'
+  mdc-select-label-ink-color: '#a9a493'
   mdc-select-idle-line-color: '#636366'
-  mdc-select-hover-line-color: '#A1A1A6'
-  mdc-select-dropdown-icon-color: '#A1A1A6'
-  mdc-theme-surface: '#2C2C2E'
-  mdc-theme-on-surface: '#F5F5F7'
-  mdc-theme-text-primary-on-background: '#F5F5F7'
-  mdc-theme-text-secondary-on-background: '#A1A1A6'
+  mdc-select-hover-line-color: '#a9a493'
+  mdc-select-dropdown-icon-color: '#a9a493'
+  mdc-theme-surface: '#232a1f'
+  mdc-theme-on-surface: '#efe9dc'
+  mdc-theme-text-primary-on-background: '#efe9dc'
+  mdc-theme-text-secondary-on-background: '#a9a493'
   mdc-dialog-scrim-color: rgba(0, 0, 0, 0.6)
-  ha-dialog-surface-background: '#2C2C2E'
-  ha-color-form-background: '#2C2C2E'
-  ha-color-form-background-hover: '#3A3A3C'
-  ha-color-form-background-disabled: '#1C1C1E'
-  ha-color-text-primary: '#F5F5F7'
-  ha-color-text-secondary: '#A1A1A6'
-  code-editor-background-color: '#1C1C1E'
-  codemirror-property: '#64D2FF'
-  markdown-code-background-color: '#1C1C1E'
-  table-row-background-color: '#1C1C1E'
-  table-row-alternative-background-color: '#2C2C2E'
-  data-table-background-color: '#1C1C1E'
-  chip-background-color: '#3A3A3C'
+  ha-dialog-surface-background: '#232a1f'
+  ha-color-form-background: '#232a1f'
+  ha-color-form-background-hover: '#2f3829'
+  ha-color-form-background-disabled: '#161a13'
+  ha-color-text-primary: '#efe9dc'
+  ha-color-text-secondary: '#a9a493'
+  code-editor-background-color: '#161a13'
+  codemirror-property: '#c9d8b4'
+  markdown-code-background-color: '#161a13'
+  table-row-background-color: '#161a13'
+  table-row-alternative-background-color: '#232a1f'
+  data-table-background-color: '#161a13'
+  chip-background-color: '#2f3829'
 Apple Hell:
-  primary-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", Roboto, "Helvetica Neue", sans-serif
+  primary-font-family: 'Montserrat, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif'
   paper-font-common-base_-_font-family: var(--primary-font-family)
   ha-font-family-body: var(--primary-font-family)
-  ha-font-family-heading: var(--primary-font-family)
+  ha-font-family-heading: '"Cormorant Garamond", Georgia, serif'
   ha-card-border-radius: 28px
   ha-card-border-width: 1px
   ha-tile-border-radius: 24px
@@ -148,31 +149,31 @@ Apple Hell:
   mdc-shape-small: 999px
   ha-section-title-font-size: 24px
   ha-heading-card-title-font-size: 20px
-  state-light-active-color: '#FFCC00'
-  state-switch-active-color: '#34C759'
-  state-script-active-color: '#007AFF'
-  state-icon-active-color: '#FF9F0A'
-  primary-color: '#007AFF'
-  accent-color: '#007AFF'
-  primary-background-color: '#F2F2F7'
+  state-light-active-color: '#e2b44b'
+  state-switch-active-color: '#536b45'
+  state-script-active-color: '#536b45'
+  state-icon-active-color: '#c9a55a'
+  primary-color: '#536b45'
+  accent-color: '#536b45'
+  primary-background-color: '#f7f4ed'
   secondary-background-color: '#FFFFFF'
-  lovelace-background: radial-gradient(ellipse at 8% 0%, #D4E4FF 0%, rgba(212,228,255,0) 55%), radial-gradient(ellipse at 95% 10%, #F3DDF3 0%, rgba(243,221,243,0) 50%), radial-gradient(ellipse at 75% 100%, #FFE7CC 0%, rgba(255,231,204,0) 55%), linear-gradient(165deg, #EDF2FA 0%, #F5F2F8 100%)
+  lovelace-background: radial-gradient(ellipse at 10% 0%, #e9e2cf 0%, rgba(233,226,207,0) 55%), radial-gradient(ellipse at 95% 15%, #dfe6d3 0%, rgba(223,230,211,0) 50%), linear-gradient(170deg, #f7f4ed 0%, #f1ece0 100%)
   card-background-color: '#FFFFFF'
-  ha-card-background: rgba(255, 255, 255, 0.62)
-  ha-card-border-color: rgba(255, 255, 255, 0.9)
-  ha-card-box-shadow: 0 10px 30px rgba(40, 52, 90, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.95)
-  primary-text-color: '#1C1C1E'
-  secondary-text-color: '#6E6E73'
+  ha-card-background: rgba(255, 255, 255, 0.82)
+  ha-card-border-color: rgba(216, 199, 163, 0.55)
+  ha-card-box-shadow: 0 4px 16px rgba(51, 68, 43, 0.08)
+  primary-text-color: '#2d3329'
+  secondary-text-color: '#6b7266'
   disabled-text-color: '#C7C7CC'
-  divider-color: rgba(60, 60, 67, 0.10)
-  app-header-background-color: rgba(244, 245, 250, 0.82)
-  app-header-text-color: '#1C1C1E'
-  sidebar-background-color: '#F2F2F7'
-  sidebar-selected-icon-color: '#007AFF'
-  sidebar-selected-text-color: '#007AFF'
-  switch-checked-color: '#34C759'
+  divider-color: rgba(216, 199, 163, 0.6)
+  app-header-background-color: rgba(247, 244, 237, 0.92)
+  app-header-text-color: '#2d3329'
+  sidebar-background-color: '#f7f4ed'
+  sidebar-selected-icon-color: '#536b45'
+  sidebar-selected-text-color: '#536b45'
+  switch-checked-color: '#536b45'
   switch-checked-button-color: '#FFFFFF'
-  switch-checked-track-color: '#34C759'
-  success-color: '#34C759'
-  warning-color: '#FF9500'
-  error-color: '#FF3B30'
+  switch-checked-track-color: '#536b45'
+  success-color: '#536b45'
+  warning-color: '#c96f4a'
+  error-color: '#b3412e'

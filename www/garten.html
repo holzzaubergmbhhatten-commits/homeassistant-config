@@ -15,7 +15,7 @@
 -->
 <style>
   :root {
-    --bg: #F2F2F7; --karte: #FFFFFF; --text: #1C1C1E; --grau: #8E8E93; --linie: #E5E5EA; --akzent: #34A853; --blau: #007AFF;
+    --bg: #F2F2F7; --karte: #FFFFFF; --text: #1C1C1E; --grau: #8E8E93; --linie: #E5E5EA; --akzent: #34A853; --blau: #536b45;
     --rot: #FF3B30; --orange: #FF9500; --holz: #D9B98C; --holz-rand: #A8834F; --erde: #6B4A2E; --erde-hell: #8A6644;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -140,6 +140,7 @@
   @keyframes dreh { to { transform: rotate(360deg); } }
 </style>
 <link rel="stylesheet" href="apple-glas.css?v=1">
+<link rel="stylesheet" href="/local/hausstil.css?v=1">
 </head>
 <body>
 <div class="kopf">
@@ -351,7 +352,7 @@ const PFLANZEN = [
 const PF = Object.fromEntries(PFLANZEN.map(p => [p.id, p]));
 // ================= Anbau: vorziehen, direkt säen, stecken oder Jungpflanzen kaufen? =================
 // weg: direkt | vorziehen | kaufen | stecken | beides – tiefe = Saattiefe, keim = Keimtemperatur und -dauer
-const WEG = { direkt: ["Direkt ins Beet säen", "#34A853"], vorziehen: ["Selbst vorziehen", "#007AFF"], kaufen: ["Jungpflanzen kaufen", "#FF9500"],
+const WEG = { direkt: ["Direkt ins Beet säen", "#34A853"], vorziehen: ["Selbst vorziehen", "#536b45"], kaufen: ["Jungpflanzen kaufen", "#FF9500"],
   stecken: ["Stecken / Legen", "#8E5B3A"], beides: ["Vorziehen oder kaufen", "#5856D6"] };
 const A = (weg, tiefe, keim, text) => ({ weg, tiefe, keim, text });
 const ANBAU = {
@@ -1012,19 +1013,19 @@ function karteBauen(box) {
   // Hochbeete, Kästen und Tische als Flächen mit Eckpunkten
   for (const b of beete.filter(b => b.form === "flaeche")) {
     if (b.art === "tisch") { const [mx, my] = mitteVon(b.p), a = b.linie[0], c = b.linie[1]; let w = Math.atan2(c[1] - a[1], c[0] - a[0]) * 180 / Math.PI; if (w > 90) w -= 180; if (w < -90) w += 180;
-      svg += `<g data-beet="${b.id}"><polygon points="${pts(b.p)}" fill="url(#holz)" stroke="${bearbeiten ? "#007AFF" : "#8B6F4E"}" stroke-width=".08"/><text x="${mx}" y="${my}" transform="rotate(${w} ${mx} ${my})" text-anchor="middle" dominant-baseline="middle" font-size="${Math.min(.4, b.breite * .45)}" font-weight="700" fill="#5A4632">${esc(b.name)}</text></g>`; continue; }
-    svg += `<g data-beet="${b.id}"><polygon points="${pts(b.p)}" fill="url(#erde)" stroke="${bearbeiten ? "#007AFF" : "#D2AE7C"}" stroke-width=".13" stroke-linejoin="round"/>${b.warm ? `<polygon points="${pts(b.p)}" fill="none" stroke="#FF9500" stroke-width=".08" stroke-dasharray=".25 .15"/>` : ""}</g>`;
+      svg += `<g data-beet="${b.id}"><polygon points="${pts(b.p)}" fill="url(#holz)" stroke="${bearbeiten ? "#536b45" : "#8B6F4E"}" stroke-width=".08"/><text x="${mx}" y="${my}" transform="rotate(${w} ${mx} ${my})" text-anchor="middle" dominant-baseline="middle" font-size="${Math.min(.4, b.breite * .45)}" font-weight="700" fill="#5A4632">${esc(b.name)}</text></g>`; continue; }
+    svg += `<g data-beet="${b.id}"><polygon points="${pts(b.p)}" fill="url(#erde)" stroke="${bearbeiten ? "#536b45" : "#D2AE7C"}" stroke-width=".13" stroke-linejoin="round"/>${b.warm ? `<polygon points="${pts(b.p)}" fill="none" stroke="#FF9500" stroke-width=".08" stroke-dasharray=".25 .15"/>` : ""}</g>`;
   }
   // Erdhaufen und Kästen  // Erdhaufen und Kästen
   for (const b of beete.filter(b => b.kante === undefined && b.form !== "flaeche")) {
-    if (b.art === "erdstreifen") svg += `<g data-beet="${b.id}"><path d="${kurve(b.p, false)}" fill="none" stroke="${bearbeiten ? "#007AFF" : "#3E2A18"}" stroke-width="${b.breite + .08}" stroke-linecap="round" stroke-linejoin="round"/>
+    if (b.art === "erdstreifen") svg += `<g data-beet="${b.id}"><path d="${kurve(b.p, false)}" fill="none" stroke="${bearbeiten ? "#536b45" : "#3E2A18"}" stroke-width="${b.breite + .08}" stroke-linecap="round" stroke-linejoin="round"/>
       <path d="${kurve(b.p, false)}" fill="none" stroke="#6B4A2E" stroke-width="${b.breite}" stroke-linecap="round" stroke-linejoin="round"/>
       <path d="${kurve(b.p, false)}" fill="none" stroke="#86603E" stroke-width="${b.breite * .35}" stroke-linecap="round" stroke-linejoin="round"/>
       ${b.warm ? `<path d="${kurve(b.p, false)}" fill="none" stroke="#FF9500" stroke-width="${b.breite + .3}" stroke-opacity=".5" stroke-dasharray=".3 .2"/>` : ""}</g>`;
-    else svg += `<g data-beet="${b.id}"><polyline points="${pts(b.linie)}" fill="none" stroke="${bearbeiten ? "#007AFF" : "#C9A06A"}" stroke-width="${b.breite + .14}" stroke-linecap="butt"/><polyline points="${pts(b.linie)}" fill="none" stroke="#5E4129" stroke-width="${b.breite}" stroke-linecap="butt"/></g>`;
+    else svg += `<g data-beet="${b.id}"><polyline points="${pts(b.linie)}" fill="none" stroke="${bearbeiten ? "#536b45" : "#C9A06A"}" stroke-width="${b.breite + .14}" stroke-linecap="butt"/><polyline points="${pts(b.linie)}" fill="none" stroke="#5E4129" stroke-width="${b.breite}" stroke-linecap="butt"/></g>`;
   }
   // Häuschen (Pumpe) u. ä.
-  for (const e of daten.karte.elemente) svg += `<g data-element="${e.id}"><rect x="${e.x - e.w / 2}" y="${e.y - e.h / 2}" width="${e.w}" height="${e.h}" fill="#B8573F" stroke="${bearbeiten ? "#007AFF" : "#7A2A20"}" stroke-width=".1" rx=".05"/>
+  for (const e of daten.karte.elemente) svg += `<g data-element="${e.id}"><rect x="${e.x - e.w / 2}" y="${e.y - e.h / 2}" width="${e.w}" height="${e.h}" fill="#B8573F" stroke="${bearbeiten ? "#536b45" : "#7A2A20"}" stroke-width=".1" rx=".05"/>
     <path d="M${e.x - e.w / 2} ${e.y - e.h / 2} L${e.x + e.w / 2} ${e.y + e.h / 2} M${e.x + e.w / 2} ${e.y - e.h / 2} L${e.x - e.w / 2} ${e.y + e.h / 2}" stroke="#9E3A2E" stroke-width=".07"/></g>`;
   // Pflanzen
   for (const s of segmente) {
@@ -1070,7 +1071,7 @@ function karteBauen(box) {
   }
   svg += beschriftung;
   // Bearbeiten: Anfasser für die Punkte der Erdhaufen/Kästen
-  if (bearbeiten && !gelaendeEdit) for (const b of daten.karte.beete) b.p.forEach(([x, y], i) => { svg += `<circle cx="${x}" cy="${y}" r="${k * .45}" fill="#fff" stroke="#007AFF" stroke-width="${k * .14}" data-punkt="${b.id}:${i}"/>`; });
+  if (bearbeiten && !gelaendeEdit) for (const b of daten.karte.beete) b.p.forEach(([x, y], i) => { svg += `<circle cx="${x}" cy="${y}" r="${k * .45}" fill="#fff" stroke="#536b45" stroke-width="${k * .14}" data-punkt="${b.id}:${i}"/>`; });
   // Gelände ändern: Anfasser an Bäumen, Hecken, Wegen, Gebäuden (auch die Form des Gewächshauses)
   if (bearbeiten && gelaendeEdit) (gelaende || []).forEach((e, gi) => {
     const drin = ([x, y]) => x > box.x - 1 && x < box.x + box.w + 1 && y > box.y - 1 && y < box.y + box.h + 1;
@@ -1087,7 +1088,7 @@ function zeichnePlan() {
 
   const beetKarte = s => {
     const b = s.b, ps = segmente.filter(x => x.b.id === b.id), tags = [];
-    if (b.wasser) tags.push(["Tropfbewässerung", "#007AFF"]);
+    if (b.wasser) tags.push(["Tropfbewässerung", "#536b45"]);
     if (b.warm) tags.push(["Wärme-Ecke", "#FF9500"]);
     else if (ps.some(x => WAERME[x.pf.id])) tags.push(["Wärme-Ecke fehlt", "#FF9500"]);
     return `<div class="schild" data-a="beet" data-w="${b.id}" data-nr="${s.nr}">
@@ -1099,7 +1100,7 @@ function zeichnePlan() {
   const karte = s => {
     if (s.beetKarte) return beetKarte(s);
     const { pf, p, b } = s, m = monat(), tags = [], dach = b.bereich === "gh";
-    if (pf.wasser === 3) tags.push(["viel Wasser", "#007AFF"]);
+    if (pf.wasser === 3) tags.push(["viel Wasser", "#536b45"]);
     if (WAERME[pf.id] && !b.warm) tags.push(["braucht Wärme", "#FF9500"]);
     if (pf.ernte.includes(m)) tags.push(["Erntezeit", "#C77700"]);
     if ((dach ? pf.ghm : pf.draussen).includes(m)) tags.push(["jetzt pflanzen", "#34A853"]);
@@ -1346,15 +1347,15 @@ function zeichneHeute() {
   if (alleBeete().some(b => b.bereich === "gh" && b.art === "hochbeet")) {
     const tropf = alleBeete().some(b => b.bereich === "gh" && b.art === "hochbeet" && b.wasser);
     const takt = tmax >= 28 ? "1× täglich morgens ca. 20 Minuten, an heißen Nachmittagen nochmal 10 Minuten" : tmax >= 20 ? "1× täglich morgens ca. 15 Minuten" : tmax >= 12 ? "alle 2 Tage morgens ca. 10–15 Minuten" : "nur alle 3–5 Tage, wenn die Erde 3 cm tief trocken ist";
-    aufgaben.push(["tropfen", "#007AFF", "Gießen unter dem Dach", "Dort kommt kein Regen an. " + (tropf ? `Tropfbewässerung ${takt}. ` : `${takt.replace("Minuten", "Minuten gießen")}. `) +
+    aufgaben.push(["tropfen", "#536b45", "Gießen unter dem Dach", "Dort kommt kein Regen an. " + (tropf ? `Tropfbewässerung ${takt}. ` : `${takt.replace("Minuten", "Minuten gießen")}. `) +
       "Fingerprobe: 3 cm tief muss die Erde feucht sein. Faustregel: Tomate/Gurke im Sommer 2–3 l pro Pflanze und Tag." + (tropf ? " (Laufzeiten an euren Tropfschlauch anpassen.)" : "")]);
     if (tmax >= 30) aufgaben.push(["sonne", "#FF9500", "Hitze unter der Folie", "Unter dem Dach staut sich die Wärme – morgens gründlich gießen, Erde mulchen (Holzhäcksel/Rasenschnitt)."]);
   }
   // Draußen gießen
   if (draussen.length || alleBeete().some(b => b.bereich !== "gh")) {
     if (regen2 >= 5) aufgaben.push(["tropfen", "#8E8E93", "Draußen nicht gießen", `In den nächsten 2 Tagen kommen ca. ${Math.round(regen2)} mm Regen.`]);
-    else if (tmax >= 25) aufgaben.push(["tropfen", "#007AFF", "Erdstreifen kräftig gießen", "Früh morgens ca. 15–20 l pro Meter Erdstreifen, lieber selten und durchdringend als täglich ein bisschen. Danach mulchen (Rasenschnitt) hält die Feuchte."]);
-    else if (tmax >= 15) aufgaben.push(["tropfen", "#007AFF", "Erdstreifen gießen, wenn trocken", "Alle 2–3 Tage ca. 10 l pro Meter, Keimlinge und frische Saat täglich mit feiner Brause."]);
+    else if (tmax >= 25) aufgaben.push(["tropfen", "#536b45", "Erdstreifen kräftig gießen", "Früh morgens ca. 15–20 l pro Meter Erdstreifen, lieber selten und durchdringend als täglich ein bisschen. Danach mulchen (Rasenschnitt) hält die Feuchte."]);
+    else if (tmax >= 15) aufgaben.push(["tropfen", "#536b45", "Erdstreifen gießen, wenn trocken", "Alle 2–3 Tage ca. 10 l pro Meter, Keimlinge und frische Saat täglich mit feiner Brause."]);
     else if (draussen.length) aufgaben.push(["tropfen", "#8E8E93", "Draußen kaum gießen", "Bei der Kühle reicht meist der Regen – nur frische Aussaaten feucht halten."]);
   }
   // Düngen (Starkzehrer im Sommer)
@@ -1446,7 +1447,7 @@ function zeichneWissen() {
     <div class="karte"><h2>Selbst vorziehen, direkt säen oder Jungpflanzen kaufen?</h2>
       <div class="folge">
         <div><span class="weg" style="background:#34A8531A;color:#34A853">Direkt ins Beet säen</span><div class="klein" style="margin-top:6px">Alles, was schnell keimt oder Umpflanzen nicht mag: Möhre, Radieschen, Spinat, Bohnen, Erbsen, Feldsalat, Rote Bete, Dill.</div></div>
-        <div><span class="weg" style="background:#007AFF1A;color:#007AFF">Selbst vorziehen</span><div class="klein" style="margin-top:6px">Lohnt sich bei vielen Pflanzen oder besonderen Sorten: Tomate, Zucchini, Kürbis, Kohl, Salat, Mais. Braucht eine helle Fensterbank.</div></div>
+        <div><span class="weg" style="background:#536b451A;color:#536b45">Selbst vorziehen</span><div class="klein" style="margin-top:6px">Lohnt sich bei vielen Pflanzen oder besonderen Sorten: Tomate, Zucchini, Kürbis, Kohl, Salat, Mais. Braucht eine helle Fensterbank.</div></div>
         <div><span class="weg" style="background:#FF95001A;color:#FF9500">Jungpflanzen kaufen</span><div class="klein" style="margin-top:6px">Was sehr früh Wärme braucht oder schwierig ist: Paprika, Chili, Aubergine, Sellerie, Lauch, Blumenkohl, Kräuter. Im ersten Jahr auch gern bei Tomaten.</div></div>
         <div><span class="weg" style="background:#8E5B3A1A;color:#8E5B3A">Stecken / Legen</span><div class="klein" style="margin-top:6px">Zwiebeln, Schalotten, Knoblauch und Kartoffeln – einfach in die Erde, fast kein Risiko.</div></div>
       </div>
@@ -1638,7 +1639,7 @@ function eignung(pf, b) {
   const monate = b.bereich === "gh" ? [...pf.ghm, ...pf.vorziehen] : [...pf.draussen, ...pf.vorziehen];
   if (monate.some(x => x === m || x === m % 12 + 1)) { w += 2; gruende.push(["jetzt pflanzen", "#34A853"]); }
   if (WAERME[pf.id] && !b.warm) { w -= b.bereich === "gh" ? 2 : 4; gruende.push(["braucht Wärme", "#FF9500"]); }
-  if (pf.gh === "bevorzugt" && b.bereich === "gh") gruende.push(["mag den Regenschutz", "#007AFF"]);
+  if (pf.gh === "bevorzugt" && b.bereich === "gh") gruende.push(["mag den Regenschutz", "#536b45"]);
   if (drin.some(x => x.pflanze === pf.id)) w -= 5;
   return { w, gruende };
 }
