@@ -238,6 +238,64 @@ script:
       - stop: fertig
         response_variable: antwort
 
+  jarvis_wetter:
+    alias: Jarvis Wetter
+    description: >-
+      Liefert das Wetter für zu Hause (Ovelgönne): jetzt, Stunde für Stunde für die nächsten 24 Stunden,
+      die nächsten 7 Tage und Unwetterwarnungen des Deutschen Wetterdienstes. Nutze das IMMER bei Fragen zum
+      Wetter, zu Regen, Sonne, Wind, Temperatur, Frost, Schnee, "Brauche ich eine Jacke/einen Schirm?",
+      "Kann ich die Wäsche rausmachen?", "Wie wird das Wetter morgen/am Wochenende?". Antworte kurz und
+      gesprochen, mit deutschen Wörtern statt der englischen Zustände (rainy = Regen, cloudy = bewölkt,
+      partlycloudy = teils bewölkt, sunny = sonnig, fog = Nebel, clear-night = klar, pouring = Starkregen,
+      windy = windig, snowy = Schnee, lightning-rainy = Gewitter). Sag nie, dass du das Wetter nicht abrufen kannst,
+      wenn hier Daten zurückkommen.
+    icon: mdi:weather-partly-cloudy
+    mode: parallel
+    sequence:
+      - action: weather.get_forecasts
+        continue_on_error: true
+        target:
+          entity_id: weather.touchmonitor_home
+        data:
+          type: hourly
+        response_variable: std
+      - action: weather.get_forecasts
+        continue_on_error: true
+        target:
+          entity_id: weather.touchmonitor_home
+        data:
+          type: daily
+        response_variable: tage
+      - variables:
+          e: weather.touchmonitor_home
+      - variables:
+          antwort:
+            jetzt: >-
+              {{ {'zustand': states(e), 'grad': state_attr(e, 'temperature'), 'wind': state_attr(e, 'wind_speed'),
+                  'wind_einheit': state_attr(e, 'wind_speed_unit'), 'luftfeuchte': state_attr(e, 'humidity'),
+                  'uhrzeit': now().strftime('%H:%M')} }}
+            stunden: >-
+              {% set fc = std[e].forecast if std is defined and std is mapping and e in std else [] %}
+              {% set ns = namespace(l=[]) %}
+              {% for f in fc[:24] %}
+                {% set ns.l = ns.l + [{'uhr': ['Mo','Di','Mi','Do','Fr','Sa','So'][(f.datetime | as_datetime | as_local).weekday()] ~ ' ' ~ (f.datetime | as_datetime | as_local).strftime('%H:%M'), 'zustand': f.condition,
+                   'grad': f.temperature, 'regen_mm': f.precipitation | default(0), 'wind': f.wind_speed | default(none)}] %}
+              {% endfor %}
+              {{ ns.l }}
+            tage: >-
+              {% set fc = tage[e].forecast if tage is defined and tage is mapping and e in tage else [] %}
+              {% set ns = namespace(l=[]) %}
+              {% for f in fc[:7] %}
+                {% set d = f.datetime | as_datetime | as_local %}
+                {% set ns.l = ns.l + [{'tag': ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'][d.weekday()] ~ ' ' ~ d.strftime('%d.%m.'),
+                   'zustand': f.condition, 'max': f.temperature, 'min': f.templow | default(none),
+                   'regen_mm': f.precipitation | default(0), 'regenwahrscheinlichkeit': f.precipitation_probability | default(none)}] %}
+              {% endfor %}
+              {{ ns.l }}
+            warnungen: "{{ (state_attr('sensor.unwetter', 'warnungen') or []) | map(attribute='titel') | list }}"
+      - stop: fertig
+        response_variable: antwort
+
   jarvis_haustuer_abschliessen:
     alias: Jarvis Haustür abschließen
     description: >-
