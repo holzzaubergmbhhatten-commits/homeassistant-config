@@ -32,6 +32,12 @@ ist das die reine Fahrzeit ab Ovelgönne in eine Richtung – streng einhalten, 
 Ziele gern über den Bereich verteilen (nicht alles ganz nah). Bei "Wochenende mit Übernachtung": Ziele dürfen weiter weg liegen
 (je nach gewählter Weite), schlage in "einkehr" eine passende familienfreundliche Unterkunft mit Name vor und plane den
 "ablauf" über zwei Tage (Zeiten mit "Sa"/"So" davor); bei Fahrrad eine Zwei-Tages-Tour mit Übernachtung unterwegs. Mit Kind: kindgerecht. Ehrlich bleiben – nichts erfinden.
+Für Fahrrad- und Wandertouren suche zusätzlich fertige Touren auf Komoot (komoot.com/de-de/tour/… oder
+komoot.com/de-de/smarttour/…), Outdooractive, im ADFC-Tourenportal und auf den offiziellen Radweg-Seiten
+(Weser-Radweg, Nordseeküstenradweg, Moorroute, Wesermarsch-Touren). Passt eine fertige Tour, nimm sie als Grundlage und
+gib den echten Link in "touren" an (nur Links, die du in der Suche gesehen hast – nichts erfinden), mit Länge und
+Höhenmetern im Namen, z. B. "Komoot: Deichrunde Brake – 32 km". Auch für Auto/Bahn: schöne Touren vor Ort (Spaziergang,
+Radverleih) gern verlinken.
 Antworte am Ende NUR mit JSON:
 {"ideen": [{"name": "…", "kategorie": "Natur|Tiere|Spielplatz|Wellness|Baden|Museum|Stadt|Essen|Abenteuer|Strand|Drinnen",
   "kurz": "1 Satz", "beschreibung": "2–3 Sätze, was euch erwartet", "warum": "warum es heute passt",
@@ -39,7 +45,7 @@ Antworte am Ende NUR mit JSON:
   "oeffnung": "heute geöffnet …", "preis": "Erwachsene … / Kinder …", "webseite": "https://…",
   "zwischenstopps": [{"name": "…", "lat": 53.3, "lon": 8.4}],
   "ablauf": [{"zeit": "10:00", "was": "Abfahrt zu Hause"}], "tipps": ["…"], "mitnehmen": ["…"],
-  "einkehr": "Café/Restaurant mit Name"}],
+  "einkehr": "Café/Restaurant mit Name", "touren": [{"name": "Komoot: … – 32 km", "url": "https://www.komoot.com/…"}]}],
  "hinweis": "1 Satz zum Wetter/Tag"}
 5 bis 6 Ideen, verschieden (nicht alles dieselbe Art). Bei Fahrrad: Rundtour, Entfernung = Tour gesamt in km; zwischenstopps =
 2–3 schöne Punkte auf dem Weg (für die Route), die WIRKLICH zwischen Ovelgönne und dem Ziel liegen (kein Umweg).
@@ -86,7 +92,9 @@ def idee_sauber(x):
             "ablauf": [{"zeit": str(a.get("zeit") or "")[:10], "was": str(a.get("was") or "")[:140]}
                        for a in x.get("ablauf") or [] if isinstance(a, dict)][:8],
             "tipps": [str(a)[:140] for a in x.get("tipps") or []][:5], "mitnehmen": [str(a)[:60] for a in x.get("mitnehmen") or []][:8],
-            "einkehr": t("einkehr", 140), "bild": ""}
+            "einkehr": t("einkehr", 140), "bild": "",
+            "touren": [{"name": str(z.get("name") or "Tour")[:80], "url": str(z.get("url"))[:300]}
+                       for z in x.get("touren") or [] if isinstance(z, dict) and str(z.get("url") or "").startswith("https://")][:3]}
 
 
 def ideen_machen(auftrag):
@@ -103,7 +111,7 @@ def ideen_machen(auftrag):
              + (f"Waren schon da (nicht wieder vorschlagen): {', '.join(auftrag['erlebt'])}\n" if auftrag.get("erlebt") else ""))
     status(True, "Claude sucht Ausflugsziele und prüft Öffnungszeiten …")
     a = kueche.claude(SYSTEM, frage, max_tokens=12000, effort="medium", timeout=300,
-                      werkzeuge=[{"type": "web_search_20260209", "name": "web_search", "max_uses": 10,
+                      werkzeuge=[{"type": "web_search_20260209", "name": "web_search", "max_uses": 14,
                                   "user_location": {"type": "approximate", "city": "Ovelgönne", "region": "Niedersachsen",
                                                     "country": "DE", "timezone": "Europe/Berlin"}}])
     ideen = [idee_sauber(x) for x in a.get("ideen") or [] if isinstance(x, dict) and x.get("name")][:6]
@@ -150,7 +158,8 @@ def im_hintergrund(auftrag):
                 mehr = " · ".join(x for x in (f"{round(i['entfernung_km'])} km" if i.get("entfernung_km") else "",
                                               "drinnen" if i.get("drinnen") else "", i.get("preis", "")[:40]) if x)
                 zeilen.append(f"• {i['name']} – {i['kurz']}" + (f" ({mehr})" if mehr else "")
-                              + f"\n  Karte: https://www.google.com/maps/search/?api=1&query={ort}")
+                              + f"\n  Karte: https://www.google.com/maps/search/?api=1&query={ort}"
+                              + "".join(f"\n  {t['name']}: {t['url']}" for t in i.get("touren") or []))
             kueche.senden(auftrag["chat"], "🚲 Ausflugsideen:\n" + "\n".join(zeilen)
                           + "\n\nAblauf, Bilder und Route ab Haustür am Monitor unter „Ausflug“.")
     except Exception as fehler:  # noqa: BLE001
