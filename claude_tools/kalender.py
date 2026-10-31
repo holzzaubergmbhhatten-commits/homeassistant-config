@@ -91,19 +91,33 @@ def main():
                 continue
             start, ganz = lese_zeitpunkt(start_z)
             tag = start if ganz else start.date()
-            if alt_datum and tag.isoformat() != alt_datum:
-                continue
             if alt_titel and alt_titel not in summary.lower() and summary.lower() not in alt_titel:
+                continue
+            serie = any(z.startswith("RRULE") for z in zeilen)
+            # Serientermine (z. B. jeden Dienstag) beginnen an einem früheren Tag – die passen über den Titel
+            if alt_datum and tag.isoformat() != alt_datum and not (serie and alt_titel and tag.isoformat() <= alt_datum):
                 continue
             treffer.append((b, zeilen, summary, start, ganz))
         if not treffer:
             continue
+        # genauer Tag vor Serie
+        treffer.sort(key=lambda t: 0 if (t[3] if t[4] else t[3].date()).isoformat() == alt_datum else 1)
         if len(treffer) > 1 and not alt_titel:
             print(f"❓ Am {alt_datum} gibt es mehrere Termine – bitte den Titel dazuschreiben.")
             return
         b, zeilen, summary, start, ganz = treffer[0]
         if any(z.startswith("RRULE") for z in zeilen):
-            print(f"🔁 {summary} ist ein Serientermin – den bitte am Handy im Kalender ändern.")
+            # Serie: nur den Namen für alle Termine ändern; Verschieben/Löschen einzelner Termine geht nicht
+            neuer_titel = text(auftrag.get("titel"))
+            if aktion == "aendern" and neuer_titel and not text(auftrag.get("datum")) and not text(auftrag.get("uhrzeit")):
+                neue_zeilen = [("SUMMARY:" + neuer_titel) if z.startswith("SUMMARY") else
+                               ("SEQUENCE:" + str(int(z.split(":", 1)[1] or 0) + 1)) if z.startswith("SEQUENCE:") else z
+                               for z in zeilen]
+                speichere(datei, inhalt[: b.start()] + nl.join(neue_zeilen) + inhalt[b.end():])
+                print(f"✏️ Geändert: {summary} heißt jetzt „{neuer_titel}“ (alle Termine der Serie)")
+                return
+            print(f"🔁 {summary} ist ein Serientermin – den Namen kann ich für alle Termine ändern, "
+                  "einzelne Termine der Serie verschieben oder löschen kann ich noch nicht.")
             return
         ende_z = next((z for z in zeilen if z.startswith("DTEND")), None)
         ende, _ = lese_zeitpunkt(ende_z) if ende_z else (None, ganz)
