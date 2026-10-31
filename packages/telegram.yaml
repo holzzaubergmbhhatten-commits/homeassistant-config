@@ -44,6 +44,13 @@ automation:
   - condition: template
     value_template: >-
       {{ not (trigger.event.data.text | default('') | string) is search('(geh(ö|oe)r\w*\s.{0,40}zusammen|kosten\s*-?\s*aufstellung|(belege|rechnungen|quittungen|kosten|fotos|bilder)\\b.{0,60}(zusammen|addier|summier)|zusammen\s*(zu\s*)?(fass|führ|fuehr)\w*\s.{0,40}(pdf|belege?|rechnung)|nicht\s+(mehr\s+)?zusammen|zusammen\s*(zu\s*)?(ge)?(füg|fueg|heft)|auseinander\s*(nehmen|machen)|\\btrennen\\b|(getrennt|einzeln)\s+ablegen)', ignorecase=True) }}
+  # Müll (packages/muell.yaml) und Küche/Essensplan (packages/kueche.yaml) antworten selbst
+  - condition: template
+    value_template: >-
+      {% set t = trigger.event.data.text | default('') | string %}
+      {{ not (t is match('^\s*/?(m(ü|ue)ll|abfall|tonnen?)\s*-?\s*(link|kalender|termine)?\s*([:?!.]|$)', ignorecase=True)
+              or t is search('^\s*wann\s+(ist|kommt|wird)\s+.{0,20}(m(ü|ue)ll|tonne|abfall|gelbe|papier)', ignorecase=True)
+              or t is search('m(ü|ue)ll.{0,20}(webcal|https?)://', ignorecase=True)) }}
   # Nachrichten an Familienmitglieder ("Schick Mirka: …") und Schreiben ("Mach ein Schreiben für die Kündigung …") macht die Akte
   - condition: template
     value_template: >-

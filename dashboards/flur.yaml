@@ -39,6 +39,20 @@ views:
             perform_action: script.jarvis_monitor_nachricht
             data:
               text: ''
+    # Hinweise vom Haus-Wächter (packages/haus_waechter.yaml): Wasser/Rauch, Müll, Wäsche fertig, Batterien – nur wenn etwas ansteht
+    - type: conditional
+      grid_options:
+        columns: full
+      conditions:
+      - condition: numeric_state
+        entity: sensor.haus_hinweise
+        above: 0
+      card:
+        type: markdown
+        content: |-
+          {% for h in state_attr('sensor.haus_hinweise', 'liste') or [] %}
+          {{ '<br>' if not loop.first }}<font color="{{ h.farbe }}"><ha-icon icon="{{ h.icon }}"></ha-icon></font> <b>{{ h.text }}</b>
+          {%- endfor %}
     # Begrüßung mit Familienwappen (Bild von der eigenen Webseite), darunter Uhrzeit und Datum
     - type: markdown
       text_only: true
@@ -385,6 +399,17 @@ views:
       grid_options:
         columns: 4
         rows: 2
+    - type: tile
+      entity: input_boolean.urlaubsmodus
+      name: Urlaubsmodus
+      icon: mdi:bag-suitcase
+      tap_action:
+        action: toggle
+        confirmation:
+          text: Urlaubsmodus umschalten? (Licht wie bewohnt, Morgen-Ansage aus, strenger Wasser-Wächter)
+      grid_options:
+        columns: full
+        rows: 1
     - type: tile
       entity: input_select.design
       name: Design

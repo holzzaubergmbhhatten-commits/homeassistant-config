@@ -1,0 +1,116 @@
+# Morgen-Nachricht per Telegram an alle (Mo–Fr 6:40, Sa/So 8:10 – kurz nach der Morgen-Ansage auf den HomePods):
+# Termine, Müll, Essen heute, fällige Aufgaben, Fristen aus der Akte (claude_tools/tagesbrief.py), Wetter, Batterien.
+# Abschalten: input_boolean.tagesbrief_pause (Einstellungen → Geräte & Dienste → Helfer → „Morgen-Nachricht pausieren“).
+shell_command:
+  tagesbrief_fristen: python3 /config/claude_tools/tagesbrief.py
+
+input_boolean:
+  tagesbrief_pause:
+    name: Morgen-Nachricht pausieren
+    icon: mdi:message-off-outline
+
+script:
+  tagesbrief_senden:
+    alias: Morgen-Nachricht per Telegram senden
+    description: Schickt die Morgen-Nachricht (Termine, Müll, Essen, Aufgaben, Fristen, Wetter) an alle oder an einen Chat.
+    icon: mdi:weather-sunset-up
+    mode: queued
+    fields:
+      chat:
+        description: Telegram-Chat (leer = alle)
+    sequence:
+      - action: weather.get_forecasts
+        continue_on_error: true
+        target:
+          entity_id: weather.touchmonitor_home
+        data:
+          type: daily
+        response_variable: wetter
+      - action: shell_command.tagesbrief_fristen
+        continue_on_error: true
+        response_variable: fr
+      - variables:
+          fristen: >-
+            {% set a = fr.stdout | default('') if fr is defined and fr is mapping else '' %}
+            {{ (a | from_json).fristen if (a | string).startswith('{') else [] }}
+          w: >-
+            {% set fc = wetter['weather.touchmonitor_home'].forecast if wetter is defined and wetter is mapping
+                        and 'weather.touchmonitor_home' in wetter else [] %}
+            {{ fc[0] if fc else {} }}
+          ziele: >-
+            {{ [chat | string] if chat | default('', true) | string | trim
+               else (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+          text: |-
+            {%- set tage = ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'] %}
+            {%- set heute = now().strftime('%Y-%m-%d') %}
+            {%- set wz = {'sunny': 'sonnig', 'clear-night': 'klar', 'partlycloudy': 'teils bewölkt', 'cloudy': 'bewölkt',
+                'rainy': 'Regen', 'pouring': 'Starkregen', 'fog': 'Nebel', 'snowy': 'Schnee', 'snowy-rainy': 'Schneeregen',
+                'windy': 'windig', 'windy-variant': 'windig', 'lightning': 'Gewitter', 'lightning-rainy': 'Gewitter', 'hail': 'Hagel'} %}
+            ☀️ Guten Morgen! {{ tage[now().weekday()] }}, {{ now().strftime('%d.%m.') }}
+            {%- if w %}
+            🌤 {{ wz.get(w.condition, w.condition) }}, {% if w.templow is defined and w.templow is not none %}{{ w.templow | round(0) | int }}–{% endif %}{{ w.temperature | round(0) | int }} °C{{ ', Regen ' ~ w.precipitation_probability ~ ' %' if (w.precipitation_probability | default(0) | int(0)) >= 30 else '' }}
+            {%- endif %}
+            {%- set t = (state_attr('sensor.termine_vorschau', 'familie') or []) | selectattr('start', 'search', '^' ~ heute) | list %}
+            {%- if t %}
+            📅 Heute:
+            {%- for x in t %}
+            • {{ x.start[11:16] ~ ' ' if 'T' in (x.start | string) else '' }}{{ x.titel }}
+            {%- endfor %}
+            {%- else %}
+            📅 Heute keine Termine
+            {%- endif %}
+            {%- set mh = state_attr('sensor.muell', 'heute') or [] %}{% set mm = state_attr('sensor.muell', 'morgen') or [] %}
+            {%- if mh %}
+            🗑 Heute wird abgeholt: {{ mh | join(', ') }}
+            {%- endif %}
+            {%- if mm %}
+            🗑 Morgen wird abgeholt: {{ mm | join(', ') }} (heute Abend rausstellen)
+            {%- endif %}
+            {%- set e = state_attr('sensor.kueche_heute', 'gericht') %}
+            {%- if e %}
+            🍽 Essen heute: {{ e }}{{ ' (' ~ state_attr('sensor.kueche_heute', 'hinweis') ~ ')' if state_attr('sensor.kueche_heute', 'hinweis') }}
+            {%- endif %}
+            {%- set f = (state_attr('sensor.aufgaben_liste', 'items') or []) | selectattr('faellig', 'ne', '') | selectattr('faellig', 'le', heute) | list %}
+            {%- if f %}
+            ✅ Fällig:
+            {%- for x in f[:6] %}
+            • {{ x.titel }}{{ ' (überfällig)' if x.faellig < heute else '' }}
+            {%- endfor %}
+            {%- endif %}
+            {%- if fristen %}
+            ⏰ Fristen:
+            {%- for x in fristen %}
+            • {{ x.tag }}: {{ x.was }}{{ ' – ' ~ x.titel if x.titel }}
+            {%- endfor %}
+            {%- endif %}
+            {%- set b = state_attr('sensor.batterien_schwach', 'liste') or [] %}
+            {%- if b %}
+            🔋 Batterie tauschen: {{ b | map(attribute='name') | join(', ') }}
+            {%- endif %}
+      - repeat:
+          for_each: "{{ ziele }}"
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                chat_id: "{{ repeat.item | int }}"
+                message: "{{ text }}"
+
+automation:
+  - id: tagesbrief_morgens
+    alias: "Morgen-Nachricht per Telegram"
+    triggers:
+      - trigger: time
+        at: "06:40:00"
+        id: werktag
+      - trigger: time
+        at: "08:10:00"
+        id: wochenende
+    conditions:
+      - condition: template
+        value_template: "{{ (now().weekday() < 5) == (trigger.id == 'werktag') }}"
+      - condition: state
+        entity_id: input_boolean.tagesbrief_pause
+        state: "off"
+    actions:
+      - action: script.tagesbrief_senden

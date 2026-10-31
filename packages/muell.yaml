@@ -1,0 +1,142 @@
+# Müllabfuhr der GIB Wesermarsch (claude_tools/muell.py): Termine aus dem Kalender der GIB-Abfall-App.
+# - Einrichten: in der GIB-Abfall-App den Kalender-Link (iCal/„Kalender abonnieren“) kopieren und dem Telegram-Bot
+#   schicken: „Müll-Link: https://…“ – oder die .ics-Datei an den Bot schicken. Link und Termine bleiben lokal.
+# - Monitor: am Vortag ab 12 Uhr „Morgen wird abgeholt: …“, am Abholtag bis 10 Uhr „Heute …“ (sensor.haus_hinweise).
+# - Telegram: am Vortag um 18:30 Erinnerung an alle; „Müll“ an den Bot → die nächsten Termine.
+# - Morgen-Nachricht und Morgen-Ansage nennen heute/morgen (packages/tagesbrief.yaml, script.jarvis_tagesueberblick).
+shell_command:
+  muell: python3 /config/claude_tools/muell.py {{ aktion }} {{ wert | default('') }}
+
+template:
+  - triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: 2
+      - trigger: event
+        event_type: muell_neu
+    actions:
+      - action: shell_command.muell
+        continue_on_error: true
+        data:
+          aktion: "{{ 'holen' if trigger.platform == 'homeassistant' or now().hour == 4 else 'stand' }}"
+        response_variable: roh
+      - variables:
+          m: >-
+            {% set a = roh.stdout | default('') if roh is defined and roh is mapping else '' %}
+            {{ a | from_json if (a | string).startswith('{') else {} }}
+    sensor:
+      - name: Muell
+        unique_id: muell
+        icon: mdi:trash-can-outline
+        state: "{{ (m.naechste | default([]) | first | default({})).get('tag', 'unbekannt') }}"
+        attributes:
+          naechste: "{{ m.naechste | default([]) }}"
+          heute: "{{ m.heute | default([]) }}"
+          morgen: "{{ m.morgen | default([]) }}"
+          hinweis: "{{ m.hinweis | default([]) }}"
+          text: "{{ m.text | default('') }}"
+          bis: "{{ m.bis | default('') }}"
+          fehler: "{{ m.fehler | default('') }}"
+
+automation:
+  - id: muell_erinnerung_vorabend
+    alias: "Müll: Erinnerung am Vorabend"
+    triggers:
+      - trigger: time
+        at: "18:30:00"
+    conditions:
+      - condition: template
+        value_template: "{{ state_attr('sensor.muell', 'morgen') | default([], true) | count > 0 }}"
+    actions:
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                chat_id: "{{ repeat.item | int }}"
+                message: "🗑 Morgen wird abgeholt: {{ state_attr('sensor.muell', 'morgen') | join(', ') }} – bitte heute Abend rausstellen."
+
+  # Telegram: „Müll“ / „Wann ist Müll?“ → nächste Termine; „Müll-Link: https://…“ → Kalender einrichten
+  - id: muell_telegram
+    alias: "Müll: Telegram-Befehle"
+    mode: queued
+    triggers:
+      - trigger: event
+        event_type: telegram_text
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ (trigger.event.data.text | default('') | string)
+             is match('^\s*/?(m(ü|ue)ll|abfall|tonnen?)\s*-?\s*(link|kalender|termine)?\s*([:?!.]|$)', ignorecase=True)
+             or (trigger.event.data.text | default('') | string) is search('^\s*wann\s+(ist|kommt|wird)\s+.{0,20}(m(ü|ue)ll|tonne|abfall|gelbe|papier)', ignorecase=True)
+             or (trigger.event.data.text | default('') | string) is search('m(ü|ue)ll.{0,20}(webcal|https?)://', ignorecase=True) }}
+    actions:
+      - variables:
+          text: "{{ trigger.event.data.text | string }}"
+          ist_link: "{{ text is search('(webcal|https?)://', ignorecase=True) }}"
+      - action: shell_command.muell
+        continue_on_error: true
+        data:
+          aktion: "{{ 'link' if ist_link else 'stand' }}"
+          wert: "{{ text | base64_encode if ist_link else '' }}"
+        response_variable: roh
+      - variables:
+          m: >-
+            {% set a = roh.stdout | default('') if roh is defined and roh is mapping else '' %}
+            {{ a | from_json if (a | string).startswith('{') else {'fehler': 'keine Antwort'} }}
+      - event: muell_neu
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ trigger.event.data.chat_id }}"
+          message: |-
+            {%- if m.fehler | default('') %}⚠️ Müll-Kalender: {{ m.fehler }}
+            {%- elif not (m.naechste | default([])) %}🗑 {{ m.text }}
+            {%- else %}🗑 {{ '✅ Müll-Kalender eingerichtet. ' if ist_link else '' }}Die nächsten Abholungen:
+            {%- for t in m.naechste[:6] %}
+            • {{ t.tag }}: {{ t.art }}
+            {%- endfor %}
+            {%- endif %}
+
+  # .ics-Datei an den Bot → als Müll-Kalender übernehmen
+  - id: muell_telegram_datei
+    alias: "Müll: Kalender-Datei aus Telegram"
+    mode: queued
+    triggers:
+      - trigger: event
+        event_type: telegram_attachment
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ 'calendar' in (trigger.event.data.file_mime_type | default('') | string)
+             or (trigger.event.data.file_name | default('') | string | lower).endswith('.ics') }}
+    actions:
+      - variables:
+          name: "muell_{{ now().strftime('%Y%m%d_%H%M%S') }}.ics"
+      - action: telegram_bot.download_file
+        continue_on_error: true
+        data:
+          file_id: "{{ trigger.event.data.file_id }}"
+          directory_path: /media/akte/_eingang
+          file_name: "{{ name }}"
+      - action: shell_command.muell
+        continue_on_error: true
+        data:
+          aktion: datei
+          wert: "{{ {'datei': '/media/akte/_eingang/' ~ name} | to_json | base64_encode }}"
+        response_variable: roh
+      - variables:
+          m: >-
+            {% set a = roh.stdout | default('') if roh is defined and roh is mapping else '' %}
+            {{ a | from_json if (a | string).startswith('{') else {'fehler': 'keine Antwort'} }}
+      - event: muell_neu
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ trigger.event.data.chat_id }}"
+          message: >-
+            {{ '⚠️ Müll-Kalender: ' ~ m.fehler if m.fehler | default('') else '✅ Müll-Kalender übernommen (bis '
+               ~ (m.bis | default('?')) ~ '). Nächste Abholung: ' ~ m.text }}

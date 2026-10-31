@@ -1,0 +1,571 @@
+# Haus-Wächter: passt auf, was im Alltag leicht untergeht.
+# - Batterien: jedes Gerät mit Batterie (Sensoren, Melder, Schlösser …) unter 20 % oder seit einem Tag stumm →
+#   Telegram an Marco ("Batterie tauschen: …") und Hinweis auf dem Monitor; samstags eine Erinnerung, solange etwas offen ist.
+# - Wasser: Conel meldet Alarm oder ein Wassermelder wird nass → Telegram an alle, Monitor, Durchsage.
+#   Wasser läuft ununterbrochen 1 Stunde (im Urlaub 10 Minuten) → Telegram an alle. Abgesperrt wird NICHT automatisch.
+# - Rauchmelder (alle Melder mit Rauch/Gas/CO in Home Assistant) → Telegram an alle, Monitor, Durchsage.
+# - Geräte fertig: Shelly Plug S mit Namen "Waschmaschine", "Trockner", "Spülmaschine"/"Geschirrspüler" → wenn das
+#   Gerät fertig ist, Telegram an alle und Hinweis auf dem Monitor.
+# - Sonnenstrom übrig (Akku voll, PV liefert viel) → einmal am Tag der Tipp, jetzt Waschmaschine & Co. zu starten.
+# - Urlaubsmodus: Licht abends wie bewohnt, Morgen-Ansage aus, Wasser-Wächter strenger, täglicher Kurzbericht.
+# Welche Entität Viessmann/Conel/Melder ist, findet claude_tools/haus_kennungen.py (sensor.haus_kennungen).
+shell_command:
+  haus_kennungen: python3 /config/claude_tools/haus_kennungen.py
+
+input_boolean:
+  urlaubsmodus:
+    name: Urlaubsmodus
+    icon: mdi:bag-suitcase
+  # einmalig: die Aufgaben "Für Claude" sind angelegt (bleibt nach Neustarts gemerkt)
+  claude_aufgaben_angelegt:
+    name: Aufgaben für Claude angelegt
+    icon: mdi:robot-outline
+
+template:
+  - triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: 23
+    actions:
+      - action: shell_command.haus_kennungen
+        continue_on_error: true
+        response_variable: roh
+      - variables:
+          k: >-
+            {% set a = roh.stdout | default('') if roh is defined and roh is mapping else '' %}
+            {{ a | from_json if (a | string).startswith('{') else {} }}
+    sensor:
+      - name: Haus Kennungen
+        unique_id: haus_kennungen
+        icon: mdi:identifier
+        state: "{{ (k.wassermelder | default([]) | count) + (k.rauchmelder | default([]) | count) }}"
+        attributes:
+          pv_leistung: "{{ k.pv_leistung | default('') }}"
+          akku_stand: "{{ k.akku_stand | default('') }}"
+          conel_alarm: "{{ k.conel_alarm | default([]) }}"
+          conel_warnung: "{{ k.conel_warnung | default([]) }}"
+          conel_durchfluss: "{{ k.conel_durchfluss | default('') }}"
+          conel_ventil: "{{ k.conel_ventil | default('') }}"
+          wassermelder: "{{ k.wassermelder | default([]) }}"
+          rauchmelder: "{{ k.rauchmelder | default([]) }}"
+          fehler: "{{ k.fehler | default('') }}"
+
+  - sensor:
+      # Alle Geräte mit Batterie: schwach (≤ 20 %), "Batterie niedrig" gemeldet oder seit einem Tag ohne Meldung.
+      # Handys (Companion-App) und der Hausakku (Viessmann) zählen nicht.
+      - name: Batterien schwach
+        unique_id: batterien_schwach
+        icon: mdi:battery-alert-variant-outline
+        state: "{{ this.attributes.get('liste', []) | count if this is defined else 0 }}"
+        attributes:
+          liste: >-
+            {% set aus = integration_entities('mobile_app') + integration_entities('vicare') %}
+            {% set ns = namespace(l=[], namen=[]) %}
+            {% for s in states.sensor | selectattr('attributes.device_class', 'defined')
+                 | selectattr('attributes.device_class', 'eq', 'battery') if s.entity_id not in aus %}
+              {% set name = device_attr(s.entity_id, 'name_by_user') or device_attr(s.entity_id, 'name') or s.name %}
+              {% if s.state in ['unavailable', 'unknown'] %}
+                {% if now() - s.last_changed > timedelta(hours=24) and name not in ns.namen %}
+                  {% set ns.l = ns.l + [{'name': name, 'wert': 'meldet sich nicht (Batterie leer?)'}] %}{% set ns.namen = ns.namen + [name] %}
+                {% endif %}
+              {% elif is_number(s.state) and s.state | float <= 20 and name not in ns.namen %}
+                {% set ns.l = ns.l + [{'name': name, 'wert': (s.state | float | round(0) | int) ~ ' %'}] %}{% set ns.namen = ns.namen + [name] %}
+              {% endif %}
+            {% endfor %}
+            {% for s in states.binary_sensor | selectattr('attributes.device_class', 'defined')
+                 | selectattr('attributes.device_class', 'eq', 'battery') | selectattr('state', 'eq', 'on') if s.entity_id not in aus %}
+              {% set name = device_attr(s.entity_id, 'name_by_user') or device_attr(s.entity_id, 'name') or s.name %}
+              {% if name not in ns.namen %}{% set ns.l = ns.l + [{'name': name, 'wert': 'Batterie niedrig'}] %}{% set ns.namen = ns.namen + [name] %}{% endif %}
+            {% endfor %}
+            {{ ns.l | sort(attribute='name') }}
+
+  - binary_sensor:
+      # Conel-Alarm (SYR "getALA", "FF" = alles gut) oder ein Wassermelder ist nass
+      - name: Wasser-Alarm
+        unique_id: wasser_alarm
+        device_class: moisture
+        state: >-
+            {% set nass = (state_attr('sensor.haus_kennungen', 'wassermelder') or []) | select('is_state', 'on')
+               | map('state_attr', 'friendly_name') | list %}
+            {% set ns = namespace(t=[]) %}
+            {% if nass %}{% set ns.t = ns.t + ['Nass: ' ~ nass | join(', ')] %}{% endif %}
+            {# Conel/SafeFloor: nur Leckage-Meldungen sind Alarm (Batterie, Netzwerk & Co. stehen als Hinweis auf dem Monitor) #}
+            {% for a in (state_attr('sensor.haus_kennungen', 'conel_alarm') or []) + (state_attr('sensor.haus_kennungen', 'conel_warnung') or []) %}
+              {% if states(a) is search('leak|flood|max_flow|flow_time') %}
+                {% set ns.t = ns.t + [(device_attr(a, 'name_by_user') or device_attr(a, 'name') or 'Conel') ~ ': ' ~ state_translated(a)] %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.t | count > 0 }}
+        attributes:
+          grund: >-
+            {% set nass = (state_attr('sensor.haus_kennungen', 'wassermelder') or []) | select('is_state', 'on')
+               | map('state_attr', 'friendly_name') | list %}
+            {% set ns = namespace(t=[]) %}
+            {% if nass %}{% set ns.t = ns.t + ['Nass: ' ~ nass | join(', ')] %}{% endif %}
+            {# Conel/SafeFloor: nur Leckage-Meldungen sind Alarm (Batterie, Netzwerk & Co. stehen als Hinweis auf dem Monitor) #}
+            {% for a in (state_attr('sensor.haus_kennungen', 'conel_alarm') or []) + (state_attr('sensor.haus_kennungen', 'conel_warnung') or []) %}
+              {% if states(a) is search('leak|flood|max_flow|flow_time') %}
+                {% set ns.t = ns.t + [(device_attr(a, 'name_by_user') or device_attr(a, 'name') or 'Conel') ~ ': ' ~ state_translated(a)] %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.t | join(' · ') }}
+      # Wasser fließt ohne Pause – 1 Stunde, im Urlaub schon nach 10 Minuten
+      - name: Wasser Dauerfluss
+        unique_id: wasser_dauerfluss
+        icon: mdi:water-alert
+        state: >-
+          {% set f = state_attr('sensor.haus_kennungen', 'conel_durchfluss') %}
+          {{ f != '' and f is not none and states(f) | float(0) > 0 }}
+        delay_on: "{{ '00:10:00' if is_state('input_boolean.urlaubsmodus', 'on') else '01:00:00' }}"
+      - name: Rauchmelder Alarm
+        unique_id: rauchmelder_alarm
+        device_class: smoke
+        state: "{{ (state_attr('sensor.haus_kennungen', 'rauchmelder') or []) | select('is_state', 'on') | list | count > 0 }}"
+        attributes:
+          melder: >-
+            {{ (state_attr('sensor.haus_kennungen', 'rauchmelder') or []) | select('is_state', 'on')
+               | map('state_attr', 'friendly_name') | join(', ') }}
+
+      # Geräte über die Shelly Plug S: läuft, solange mehr als 5 Watt fließen (Pausen im Programm überbrückt)
+      - name: Waschmaschine Betrieb
+        unique_id: waschmaschine_betrieb
+        icon: mdi:washing-machine
+        state: >-
+          {{ (states.sensor | selectattr('attributes.device_class', 'defined') | selectattr('attributes.device_class', 'eq', 'power')
+             | selectattr('name', 'search', '(?i)waschmasch') | map(attribute='state') | map('float', 0) | list + [0] ) | max > 5 }}
+        delay_on: "00:02:00"
+        delay_off: "00:05:00"
+      - name: Trockner Betrieb
+        unique_id: trockner_betrieb
+        icon: mdi:tumble-dryer
+        state: >-
+          {{ (states.sensor | selectattr('attributes.device_class', 'defined') | selectattr('attributes.device_class', 'eq', 'power')
+             | selectattr('name', 'search', '(?i)trockner') | map(attribute='state') | map('float', 0) | list + [0] ) | max > 5 }}
+        delay_on: "00:02:00"
+        delay_off: "00:03:00"
+      - name: Spuelmaschine Betrieb
+        unique_id: spuelmaschine_betrieb
+        icon: mdi:dishwasher
+        state: >-
+          {{ (states.sensor | selectattr('attributes.device_class', 'defined') | selectattr('attributes.device_class', 'eq', 'power')
+             | selectattr('name', 'search', '(?i)sp(ü|ue)lmasch|geschirrsp') | map(attribute='state') | map('float', 0) | list + [0] ) | max > 5 }}
+        delay_on: "00:02:00"
+        delay_off: "00:10:00"
+
+  - sensor:
+      # Kurz-Hinweise für den Monitor (Startseite): nur was gerade wichtig ist
+      - name: Haus Hinweise
+        unique_id: haus_hinweise
+        icon: mdi:bell-badge-outline
+        state: "{{ this.attributes.get('liste', []) | count if this is defined else 0 }}"
+        attributes:
+          liste: >-
+            {% set ns = namespace(l=[]) %}
+            {% if is_state('binary_sensor.wasser_alarm', 'on') %}
+              {% set ns.l = ns.l + [{'icon': 'mdi:water-alert', 'farbe': '#FF3B30', 'text': 'WASSER-ALARM: ' ~ state_attr('binary_sensor.wasser_alarm', 'grund')}] %}
+            {% endif %}
+            {% if is_state('binary_sensor.rauchmelder_alarm', 'on') %}
+              {% set ns.l = ns.l + [{'icon': 'mdi:smoke-detector-alert', 'farbe': '#FF3B30', 'text': 'RAUCHMELDER: ' ~ state_attr('binary_sensor.rauchmelder_alarm', 'melder')}] %}
+            {% endif %}
+            {% for a in state_attr('sensor.haus_kennungen', 'conel_alarm') or [] %}
+              {% if states(a) not in ['no_alarm', 'unknown', 'unavailable', 'error_no_information'] and not (states(a) is search('leak|flood|max_flow|flow_time')) %}
+                {% set ns.l = ns.l + [{'icon': 'mdi:water-pump', 'farbe': '#FF9500', 'text': (device_attr(a, 'name_by_user') or device_attr(a, 'name') or 'Conel') ~ ': ' ~ state_translated(a)}] %}
+              {% endif %}
+            {% endfor %}
+            {% if is_state('binary_sensor.wasser_dauerfluss', 'on') %}
+              {% set ns.l = ns.l + [{'icon': 'mdi:water-alert', 'farbe': '#FF9500', 'text': 'Wasser läuft ohne Pause – Hahn oder Garten offen?'}] %}
+            {% endif %}
+            {% for m in state_attr('sensor.muell', 'hinweis') or [] %}
+              {% set ns.l = ns.l + [{'icon': 'mdi:trash-can-outline', 'farbe': '#007AFF', 'text': m}] %}
+            {% endfor %}
+            {% for g in state_attr('sensor.geraete_fertig', 'liste') or [] %}
+              {% set ns.l = ns.l + [{'icon': g.icon, 'farbe': '#34C759', 'text': g.text}] %}
+            {% endfor %}
+            {% for b in state_attr('sensor.batterien_schwach', 'liste') or [] %}
+              {% set ns.l = ns.l + [{'icon': 'mdi:battery-alert-variant-outline', 'farbe': '#FF9500', 'text': 'Batterie tauschen: ' ~ b.name ~ ' (' ~ b.wert ~ ')'}] %}
+            {% endfor %}
+            {% if is_state('input_boolean.urlaubsmodus', 'on') %}
+              {% set ns.l = ns.l + [{'icon': 'mdi:bag-suitcase', 'farbe': '#8E8E93', 'text': 'Urlaubsmodus ist an'}] %}
+            {% endif %}
+            {{ ns.l }}
+
+  # Was ist gerade fertig und wartet aufs Ausräumen: 2 Stunden lang, oder bis das Gerät wieder läuft
+  # (Einträge kommen vom Ereignis "geraet_fertig" aus der Automation unten; bleiben über Neustarts erhalten)
+  - triggers:
+      - trigger: event
+        event_type: geraet_fertig
+        id: neu
+      - trigger: state
+        entity_id: [binary_sensor.waschmaschine_betrieb, binary_sensor.trockner_betrieb, binary_sensor.spuelmaschine_betrieb]
+        to: "on"
+        id: laeuft
+      - trigger: time_pattern
+        minutes: "/5"
+    sensor:
+      - name: Geraete fertig
+        unique_id: geraete_fertig
+        icon: mdi:check-circle-outline
+        state: "{{ this.attributes.get('liste', []) | count if this is defined else 0 }}"
+        attributes:
+          liste: >-
+            {% set alt = (this.attributes.get('liste', []) if this is defined else []) or [] %}
+            {% set weg = trigger.entity_id if trigger.id == 'laeuft' else '' %}
+            {% set ns = namespace(l=[]) %}
+            {% for g in alt if g.entity != weg and g.entity != (trigger.event.data.entity if trigger.id == 'neu' else '')
+                 and as_datetime(g.zeit) > now() - timedelta(hours=2) %}{% set ns.l = ns.l + [g] %}{% endfor %}
+            {% if trigger.id == 'neu' %}
+              {% set ns.l = ns.l + [{'entity': trigger.event.data.entity, 'icon': trigger.event.data.icon, 'zeit': now().isoformat(),
+                 'text': trigger.event.data.name ~ ' ist fertig (' ~ now().strftime('%H:%M') ~ ' Uhr) – bitte ausräumen'}] %}
+            {% endif %}
+            {{ ns.l }}
+
+automation:
+  # ---------- Batterien ----------
+  - id: haus_batterie_neu_schwach
+    alias: "Haus-Wächter: Batterie schwach melden"
+    mode: queued
+    triggers:
+      - trigger: state
+        entity_id: sensor.batterien_schwach
+        attribute: liste
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ trigger.from_state is not none and trigger.from_state.state not in ['unknown', 'unavailable']
+             and trigger.from_state.attributes.liste is defined }}
+    actions:
+      - variables:
+          neu: >-
+            {% set vorher = trigger.from_state.attributes.liste | map(attribute='name') | list %}
+            {{ trigger.to_state.attributes.liste | default([]) | rejectattr('name', 'in', vorher) | list }}
+      - condition: template
+        value_template: "{{ neu | count > 0 }}"
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
+          message: |-
+            🔋 Batterie tauschen:
+            {%- for b in neu %}
+            • {{ b.name }} – {{ b.wert }}
+            {%- endfor %}
+
+  - id: haus_batterie_wochen_erinnerung
+    alias: "Haus-Wächter: Batterien samstags erinnern"
+    triggers:
+      - trigger: time
+        at: "10:07:00"
+    conditions:
+      - condition: time
+        weekday: sat
+      - condition: numeric_state
+        entity_id: sensor.batterien_schwach
+        above: 0
+    actions:
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
+          message: |-
+            🔋 Erinnerung – diese Batterien sind noch schwach:
+            {%- for b in state_attr('sensor.batterien_schwach', 'liste') or [] %}
+            • {{ b.name }} – {{ b.wert }}
+            {%- endfor %}
+
+  # ---------- Wasser & Rauch ----------
+  - id: haus_wasser_rauch_alarm
+    alias: "Haus-Wächter: Wasser- oder Rauchalarm"
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.wasser_alarm
+        to: "on"
+        id: wasser
+      - trigger: state
+        entity_id: binary_sensor.rauchmelder_alarm
+        to: "on"
+        id: rauch
+    actions:
+      - variables:
+          text: >-
+            {{ 'WASSER-ALARM: ' ~ state_attr('binary_sensor.wasser_alarm', 'grund') if trigger.id == 'wasser'
+               else 'RAUCHMELDER-ALARM: ' ~ state_attr('binary_sensor.rauchmelder_alarm', 'melder') }}
+          ansage: >-
+            {{ 'Achtung, Wasseralarm. Bitte sofort nachsehen.' if trigger.id == 'wasser'
+               else 'Achtung, der Rauchmelder hat ausgelöst. Bitte sofort nachsehen.' }}
+      - action: script.jarvis_monitor_nachricht
+        continue_on_error: true
+        data:
+          text: "{{ text }}"
+          minuten: 240
+      - action: script.jarvis_durchsage
+        continue_on_error: true
+        data:
+          text: "{{ ansage }}"
+          lautstaerke: 60
+      # alle 10 Minuten wiederholen, solange der Alarm anhält (höchstens 4-mal)
+      - repeat:
+          sequence:
+            - repeat:
+                for_each: >-
+                  {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+                sequence:
+                  - action: telegram_bot.send_message
+                    continue_on_error: true
+                    data:
+                      chat_id: "{{ repeat.item | int }}"
+                      message: >-
+                        🚨 {{ text }}
+                        {{ 'Wasser absperren geht in der Conel-App (oder am Haupthahn).' if trigger.id == 'wasser' else 'Bitte sofort nachsehen!' }}
+            - delay: "00:10:00"
+          until:
+            - condition: template
+              value_template: >-
+                {{ repeat.index >= 4 or is_state('binary_sensor.wasser_alarm' if trigger.id == 'wasser' else 'binary_sensor.rauchmelder_alarm', 'off') }}
+
+  - id: haus_wasser_dauerfluss
+    alias: "Haus-Wächter: Wasser läuft ohne Pause"
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.wasser_dauerfluss
+        to: "on"
+    actions:
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                chat_id: "{{ repeat.item | int }}"
+                message: >-
+                  💧 Wasser läuft seit {{ '10 Minuten' if is_state('input_boolean.urlaubsmodus', 'on') else 'einer Stunde' }} ohne Pause
+                  ({{ states(state_attr('sensor.haus_kennungen', 'conel_durchfluss')) }}
+                  {{ state_attr(state_attr('sensor.haus_kennungen', 'conel_durchfluss'), 'unit_of_measurement') or '' }}).
+                  Gartenschlauch, Toilettenspülung oder ein Hahn offen? Absperren geht in der Conel-App.
+
+  # ---------- Geräte fertig ----------
+  - id: haus_geraet_fertig
+    alias: "Haus-Wächter: Waschmaschine/Trockner/Spülmaschine fertig"
+    mode: queued
+    triggers:
+      - trigger: state
+        entity_id: [binary_sensor.waschmaschine_betrieb, binary_sensor.trockner_betrieb, binary_sensor.spuelmaschine_betrieb]
+        from: "on"
+        to: "off"
+    conditions:
+      # mindestens 15 Minuten gelaufen (kein kurzes Einschalten)
+      - condition: template
+        value_template: "{{ (trigger.to_state.last_changed - trigger.from_state.last_changed).total_seconds() > 900 }}"
+    actions:
+      - variables:
+          name: >-
+            {{ {'binary_sensor.waschmaschine_betrieb': 'Waschmaschine', 'binary_sensor.trockner_betrieb': 'Trockner',
+                'binary_sensor.spuelmaschine_betrieb': 'Spülmaschine'}[trigger.entity_id] }}
+          symbol: >-
+            {{ {'binary_sensor.waschmaschine_betrieb': '🧺', 'binary_sensor.trockner_betrieb': '👕',
+                'binary_sensor.spuelmaschine_betrieb': '🍽'}[trigger.entity_id] }}
+          dauer: "{{ ((trigger.to_state.last_changed - trigger.from_state.last_changed).total_seconds() / 60) | round(0) | int }}"
+      - event: geraet_fertig
+        event_data:
+          entity: "{{ trigger.entity_id }}"
+          name: "{{ name }}"
+          icon: >-
+            {{ {'binary_sensor.waschmaschine_betrieb': 'mdi:washing-machine', 'binary_sensor.trockner_betrieb': 'mdi:tumble-dryer',
+                'binary_sensor.spuelmaschine_betrieb': 'mdi:dishwasher'}[trigger.entity_id] }}
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                chat_id: "{{ repeat.item | int }}"
+                message: "{{ symbol }} {{ name }} ist fertig (lief {{ dauer }} Minuten) – bitte ausräumen."
+
+  # ---------- Sonnenstrom übrig ----------
+  - id: haus_sonnenstrom_tipp
+    alias: "Haus-Wächter: Sonnenstrom übrig – jetzt Geräte starten"
+    mode: single
+    triggers:
+      - trigger: template
+        value_template: >-
+          {% set a = state_attr('sensor.haus_kennungen', 'akku_stand') %}
+          {% set p = state_attr('sensor.haus_kennungen', 'pv_leistung') %}
+          {% set pv = states(p) | float(0) if p else 0 %}
+          {% set kw = pv / 1000 if (state_attr(p, 'unit_of_measurement') or '') | lower == 'w' else pv %}
+          {{ a and p and states(a) | float(0) >= 95 and kw >= 2.5 }}
+        for: "00:15:00"
+    conditions:
+      - condition: time
+        after: "09:30:00"
+        before: "15:30:00"
+      - condition: template
+        value_template: >-
+          {{ (this.attributes.last_triggered | default(none)) is none
+             or as_local(this.attributes.last_triggered).date() != now().date() }}
+      - condition: state
+        entity_id: input_boolean.urlaubsmodus
+        state: "off"
+    actions:
+      - variables:
+          laeuft: >-
+            {{ [('Waschmaschine', 'binary_sensor.waschmaschine_betrieb'), ('Trockner', 'binary_sensor.trockner_betrieb'),
+                ('Spülmaschine', 'binary_sensor.spuelmaschine_betrieb')] | selectattr('1', 'is_state', 'on') | map(attribute='0') | list }}
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                chat_id: "{{ repeat.item | int }}"
+                message: >-
+                  ☀️ Sonnenstrom übrig: Akku {{ states(state_attr('sensor.haus_kennungen', 'akku_stand')) | float(0) | round(0) | int }} %,
+                  die PV liefert gerade viel. Jetzt ist ein guter Moment für Waschmaschine, Trockner oder Spülmaschine
+                  – der Strom ist quasi kostenlos.{{ ' (Läuft schon: ' ~ laeuft | join(', ') ~ ')' if laeuft else '' }}
+
+  # ---------- Urlaubsmodus ----------
+  - id: haus_urlaub_an_aus
+    alias: "Haus-Wächter: Urlaubsmodus an/aus"
+    triggers:
+      - trigger: state
+        entity_id: input_boolean.urlaubsmodus
+        to: ["on", "off"]
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.from_state is not none and trigger.from_state.state in ['on', 'off'] }}"
+    actions:
+      - action: "input_boolean.turn_{{ trigger.to_state.state }}"
+        continue_on_error: true
+        target:
+          entity_id: input_boolean.morgen_homepod_pause
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                chat_id: "{{ repeat.item | int }}"
+                message: >-
+                  {% if trigger.to_state.state == 'on' %}🧳 Urlaubsmodus ist an: abends geht Licht wie bewohnt an und aus,
+                  die Morgen-Ansage pausiert, und läuft 10 Minuten am Stück Wasser, kommt sofort eine Nachricht.
+                  Jeden Abend um 19 Uhr kommt ein kurzer Bericht. Tipp: Wasser in der Conel-App auf „Abwesend“ stellen.
+                  {% else %}🏡 Willkommen zurück! Urlaubsmodus ist aus, die Morgen-Ansage läuft wieder.{% endif %}
+
+  - id: haus_urlaub_licht
+    alias: "Haus-Wächter: Urlaub – Licht wie bewohnt"
+    mode: restart
+    triggers:
+      - trigger: sun
+        event: sunset
+        offset: "00:10:00"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.urlaubsmodus
+        state: "on"
+    actions:
+      - variables:
+          innen: >-
+            {% set ns = namespace(l=[]) %}
+            {% for l in states.light if (area_name(l.entity_id) or '') is search('(?i)wohn|küche|kueche|ess|flur|diele')
+               and not (l.name is search('(?i)au(ß|ss)en|hof|garten|terrasse|carport')) %}{% set ns.l = ns.l + [l.entity_id] %}{% endfor %}
+            {{ ns.l if ns.l else (states.light | rejectattr('name', 'search', '(?i)au(ß|ss)en|hof|garten|terrasse|carport')
+               | map(attribute='entity_id') | list)[:3] }}
+      - condition: template
+        value_template: "{{ innen | count > 0 }}"
+      - variables:
+          aus_minute: "{{ range(5, 50) | random }}"
+      - delay:
+          minutes: "{{ range(0, 30) | random }}"
+      - action: light.turn_on
+        continue_on_error: true
+        target:
+          entity_id: "{{ innen }}"
+      - wait_template: "{{ now().hour == 22 and now().minute >= aus_minute | int }}"
+        timeout: "06:00:00"
+      - action: light.turn_off
+        continue_on_error: true
+        target:
+          entity_id: "{{ innen }}"
+
+  - id: haus_urlaub_bericht
+    alias: "Haus-Wächter: Urlaub – Kurzbericht am Abend"
+    triggers:
+      - trigger: time
+        at: "19:00:00"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.urlaubsmodus
+        state: "on"
+    actions:
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
+          message: |-
+            🧳 Zuhause alles im Blick:
+            • Wasser: {{ 'ALARM – ' ~ state_attr('binary_sensor.wasser_alarm', 'grund') if is_state('binary_sensor.wasser_alarm', 'on') else 'ruhig' }}
+            • Rauchmelder: {{ 'ALARM' if is_state('binary_sensor.rauchmelder_alarm', 'on') else 'ruhig' }}
+            {%- set r = (states.sensor | selectattr('entity_id', 'match', 'sensor\\.temperatur_') | rejectattr('state', 'in', ['unknown', 'unavailable']) | list) %}
+            {%- if r %}
+            • Innen: {{ r | map(attribute='state') | map('float', 0) | min | round(1) }}–{{ r | map(attribute='state') | map('float', 0) | max | round(1) }} °C
+            {%- endif %}
+            {%- if states('sensor.batterien_schwach') | int(0) > 0 %}
+            • Batterie schwach: {{ (state_attr('sensor.batterien_schwach', 'liste') or []) | map(attribute='name') | join(', ') }}
+            {%- endif %}
+
+  # ---------- Einmalig: was Claude noch von Marco braucht, als Aufgaben ----------
+  - id: haus_aufgaben_fuer_claude
+    alias: "Haus-Wächter: Aufgaben „Für Claude“ einmalig anlegen"
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        hours: "/1"
+        minutes: 11
+    conditions:
+      - condition: state
+        entity_id: input_boolean.claude_aufgaben_angelegt
+        state: "off"
+    actions:
+      - delay: "00:01:00"
+      - repeat:
+          for_each:
+            - titel: "Für Claude: Bad-HomePod prüfen (steht auf 77 %)"
+              notiz: "Home-App öffnen → Bad → HomePod: zeigt er auch 77 % / 19,3 °C? Wenn ja: HomePod 10 Sekunden ausstecken. Sonst Screenshot der Bad-Zeilen im Kurzbefehl an Claude."
+            - titel: "Für Claude: Leckageschutz in der Conel-App einschalten"
+              notiz: "Conel-App → Profil → Leckageschutz: steht noch alles auf „Aus“. Einschalten (Menge/Dauer/Durchfluss), dann sperrt Conel selbst ab."
+            - titel: "Für Claude: Screenshot „Geräte:“ im Viessmann-Rückblick"
+              notiz: "Monitor oder App → Klima & Energie → Energie → ganz unten „Rückblick“: Zeile „Geräte:“ fotografieren und an Claude schicken."
+            - titel: "Für Claude: Screenshot Reparaturen"
+              notiz: "Einstellungen → System → Reparaturen: Screenshot an Claude."
+            - titel: "Für Claude: Foto Pufferspeicher + ViCare Puffer-Einstellung"
+              notiz: "Foto vom Pufferspeicher (Typenschild) und in der ViCare-App die Puffer-Einstellung als Screenshot – für Kamin + Wärmepumpe."
+            - titel: "Für Claude: Foto Rückseite Shuttle-PC"
+              notiz: "Für den neuen Flur-Monitor: Foto der Anschlüsse hinten am alten Shuttle."
+            - titel: "Für Claude: Fotos Fußbodenheizung (wenn Teile da)"
+              notiz: "Wenn alle Fühler da sind: Fotos von beiden Heizkreisverteilern und von den Klemmen am Shelly."
+            - titel: "Für Claude: Telegram-Bot – stärkstes Modell wählen"
+              notiz: "Einstellungen → Geräte & Dienste → Anthropic → Konfigurieren → Modell: das stärkste auswählen."
+            - titel: "Shelly Plug S einstecken und benennen"
+              notiz: "Shelly-App: Geräte „Waschmaschine“, „Trockner“, „Spülmaschine“ nennen, in Home Assistant hinzufügen (Shelly wird meist automatisch gefunden). Dann kommt „… ist fertig“ von selbst."
+            - titel: "Müll-Kalender der GIB eintragen"
+              notiz: "GIB-Abfall-App → Einstellungen → Kalender-Export/iCal: Link kopieren und an den Telegram-Bot schicken mit „Müll-Link: …“ – oder die .ics-Datei an den Bot schicken."
+            - titel: "IKEA Temperatursensoren kaufen und anlernen"
+              notiz: "Im IKEA-Hub (DIRIGERA) hinzufügen und dem Raum zuordnen – erscheinen dann automatisch, Batterie wird überwacht."
+            - titel: "Wassermelder + Rauchmelder kaufen"
+              notiz: "Links stehen im Chat mit Claude. Nach dem Anlernen meldet Home Assistant Alarm und schwache Batterien von selbst."
+          sequence:
+            - action: todo.add_item
+              continue_on_error: true
+              target:
+                entity_id: todo.aufgaben
+              data:
+                item: "{{ repeat.item.titel }}"
+                description: "{{ repeat.item.notiz }}"
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.claude_aufgaben_angelegt
