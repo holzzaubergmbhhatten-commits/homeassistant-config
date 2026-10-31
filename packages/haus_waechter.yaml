@@ -49,9 +49,45 @@ template:
           conel_warnung: "{{ k.conel_warnung | default([]) }}"
           conel_durchfluss: "{{ k.conel_durchfluss | default('') }}"
           conel_ventil: "{{ k.conel_ventil | default('') }}"
+          conel_volumen: "{{ k.conel_volumen | default('') }}"
           wassermelder: "{{ k.wassermelder | default([]) }}"
           rauchmelder: "{{ k.rauchmelder | default([]) }}"
           fehler: "{{ k.fehler | default('') }}"
+
+  # Wasser fließt ohne Pause – 1 Stunde, im Urlaub schon nach 10 Minuten.
+  # Maßgeblich ist der Wasserzähler der Conel (Gesamtmenge): Nur wenn er in JEDEM 5-Minuten-Abschnitt weitergezählt hat,
+  # läuft wirklich ununterbrochen Wasser. Der Durchfluss-Wert allein reicht nicht – die Cloud meldet ihn manchmal veraltet
+  # weiter, obwohl die Uhr steht. Ohne Zähler: Durchfluss zählt nur, wenn er frisch (≤ 15 Min.) gemeldet wurde.
+  - triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/5"
+    variables:
+      dauerfluss: >-
+        {% set k = 'sensor.haus_kennungen' %}
+        {% set f = state_attr(k, 'conel_durchfluss') or '' %}
+        {% set v = state_attr(k, 'conel_volumen') or '' %}
+        {% set menge = states(v) | float(-1) if v else -1 %}
+        {% set vorher = state_attr('binary_sensor.wasser_dauerfluss', 'menge') | float(-1) %}
+        {% set frisch = f != '' and states[f] is not none and (now() - states[f].last_reported).total_seconds() < 900 %}
+        {% set fluss = frisch and states(f) | float(0) > 0 %}
+        {% if menge >= 0 %}
+          {% set lauf = vorher >= 0 and menge > vorher %}{% set quelle = 'Wasserzähler' %}
+        {% else %}
+          {% set lauf = fluss %}{% set quelle = 'Durchfluss' %}
+        {% endif %}
+        {% set alt = state_attr('binary_sensor.wasser_dauerfluss', 'abschnitte') | int(0) %}
+        {{ {'menge': menge, 'abschnitte': alt + 1 if lauf else 0, 'quelle': quelle} }}
+    binary_sensor:
+      - name: Wasser Dauerfluss
+        unique_id: wasser_dauerfluss
+        icon: mdi:water-alert
+        state: "{{ dauerfluss.abschnitte >= (2 if is_state('input_boolean.urlaubsmodus', 'on') else 12) }}"
+        attributes:
+          menge: "{{ dauerfluss.menge }}"
+          abschnitte: "{{ dauerfluss.abschnitte }}"
+          quelle: "{{ dauerfluss.quelle }}"
 
   - sensor:
       # Alle Geräte mit Batterie: schwach (≤ 20 %), "Batterie niedrig" gemeldet oder seit einem Tag ohne Meldung.
@@ -112,14 +148,6 @@ template:
               {% endif %}
             {% endfor %}
             {{ ns.t | join(' · ') }}
-      # Wasser fließt ohne Pause – 1 Stunde, im Urlaub schon nach 10 Minuten
-      - name: Wasser Dauerfluss
-        unique_id: wasser_dauerfluss
-        icon: mdi:water-alert
-        state: >-
-          {% set f = state_attr('sensor.haus_kennungen', 'conel_durchfluss') %}
-          {{ f != '' and f is not none and states(f) | float(0) > 0 }}
-        delay_on: "{{ '00:10:00' if is_state('input_boolean.urlaubsmodus', 'on') else '01:00:00' }}"
       - name: Rauchmelder Alarm
         unique_id: rauchmelder_alarm
         device_class: smoke
