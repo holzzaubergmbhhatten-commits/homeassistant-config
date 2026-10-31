@@ -60,7 +60,7 @@
 <link rel="stylesheet" href="/local/hausstil.css?v=2">
 </head>
 <body>
-<div class="kopf"><h1>Netzwerk</h1><span class="stand" id="stand"></span><span class="stand" style="margin-left:auto">Seite v7</span></div>
+<div class="kopf"><h1>Netzwerk</h1><span class="stand" id="stand"></span><span class="stand" style="margin-left:auto">Seite v8</span></div>
 <main id="inhalt"><div class="leer klein">Lädt …</div></main>
 <div class="meldung" id="meldung"></div>
 <script>
@@ -281,6 +281,17 @@ document.addEventListener("touchend", ev => { letzterFinger = Date.now(); const 
 document.addEventListener("click", ev => { if (Date.now() - letzterFinger < 800) return; const t = ev.target.closest("button"); if (t) aktion(t); });
 
 function design() { const h = hass(); document.documentElement.classList.toggle("dunkel", !!(h && h.themes && h.themes.darkMode)); }
+// Selbst-Aktualisierung: Browser/Monitor halten die Seite gern im Speicher. Ist auf Home Assistant eine neuere Fassung,
+// lädt sie sich einmal neu (mit neuer Adresse, damit der Speicher nicht greift).
+const SEITE_VERSION = 8;
+async function neuereFassung() {
+  try {
+    const t = await (await fetch(location.pathname + "?frisch=" + Date.now(), { cache: "no-store" })).text();
+    const m = t.match(/const SEITE_VERSION = (\d+);/);
+    if (m && +m[1] > SEITE_VERSION) location.replace(location.pathname + "?v=" + m[1] + "&t=" + Date.now());
+  } catch (e) { /* egal */ }
+}
+neuereFassung(); setInterval(neuereFassung, 30 * 60e3);
 let versuche = 0;
 async function start() {
   if (!hass()) { if (++versuche === 15) $("inhalt").innerHTML = `<div class="karte leer klein">Die Seite funktioniert nur im Dashboard (Reiter „Netzwerk“).</div>`; setTimeout(start, 400); return; }
