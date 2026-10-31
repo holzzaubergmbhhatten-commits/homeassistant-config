@@ -60,7 +60,7 @@
 <link rel="stylesheet" href="/local/hausstil.css?v=2">
 </head>
 <body>
-<div class="kopf"><h1>Netzwerk</h1><span class="stand" id="stand"></span></div>
+<div class="kopf"><h1>Netzwerk</h1><span class="stand" id="stand"></span><span class="stand" style="margin-left:auto">Seite v7</span></div>
 <main id="inhalt"><div class="leer klein">Lädt …</div></main>
 <div class="meldung" id="meldung"></div>
 <script>
@@ -96,8 +96,10 @@ const VORBELEGUNG = [
 ];
 // passende Vorbelegung: nach Modell, sonst nach Art (großer Switch / Router)
 function vorlage(g) {
-  return VORBELEGUNG.find(x => x.modell.test(g.modell + " " + g.name))
-    || VORBELEGUNG.find(x => x.art === g.art && g.ports.length >= (x.minPorts || 1) && GERAETE.filter(y => y.art === g.art && y.ports.length >= (x.minPorts || 1)).length === 1);
+  const t = g.modell + " " + g.name, groesster = GERAETE.reduce((a, b) => (b.ports.length > (a ? a.ports.length : 0) ? b : a), null);
+  return VORBELEGUNG.find(x => x.modell.test(t))
+    || (g === groesster && g.ports.length >= 20 ? VORBELEGUNG.find(x => x.art === "switch") : null)
+    || (g.art === "router" ? VORBELEGUNG.find(x => x.art === "router") : null);
 }
 function vorName(g, nr) { const v = vorlage(g); return v && v.ports[nr] ? v.ports[nr] : null; }
 async function vorbelegen() {
@@ -175,7 +177,7 @@ function geraetKarte(g) {
   const art = { router: "Router", switch: "Switch", ap: "Access Point", sonst: "Gerät" }[g.art];
   const u = g.update && st(g.update), upd = u && u.state === "on", laeuft = u && (u.attributes.in_progress === true || typeof u.attributes.in_progress === "number" || fwLaeuft[g.update]);
   return `<div class="karte"><div class="zeile" style="justify-content:space-between"><div><button class="name-knopf" data-umbenennen="${esc(g.id)}"><h2>${esc(g.name)} <span class="stift">✏️</span></h2></button>
-      <div class="klein">${esc(art)}${g.modell ? " · " + esc(g.modell) : ""}${ort ? " · " + esc(ort) : ""}</div></div>
+      <div class="klein">${esc(art)}${g.modell ? " · " + esc(g.modell) : ""}${g.ports.length ? " · " + g.ports.length + " Ports" : ""}${ort ? " · " + esc(ort) : ""}</div></div>
       <div class="zeile"><span class="punkt ${on ? "" : "aus"}"></span><b style="color:${on ? "var(--ok)" : "var(--rot)"}">${on ? "online" : "offline"}</b></div></div>
     ${g.werte.length ? `<div class="werte">${g.werte.slice(0, 8).map(id => `<div class="wert">${esc(wertName(id, g))}<b>${esc(wertText(id))}</b></div>`).join("")}</div>` : ""}
     ${upd ? `<div class="update zeile" style="justify-content:space-between"><span>${laeuft ? "⏳ Firmware wird eingespielt … (ca. 5 Minuten, Gerät ist kurz weg)" : `Neue Firmware: ${esc(u.attributes.latest_version || "")} <span class="klein">(jetzt ${esc(u.attributes.installed_version || "?")})</span>`}</span>
@@ -210,8 +212,8 @@ function zeichnen() {
   $("stand").textContent = `${GERAETE.length} Geräte · ${weg.length ? weg.length + " offline" : "alle online"}`;
   const fw = GERAETE.filter(g => g.update && st(g.update) && st(g.update).state === "on");
   const fwText = fw.length ? `<div class="karte zeile" style="justify-content:space-between;border-color:var(--gelb)"><div><b>📡 Neue Firmware für ${fw.length} ${fw.length === 1 ? "Gerät" : "Geräte"}</b>
-      <div class="klein">Nacheinander: erst Access Points, dann Switch, Router zuletzt. Pro Gerät ca. 5 Minuten, das jeweilige Gerät ist kurz weg.${st("input_boolean.netzwerk_update_nachts") && st("input_boolean.netzwerk_update_nachts").state === "on" ? " <b>Geplant für heute Nacht 2:30 Uhr.</b>" : ""}</div></div>
-      <div class="zeile"><button class="knopf voll" data-fwalle="1">Alle einspielen</button><button class="knopf" data-fwnacht="1">Heute Nacht</button></div></div>` : "";
+      <div class="klein"><b>Wird automatisch heute Nacht um 2:30 Uhr eingespielt</b> – du musst nichts tun. Nacheinander: erst Access Points, dann Switch, Router zuletzt.</div></div>
+      <div class="zeile"><button class="knopf" data-fwalle="1">Lieber jetzt</button></div></div>` : "";
   $("inhalt").innerHTML = fwText + (weg.length ? `<div class="karte" style="border-color:var(--terra)"><b style="color:var(--rot)">Nicht erreichbar:</b> ${weg.map(g => esc(g.name)).join(", ")}</div>` : "")
     + `<div class="geraete">${GERAETE.map(geraetKarte).join("")}</div>` + blatt();
 }
