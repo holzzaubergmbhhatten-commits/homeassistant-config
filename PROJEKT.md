@@ -117,3 +117,15 @@ Skripte müssen in Sprachassistenten → Entitäten freigeben für Assist freige
 - **Müll** (`packages/muell.yaml`): GIB-Abfall-App → Kalender-Link an den Bot („Müll-Link: …“) oder .ics-Datei.
 - **Morgen-Nachricht** (`packages/tagesbrief.yaml`): Mo–Fr 6:40, Sa/So 8:10 an alle per Telegram.
 - Hinweise oben auf der Startseite: `sensor.haus_hinweise`.
+
+## Stand 31.10.2026 (später): Alltagshelfer, Kochmodus, Ausflugsplaner, Hausstil
+- **Alltag** (`packages/alltag.yaml`, `claude_tools/alltag.py`): Schultasche am Vorabend (aus `mucki_daten.json`), Schulferien
+  Niedersachsen (ferien-api.de) im Kalender, Wochenvorschau sonntags 18 Uhr, Geburtstage 7 Tage/1 Tag vorher mit Geschenkideen,
+  Stamm-Einkauf (`input_text.einkauf_stamm`, freitags 14 Uhr), DWD-Unwetter Wesermarsch mit Tipps, „Alle aus dem Haus“-Check
+  (person-Entitäten), Warmwasser mit Sonnenstrom (ViCare-Knopf „einmalige Warmwasserbereitung“), Ausweise/Pässe
+  (`/config/dokumente.json`), Hausarbeit der Woche (`/config/hausarbeit.json`, wird beim ersten Lauf angelegt – dort anpassen).
+- **Kochmodus**: gezeichnete Comic-Szenen je Arbeitsschritt, Fotos der Gerichte (Rezeptseite per Websuche → og:image).
+- **Ausflugsplaner** (`packages/ausflug.yaml`, `claude_tools/ausflug.py`, `www/ausflug.html`, Reiter „Ausflug“): Claude mit
+  Websuche, Route als Google-Maps-Link ab Zone „Zuhause“, Telegram „Ausflug …“.
+- **Hausstil** (`www/hausstil.css`, `themes/apple.yaml`): Farben/Schrift wie das Handbuch „Zuhause“.
+- Einkaufsliste (`todo.einkaufsliste`) ist die Einkaufsliste-Integration: **kein** Beschreibungsfeld bei `todo.add_item`.

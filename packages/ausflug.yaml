@@ -1,0 +1,118 @@
+# Ausflugsplaner (www/ausflug.html, claude_tools/ausflug.py, Reiter „Ausflug“): mit dem Rad, dem Auto, zu Fuß oder mit der Bahn –
+# Claude sucht passende Ziele (Wetter, Zeit, Wünsche, Familie), prüft Öffnungszeiten und Preise im Internet und liefert
+# Bilder, Ablauf, Tipps und die Route für Google Maps. „Aufs Handy“ schickt den Plan per Telegram, „In den Kalender“ trägt ihn ein.
+# Telegram: „Ausflug am Sonntag mit dem Rad“, „Was können wir am Wochenende unternehmen?“ → Ideen kommen per Telegram.
+# Daten lokal: /config/www/ausflug_daten.json. Die Heimadresse kommt aus der Zone „Zuhause“ (nicht im Repository).
+shell_command:
+  ausflug: python3 /config/claude_tools/ausflug.py {{ aktion }} {{ wert | default('') }}
+
+script:
+  ausflug_speichern:
+    alias: "Ausflug: speichern"
+    mode: queued
+    fields:
+      daten:
+        description: Inhalt als JSON-Text
+    sequence:
+      - action: shell_command.ausflug
+        data:
+          aktion: speichern
+          wert: >-
+            {% set s = (daten if daten is string else (daten | to_json)) | base64_encode %}
+            {% for i in range(0, s | length, 100000) %}{{ s[i:i + 100000] }} {% endfor %}
+        response_variable: ergebnis
+      - variables:
+          antwort: >-
+            {% set a = ergebnis.stdout | default('') if ergebnis is defined and ergebnis is mapping else '' %}
+            {{ a | from_json if (a | string).startswith('{') else {'ok': false, 'fehler': a or 'keine Antwort'} }}
+      - stop: fertig
+        response_variable: antwort
+
+  ausflug_ki:
+    alias: "Ausflug: Claude sucht Ideen"
+    mode: queued
+    fields:
+      auftrag:
+        description: JSON (wie, wann, dauer, wer, interessen, weite, wunsch, erlebt, chat)
+    sequence:
+      - action: weather.get_forecasts
+        continue_on_error: true
+        target:
+          entity_id: weather.touchmonitor_home
+        data:
+          type: daily
+        response_variable: vorhersage
+      - variables:
+          a: "{{ auftrag if auftrag is mapping else (auftrag | from_json) }}"
+          wetter: >-
+            {% set fc = vorhersage['weather.touchmonitor_home'].forecast if vorhersage is defined and vorhersage is mapping
+                        and 'weather.touchmonitor_home' in vorhersage else [] %}
+            {% for d in fc[:5] %}{{ d.datetime[:10] }}: {{ d.condition }}, {{ d.templow | default('?') }}–{{ d.temperature }} °C,
+            Regen {{ d.precipitation | default(0) }} mm, Wind {{ d.wind_speed | default('?') }} km/h{{ '; ' if not loop.last }}{% endfor %}
+      - action: shell_command.ausflug
+        continue_on_error: true
+        data:
+          aktion: ki
+          wert: "{{ dict(a, wetter=wetter) | to_json | base64_encode }}"
+        response_variable: ergebnis
+      - variables:
+          antwort: >-
+            {% set x = ergebnis.stdout | default('') if ergebnis is defined and ergebnis is mapping else '' %}
+            {{ x | from_json if (x | string).startswith('{') else {'ok': false, 'fehler': x or 'keine Antwort'} }}
+      - stop: fertig
+        response_variable: antwort
+
+  ausflug_senden:
+    alias: "Ausflug: Plan per Telegram schicken"
+    mode: queued
+    fields:
+      text:
+        description: Der Plan als Text (mit Google-Maps-Link)
+      an:
+        description: alle oder ich (= erster Empfänger)
+    sequence:
+      - repeat:
+          for_each: >-
+            {% set alle = (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list %}
+            {{ alle if (an | default('alle')) == 'alle' else alle[:1] }}
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                chat_id: "{{ repeat.item | int }}"
+                message: "{{ text }}"
+                parse_mode: plain_text
+
+automation:
+  - id: ausflug_telegram
+    alias: "Ausflug: Ideen per Telegram"
+    mode: queued
+    triggers:
+      - trigger: event
+        event_type: telegram_text
+    conditions:
+      - condition: template
+        value_template: >-
+          {% set t = trigger.event.data.text | default('') | string %}
+          {{ t is match('^\s*/?ausflug', ignorecase=True)
+             or t is search('was\s+(k(ö|oe)nn|k(ö|oe)nnt|sollen|machen)\w*\s+wir\s+.{0,40}(unternehmen|machen|erleben)|ausflugs?(ziel|idee|tipp)|(fahr)?radtour|tagesausflug', ignorecase=True) }}
+    actions:
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ trigger.event.data.chat_id }}"
+          message: "🚲 Ich suche passende Ausflugsziele und prüfe Öffnungszeiten – das dauert etwa eine Minute …"
+      - action: script.ausflug_ki
+        continue_on_error: true
+        data:
+          auftrag: >-
+            {{ {'wie': 'Fahrrad' if trigger.event.data.text is search('rad|fahrrad', ignorecase=True) else 'Auto oder Fahrrad',
+                'wunsch': trigger.event.data.text, 'chat': trigger.event.data.chat_id} }}
+        response_variable: ki
+      - if: "{{ ki is defined and ki is mapping and not ki.ok | default(false) }}"
+        then:
+          - action: telegram_bot.send_message
+            continue_on_error: true
+            data:
+              chat_id: "{{ trigger.event.data.chat_id }}"
+              message: "⚠️ Ausflug: {{ ki.fehler | default('hat nicht geklappt') }}"

@@ -42,6 +42,12 @@ automation:
       {% set t = trigger.event.data.text | default('') | string %}
       {{ not (t is search('(reisepass|kinderreisepass|personalausweis|ausweis|führerschein|fuehrerschein|\\bpass\\b).{0,60}(läuft|laeuft|gültig|gueltig|ablauf|abgelaufen|bis)', ignorecase=True)
               or t is match('^\s*/?(ausweise|pässe|paesse|dokumente)\s*\??\s*$', ignorecase=True)) }}
+  # Ausflugsideen beantwortet packages/ausflug.yaml
+  - condition: template
+    value_template: >-
+      {% set t = trigger.event.data.text | default('') | string %}
+      {{ not (t is match('^\s*/?ausflug', ignorecase=True)
+              or t is search('was\s+(k(ö|oe)nn|k(ö|oe)nnt|sollen|machen)\w*\s+wir\s+.{0,40}(unternehmen|machen|erleben)|ausflugs?(ziel|idee|tipp)|(fahr)?radtour|tagesausflug', ignorecase=True)) }}
   # Einkaufsliste schicken/zeigen beantwortet packages/einkauf.yaml
   - condition: template
     value_template: >-
