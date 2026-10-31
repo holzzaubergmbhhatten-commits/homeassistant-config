@@ -117,8 +117,12 @@ script:
             response_variable: ergebnis
       - variables:
           neu: >-
-            {% if liste is defined and liste %}{{ liste if liste is list else liste | from_json }}
-            {% else %}{% set x = ergebnis.stdout | default('') if ergebnis is defined and ergebnis is mapping else '' %}{{ (x | from_json).liste if (x | string).startswith('{') else [] }}{% endif %}
+            {%- if liste is defined and liste -%}
+              {{- liste | from_json if liste is string else liste -}}
+            {%- else -%}
+              {%- set x = ergebnis.stdout | default('') if ergebnis is defined and ergebnis is mapping else '' -%}
+              {{- (x | from_json).liste if (x | string).startswith('{') else [] -}}
+            {%- endif -%}
       - action: todo.get_items
         continue_on_error: true
         target:
@@ -140,9 +144,9 @@ script:
                   continue_on_error: true
                   target:
                     entity_id: todo.einkaufsliste
+                  # ohne Beschreibung: die Einkaufsliste (Integration „Einkaufsliste“) kennt kein Beschreibungsfeld
                   data:
                     item: "{{ repeat.item.text }}"
-                    description: "{{ repeat.item.notiz | default('') }}"
       - variables:
           antwort:
             anzahl: "{{ hinzu | map(attribute='text') | map('lower') | reject('in', schon) | list | count }}"
