@@ -11,7 +11,9 @@ import re
 
 REGISTRY = "/config/.storage/core.entity_registry"
 
-VIESSMANN = {"pv_leistung": ["photovoltaic_power_production_current"], "akku_stand": ["ess_state_of_charge"]}
+VIESSMANN = {"pv_leistung": ["photovoltaic_power_production_current"], "akku_stand": ["ess_state_of_charge"],
+             "warmwasser": ["dhw_storage_temperature", "dhw_storage_top_temperature"],
+             "warmwasser_einmal": ["activate_onetimecharge", "one_time_charge"]}
 CONEL = {"conel_durchfluss": ["getflo"], "conel_ventil": ["getab", "getvlv"]}
 # Alarm/Warnung gibt es je Gerät (Conel-Absperrung und SafeFloor-Bodensensor) → Listen
 CONEL_LISTEN = {"conel_alarm": ["getala"], "conel_warnung": ["getwrn"]}

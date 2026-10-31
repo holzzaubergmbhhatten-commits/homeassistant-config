@@ -42,6 +42,8 @@ template:
         state: "{{ (k.wassermelder | default([]) | count) + (k.rauchmelder | default([]) | count) }}"
         attributes:
           pv_leistung: "{{ k.pv_leistung | default('') }}"
+          warmwasser: "{{ k.warmwasser | default('') }}"
+          warmwasser_einmal: "{{ k.warmwasser_einmal | default('') }}"
           akku_stand: "{{ k.akku_stand | default('') }}"
           conel_alarm: "{{ k.conel_alarm | default([]) }}"
           conel_warnung: "{{ k.conel_warnung | default([]) }}"
@@ -175,6 +177,14 @@ template:
             {% endfor %}
             {% if is_state('binary_sensor.wasser_dauerfluss', 'on') %}
               {% set ns.l = ns.l + [{'icon': 'mdi:water-alert', 'farbe': '#FF9500', 'text': 'Wasser läuft ohne Pause – Hahn oder Garten offen?'}] %}
+            {% endif %}
+            {% for w in state_attr('sensor.unwetter', 'warnungen') or [] %}
+              {% set ns.l = ns.l + [{'icon': 'mdi:weather-lightning-rainy', 'farbe': '#c96f4a' if w.stufe >= 2 else '#8E8E93',
+                 'text': (w.titel or w.ereignis) ~ (' – ' ~ w.tipp if w.tipp else '')}] %}
+            {% endfor %}
+            {% if now().hour >= 15 and state_attr('sensor.schule_morgen', 'schule') %}
+              {% set ns.l = ns.l + [{'icon': 'mdi:bag-personal', 'farbe': '#536b45', 'text': 'Mathilda morgen: ' ~ (state_attr('sensor.schule_morgen', 'faecher') | join(', '))
+                 ~ ((' – einpacken: ' ~ (state_attr('sensor.schule_morgen', 'einpacken') | join('; '))) if state_attr('sensor.schule_morgen', 'einpacken') else '')}] %}
             {% endif %}
             {% for m in state_attr('sensor.muell', 'hinweis') or [] %}
               {% set ns.l = ns.l + [{'icon': 'mdi:trash-can-outline', 'farbe': '#007AFF', 'text': m}] %}

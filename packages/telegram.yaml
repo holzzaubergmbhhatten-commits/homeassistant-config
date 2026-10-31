@@ -36,6 +36,12 @@ automation:
   - condition: template
     value_template: >-
       {{ not (trigger.event.data.text | default('') | string) is match('^\s*/?go2rtc\s*$', ignorecase=True) }}
+  # Ausweis/Pass-Ablauf merken beantwortet packages/alltag.yaml
+  - condition: template
+    value_template: >-
+      {% set t = trigger.event.data.text | default('') | string %}
+      {{ not (t is search('(reisepass|kinderreisepass|personalausweis|ausweis|führerschein|fuehrerschein|\\bpass\\b).{0,60}(läuft|laeuft|gültig|gueltig|ablauf|abgelaufen|bis)', ignorecase=True)
+              or t is match('^\s*/?(ausweise|pässe|paesse|dokumente)\s*\??\s*$', ignorecase=True)) }}
   # Einkaufsliste schicken/zeigen beantwortet packages/einkauf.yaml
   - condition: template
     value_template: >-

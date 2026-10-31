@@ -1,0 +1,527 @@
+# Alltagshelfer (claude_tools/alltag.py), damit weniger im Kopf behalten werden muss:
+# - Schultasche: am Vorabend (So–Do 18:30) „Morgen Schwimmen – Badesachen einpacken“ aus Mathildas Stundenplan (Muckis Seite),
+#   nicht in den Ferien; ab 15 Uhr auch als Hinweis oben auf dem Monitor.
+# - Schulferien Niedersachsen automatisch im Familienkalender (calendar.geburtstage).
+# - Wochenvorschau: sonntags 18:00 an alle – Termine, Essen, Müll, Fristen, Geburtstage, Ferien, Hausarbeit.
+# - Geburtstage: 7 Tage vorher mit Geschenkideen, am Vortag nochmal (Termine mit „Geburtstag“ im Titel).
+# - Stamm-Einkauf: was jede Woche gebraucht wird (input_text.einkauf_stamm), freitags 14 Uhr auf die Einkaufsliste.
+# - Unwetter: Warnungen des Deutschen Wetterdienstes für die Wesermarsch mit Tipps (Sturm → Gartenmöbel sichern …).
+# - Alle aus dem Haus: sind alle Personen 10 Minuten weg und brennt Licht / ist die Tür offen / läuft Wasser → Telegram.
+# - Sonnenstrom ins Warmwasser: Akku voll + viel PV → einmalige Warmwasserbereitung der Wärmepumpe (einmal am Tag).
+# - Ausweise & Pässe: „Reisepass Mathilda läuft am 12.05.2027 ab“ an den Bot → Erinnerung 3 Monate und 1 Monat vorher.
+# - Hausarbeit: montags die Aufgaben der Woche, abwechselnd verteilt (Datei /config/hausarbeit.json, lokal), in die Aufgabenliste.
+shell_command:
+  alltag: python3 /config/claude_tools/alltag.py {{ aktion }} {{ wert | default('') }}
+  wochen_fristen: python3 /config/claude_tools/tagesbrief.py 14
+
+input_text:
+  einkauf_stamm:
+    name: Stamm-Einkauf (jede Woche, mit Komma getrennt)
+    icon: mdi:cart-heart
+    max: 255
+
+template:
+  - triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: 5
+    actions:
+      - action: shell_command.alltag
+        continue_on_error: true
+        data:
+          aktion: schule
+        response_variable: roh
+      - variables:
+          s: >-
+            {% set a = roh.stdout | default('') if roh is defined and roh is mapping else '' %}
+            {{ a | from_json if (a | string).startswith('{') else {} }}
+    sensor:
+      - name: Schule morgen
+        unique_id: schule_morgen
+        icon: mdi:bag-personal
+        state: "{{ (s.faecher | default([]) | join(', ') or ('Ferien' if s.ferien | default('') else 'keine Schule'))[:250] }}"
+        attributes:
+          schule: "{{ s.schule | default(false) }}"
+          tag: "{{ s.tag | default('') }}"
+          faecher: "{{ s.faecher | default([]) }}"
+          einpacken: "{{ s.einpacken | default([]) }}"
+          ferien: "{{ s.ferien | default('') }}"
+
+  - triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/15"
+    actions:
+      - action: shell_command.alltag
+        continue_on_error: true
+        data:
+          aktion: dwd
+        response_variable: roh
+      - variables:
+          w: >-
+            {% set a = roh.stdout | default('') if roh is defined and roh is mapping else '' %}
+            {{ a | from_json if (a | string).startswith('{') else {} }}
+    sensor:
+      - name: Unwetter
+        unique_id: unwetter_wesermarsch
+        icon: mdi:weather-lightning-rainy
+        # bei Abruffehlern den letzten Stand behalten (sonst käme dieselbe Warnung nach dem nächsten Abruf erneut)
+        state: >-
+          {{ (w.warnungen | default([]) | count) if w.ok | default(true) else (this.state if this is defined else 0) }}
+        attributes:
+          warnungen: >-
+            {{ w.warnungen | default([]) if w.ok | default(true) else (this.attributes.get('warnungen', []) if this is defined else []) }}
+
+automation:
+  # ---------- Schultasche ----------
+  - id: alltag_schultasche
+    alias: "Alltag: Schultasche für morgen"
+    triggers:
+      - trigger: time
+        at: "18:30:00"
+    conditions:
+      - condition: template
+        value_template: "{{ state_attr('sensor.schule_morgen', 'schule') | default(false) }}"
+      - condition: state
+        entity_id: input_boolean.urlaubsmodus
+        state: "off"
+    actions:
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                chat_id: "{{ repeat.item | int }}"
+                message: >-
+                  🎒 Mathilda morgen ({{ state_attr('sensor.schule_morgen', 'tag') }}): {{ state_attr('sensor.schule_morgen', 'faecher') | join(', ') }}.
+                  {{ 'Einpacken: ' ~ (state_attr('sensor.schule_morgen', 'einpacken') | join('; ')) ~ '.' if state_attr('sensor.schule_morgen', 'einpacken') else 'Nichts Besonderes einpacken.' }}
+
+  # ---------- Schulferien in den Kalender ----------
+  - id: alltag_schulferien_kalender
+    alias: "Alltag: Schulferien in den Familienkalender"
+    triggers:
+      - trigger: time
+        at: "03:15:00"
+      - trigger: homeassistant
+        event: start
+    actions:
+      - delay: "00:02:00"
+      - action: shell_command.alltag
+        continue_on_error: true
+        data:
+          aktion: ferien_neu
+        response_variable: roh
+      - variables:
+          neu: >-
+            {% set a = roh.stdout | default('') if roh is defined and roh is mapping else '' %}
+            {{ (a | from_json).neu | default([]) if (a | string).startswith('{') else [] }}
+      - repeat:
+          for_each: "{{ neu }}"
+          sequence:
+            - action: calendar.create_event
+              continue_on_error: true
+              target:
+                entity_id: calendar.geburtstage
+              data:
+                summary: "Schulferien: {{ repeat.item.name }}"
+                start_date: "{{ repeat.item.start }}"
+                end_date: "{{ repeat.item.ende_plus }}"
+
+  # ---------- Wochenvorschau ----------
+  - id: alltag_wochenvorschau
+    alias: "Alltag: Wochenvorschau am Sonntagabend"
+    triggers:
+      - trigger: time
+        at: "18:00:00"
+    conditions:
+      - condition: time
+        weekday: sun
+    actions:
+      - action: calendar.get_events
+        continue_on_error: true
+        target:
+          entity_id: calendar.geburtstage
+        data:
+          start_date_time: "{{ (now() + timedelta(days=1)).strftime('%Y-%m-%d') }} 00:00:00"
+          duration:
+            days: 7
+        response_variable: kal
+      - action: shell_command.wochen_fristen
+        continue_on_error: true
+        response_variable: fr
+      - variables:
+          termine: >-
+            {{ kal['calendar.geburtstage'].events if kal is defined and kal is mapping and 'calendar.geburtstage' in kal else [] }}
+          fristen: >-
+            {% set a = fr.stdout | default('') if fr is defined and fr is mapping else '' %}
+            {{ (a | from_json).fristen | default([]) if (a | string).startswith('{') else [] }}
+          text: |-
+            {%- set tage = ['Mo','Di','Mi','Do','Fr','Sa','So'] %}
+            {%- set von = (now() + timedelta(days=1)).strftime('%Y-%m-%d') %}
+            {%- set bis = (now() + timedelta(days=7)).strftime('%Y-%m-%d') %}
+            📆 Die Woche ab Montag:
+            {%- for e in termine | sort(attribute='start') %}
+            • {{ tage[as_datetime(e.start).weekday()] }} {{ (e.start | string)[11:16] ~ ' ' if 'T' in (e.start | string) else '' }}{{ e.summary }}
+            {%- else %}
+            • keine Termine
+            {%- endfor %}
+            {%- set essen = (state_attr('sensor.kueche_heute', 'woche') or []) | selectattr('datum', 'ge', von) | selectattr('datum', 'le', bis) | list %}
+            {%- if essen %}
+            🍽 Essen: {% for x in essen %}{{ x.tag }} {{ x.text }}{{ ' · ' if not loop.last }}{% endfor %}
+            {%- endif %}
+            {%- set muell = (state_attr('sensor.muell', 'naechste') or []) | selectattr('datum', 'ge', von) | selectattr('datum', 'le', bis) | list %}
+            {%- if muell %}
+            🗑 Müll: {% for x in muell %}{{ x.tag }} {{ x.art }}{{ ' · ' if not loop.last }}{% endfor %}
+            {%- endif %}
+            {%- if fristen %}
+            ⏰ Fristen (2 Wochen): {% for x in fristen %}{{ x.tag }} {{ x.was }}{{ ' – ' ~ x.titel if x.titel }}{{ ' · ' if not loop.last }}{% endfor %}
+            {%- endif %}
+            {%- set a = (state_attr('sensor.aufgaben_liste', 'items') or []) | selectattr('faellig', 'ne', '') | selectattr('faellig', 'le', bis) | list %}
+            {%- if a %}
+            ✅ Fällig: {{ a | map(attribute='titel') | join(' · ') }}
+            {%- endif %}
+            {%- set w = state_attr('sensor.unwetter', 'warnungen') or [] %}
+            {%- if w %}
+            ⚠️ Wetter: {{ w | map(attribute='ereignis') | unique | join(', ') }}
+            {%- endif %}
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                chat_id: "{{ repeat.item | int }}"
+                message: "{{ text }}"
+
+  # ---------- Geburtstage mit Vorlauf ----------
+  - id: alltag_geburtstage
+    alias: "Alltag: Geburtstage eine Woche vorher und am Vortag"
+    triggers:
+      - trigger: time
+        at: "09:03:00"
+    actions:
+      - action: calendar.get_events
+        continue_on_error: true
+        target:
+          entity_id: calendar.geburtstage
+        data:
+          start_date_time: "{{ (now() + timedelta(days=1)).strftime('%Y-%m-%d') }} 00:00:00"
+          duration:
+            days: 7
+        response_variable: kal
+      - variables:
+          gb: >-
+            {% set ev = kal['calendar.geburtstage'].events if kal is defined and kal is mapping and 'calendar.geburtstage' in kal else [] %}
+            {% set in7 = (now() + timedelta(days=7)).strftime('%Y-%m-%d') %}
+            {% set morgen = (now() + timedelta(days=1)).strftime('%Y-%m-%d') %}
+            {{ ev | selectattr('summary', 'search', '(?i)geburtstag|\\bgeb\\.') | selectattr('start', 'search', '^(' ~ in7 ~ '|' ~ morgen ~ ')') | list }}
+          ai: >-
+            {{ states.ai_task | map(attribute='entity_id') | select('search', 'claude|anthropic') | first | default('', true) }}
+      - repeat:
+          for_each: "{{ gb }}"
+          sequence:
+            - variables:
+                bald: "{{ (repeat.item.start | string)[:10] == (now() + timedelta(days=7)).strftime('%Y-%m-%d') }}"
+            - if: "{{ bald and ai != '' }}"
+              then:
+                - action: ai_task.generate_data
+                  continue_on_error: true
+                  data:
+                    entity_id: "{{ ai }}"
+                    task_name: Geschenkideen
+                    instructions: >-
+                      Eine Familie aus Norddeutschland (Eltern und Tochter, 8 Jahre) braucht für diesen Termin 3 kurze, konkrete
+                      Geschenkideen in Deutsch (je höchstens 8 Wörter, mit grobem Preis), passend zum Titel: „{{ repeat.item.summary }}“.
+                      Nur die 3 Zeilen, je mit "• " am Anfang, sonst nichts.
+                  response_variable: ideen
+            - repeat:
+                for_each: >-
+                  {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+                sequence:
+                  - action: telegram_bot.send_message
+                    continue_on_error: true
+                    data:
+                      chat_id: "{{ repeat.item | int }}"
+                      message: >-
+                        🎂 {{ 'In einer Woche' if bald else 'Morgen' }} ({{ ['Mo','Di','Mi','Do','Fr','Sa','So'][as_datetime(repeat.item.start).weekday()] }}
+                        {{ as_datetime(repeat.item.start).strftime('%d.%m.') }}): {{ repeat.item.summary }}.
+                        {% if bald and ideen is defined and ideen is mapping and ideen.data is defined %}Geschenkideen:
+                        {{ ideen.data }}
+                        Schreib z. B. „Geschenkpapier auf die Einkaufsliste“.{% elif not bald %}Geschenk und Karte da?{% endif %}
+
+  # ---------- Stamm-Einkauf ----------
+  - id: alltag_stamm_einkauf
+    alias: "Alltag: Stamm-Einkauf freitags auf die Einkaufsliste"
+    triggers:
+      - trigger: time
+        at: "14:00:00"
+    conditions:
+      - condition: time
+        weekday: fri
+      - condition: state
+        entity_id: input_boolean.urlaubsmodus
+        state: "off"
+    actions:
+      - action: script.einkauf_stamm_hinzufuegen
+
+  # ---------- Unwetter ----------
+  - id: alltag_unwetter
+    alias: "Alltag: Unwetterwarnung des DWD"
+    mode: queued
+    triggers:
+      - trigger: state
+        entity_id: sensor.unwetter
+        attribute: warnungen
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.from_state is not none and trigger.from_state.attributes.warnungen is defined }}"
+    actions:
+      - variables:
+          neu: >-
+            {% set alt = trigger.from_state.attributes.warnungen | default([]) | map(attribute='id') | list %}
+            {{ trigger.to_state.attributes.warnungen | default([]) | rejectattr('id', 'in', alt) | list }}
+      - condition: template
+        value_template: "{{ neu | count > 0 }}"
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                chat_id: "{{ repeat.item | int }}"
+                message: |-
+                  {%- for w in neu %}
+                  ⚠️ {{ 'Vorab-Info: ' if w.vorab }}{{ w.titel or w.ereignis }}{{ ' (' ~ w.von ~ ' bis ' ~ w.bis ~ ')' if w.von }}
+                  {%- if w.tipp %}
+                  👉 {{ w.tipp }}
+                  {%- endif %}
+                  {% endfor %}
+
+  # ---------- Alle aus dem Haus ----------
+  - id: alltag_alle_weg
+    alias: "Alltag: Alle aus dem Haus – Licht, Tür, Wasser prüfen"
+    mode: single
+    triggers:
+      - trigger: template
+        value_template: >-
+          {% set p = states.person | list %}
+          {{ p | count > 0 and p | selectattr('state', 'eq', 'home') | list | count == 0 }}
+        for: "00:10:00"
+    actions:
+      - variables:
+          lichter: >-
+            {{ states.light | selectattr('state', 'eq', 'on') | map(attribute='name') | list }}
+          offen: >-
+            {{ states.lock | selectattr('state', 'in', ['unlocked', 'open']) | map(attribute='name') | list }}
+          wasser: >-
+            {% set f = state_attr('sensor.haus_kennungen', 'conel_durchfluss') %}
+            {{ f not in [none, ''] and states(f) | float(0) > 0 }}
+      - condition: template
+        value_template: "{{ lichter | count > 0 or offen | count > 0 or wasser }}"
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
+          message: >-
+            🏠 Alle sind aus dem Haus, aber:
+            {{ ' Licht an: ' ~ (lichter[:6] | join(', ')) ~ ('…' if lichter | count > 6 else '') ~ '.' if lichter }}
+            {{ ' Nicht abgeschlossen: ' ~ (offen | join(', ')) ~ '.' if offen }}
+            {{ ' Es läuft Wasser.' if wasser }}
+            Schreib „Alle Lichter aus“ oder „Schließ die Haustür ab“.
+
+  # ---------- Sonnenstrom ins Warmwasser ----------
+  - id: alltag_warmwasser_sonne
+    alias: "Alltag: Warmwasser mit Sonnenstrom aufheizen"
+    triggers:
+      - trigger: template
+        value_template: >-
+          {% set k = 'sensor.haus_kennungen' %}
+          {% set a, p, ww = state_attr(k, 'akku_stand'), state_attr(k, 'pv_leistung'), state_attr(k, 'warmwasser') %}
+          {% set pv = states(p) | float(0) if p else 0 %}
+          {% set kw = pv / 1000 if (state_attr(p, 'unit_of_measurement') or '') | lower == 'w' else pv %}
+          {{ a and p and ww and state_attr(k, 'warmwasser_einmal') and states(a) | float(0) >= 95 and kw >= 3 and states(ww) | float(99) < 55 }}
+        for: "00:15:00"
+    conditions:
+      - condition: time
+        after: "10:30:00"
+        before: "15:30:00"
+      - condition: template
+        value_template: >-
+          {{ (this.attributes.last_triggered | default(none)) is none
+             or as_local(this.attributes.last_triggered).date() != now().date() }}
+    actions:
+      - action: button.press
+        continue_on_error: true
+        target:
+          entity_id: "{{ state_attr('sensor.haus_kennungen', 'warmwasser_einmal') }}"
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
+          message: >-
+            ☀️🚿 Sonnenstrom übrig – die Wärmepumpe heizt jetzt einmal das Warmwasser auf
+            (gerade {{ states(state_attr('sensor.haus_kennungen', 'warmwasser')) | float(0) | round(0) | int }} °C).
+
+  # ---------- Ausweise & Pässe ----------
+  - id: alltag_dokument_telegram
+    alias: "Alltag: Ausweis/Pass-Ablauf per Telegram merken"
+    mode: queued
+    triggers:
+      - trigger: event
+        event_type: telegram_text
+    conditions:
+      - condition: template
+        value_template: >-
+          {% set t = trigger.event.data.text | default('') | string %}
+          {{ t is search('(reisepass|kinderreisepass|personalausweis|ausweis|führerschein|fuehrerschein|\\bpass\\b).{0,60}(läuft|laeuft|gültig|gueltig|ablauf|abgelaufen|bis)', ignorecase=True)
+             or t is match('^\s*/?(ausweise|pässe|paesse|dokumente)\s*\??\s*$', ignorecase=True) }}
+    actions:
+      - variables:
+          liste_zeigen: "{{ trigger.event.data.text | string is match('^\\s*/?(ausweise|pässe|paesse|dokumente)', ignorecase=True) }}"
+      - action: shell_command.alltag
+        continue_on_error: true
+        data:
+          aktion: "{{ 'dokumente' if liste_zeigen else 'dokument' }}"
+          wert: "{{ {'text': trigger.event.data.text, 'von': trigger.event.data.from_first | default('', true)} | to_json | base64_encode }}"
+        response_variable: roh
+      - variables:
+          r: >-
+            {% set a = roh.stdout | default('') if roh is defined and roh is mapping else '' %}
+            {{ a | from_json if (a | string).startswith('{') else {'ok': false, 'fehler': 'keine Antwort'} }}
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ trigger.event.data.chat_id }}"
+          message: >-
+            {% if liste_zeigen %}🪪 Ausweise & Pässe:{% for x in r.liste | default([]) %}
+            • {{ x.art }} {{ x.person }}: bis {{ x.ablauf[8:10] }}.{{ x.ablauf[5:7] }}.{{ x.ablauf[:4] }}{{ ' – ABGELAUFEN' if x.tage < 0 else (' – noch ' ~ x.tage ~ ' Tage' if x.tage < 120 else '') }}{% else %}
+            noch nichts eingetragen – z. B. „Reisepass Mathilda läuft am 12.05.2027 ab“{% endfor %}
+            {%- elif r.ok | default(false) %}🪪 {{ r.text }}{% else %}⚠️ {{ r.fehler | default('Hat nicht geklappt') }}{% endif %}
+
+  - id: alltag_dokument_erinnerung
+    alias: "Alltag: Ausweis/Pass läuft bald ab"
+    triggers:
+      - trigger: time
+        at: "09:07:00"
+    actions:
+      - action: shell_command.alltag
+        continue_on_error: true
+        data:
+          aktion: dokumente
+        response_variable: roh
+      - variables:
+          faellig: >-
+            {% set a = roh.stdout | default('') if roh is defined and roh is mapping else '' %}
+            {{ (a | from_json).faellig | default([]) if (a | string).startswith('{') else [] }}
+      - repeat:
+          for_each: "{{ faellig }}"
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
+                message: >-
+                  🪪 {{ repeat.item.art }} {{ repeat.item.person }} läuft
+                  {{ 'heute ab' if repeat.item.tage <= 0 else 'in ' ~ repeat.item.tage ~ ' Tagen ab' }}
+                  ({{ repeat.item.ablauf[8:10] }}.{{ repeat.item.ablauf[5:7] }}.{{ repeat.item.ablauf[:4] }}).
+                  Termin beim Bürgerbüro machen – ein neuer Pass dauert einige Wochen.
+            - action: todo.add_item
+              continue_on_error: true
+              target:
+                entity_id: todo.aufgaben
+              data:
+                item: "{{ repeat.item.art }} {{ repeat.item.person }} verlängern (bis {{ repeat.item.ablauf[8:10] }}.{{ repeat.item.ablauf[5:7] }}.{{ repeat.item.ablauf[:4] }})"
+
+  # ---------- Hausarbeit der Woche ----------
+  - id: alltag_hausarbeit
+    alias: "Alltag: Hausarbeit der Woche verteilen"
+    triggers:
+      - trigger: time
+        at: "06:05:00"
+    conditions:
+      - condition: time
+        weekday: mon
+      - condition: state
+        entity_id: input_boolean.urlaubsmodus
+        state: "off"
+    actions:
+      - action: shell_command.alltag
+        continue_on_error: true
+        data:
+          aktion: hausarbeit
+        response_variable: roh
+      - variables:
+          aufgaben: >-
+            {% set a = roh.stdout | default('') if roh is defined and roh is mapping else '' %}
+            {{ (a | from_json).aufgaben | default([]) if (a | string).startswith('{') else [] }}
+      - action: todo.get_items
+        continue_on_error: true
+        target:
+          entity_id: todo.aufgaben
+        data:
+          status: needs_action
+        response_variable: da
+      - variables:
+          schon: >-
+            {{ (da['todo.aufgaben']['items'] if da is defined and da is mapping and 'todo.aufgaben' in da else []) | map(attribute='summary') | list }}
+      - repeat:
+          for_each: "{{ aufgaben | reject('in', schon) | list }}"
+          sequence:
+            - action: todo.add_item
+              continue_on_error: true
+              target:
+                entity_id: todo.aufgaben
+              data:
+                item: "{{ repeat.item }}"
+                due_date: "{{ (now() + timedelta(days=6)).strftime('%Y-%m-%d') }}"
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                chat_id: "{{ repeat.item | int }}"
+                message: |-
+                  🧹 Hausarbeit diese Woche:
+                  {%- for a in aufgaben %}
+                  • {{ a }}
+                  {%- endfor %}
+                  Abhaken in der Aufgabenliste (Monitor oder App).
+
+script:
+  einkauf_stamm_hinzufuegen:
+    alias: "Stamm-Einkauf auf die Einkaufsliste"
+    icon: mdi:cart-heart
+    mode: single
+    sequence:
+      - action: todo.get_items
+        continue_on_error: true
+        target:
+          entity_id: todo.einkaufsliste
+        data:
+          status: needs_action
+        response_variable: da
+      - variables:
+          schon: >-
+            {{ (da['todo.einkaufsliste']['items'] if da is defined and da is mapping and 'todo.einkaufsliste' in da else [])
+               | map(attribute='summary') | map('lower') | list }}
+          neu: >-
+            {{ (states('input_text.einkauf_stamm') | string).split(',') | map('trim') | reject('in', ['', 'unknown', 'unavailable']) | list }}
+      - repeat:
+          for_each: "{{ neu }}"
+          sequence:
+            - if: "{{ (repeat.item | lower) not in schon }}"
+              then:
+                - action: todo.add_item
+                  continue_on_error: true
+                  target:
+                    entity_id: todo.einkaufsliste
+                  data:
+                    item: "{{ repeat.item }}"

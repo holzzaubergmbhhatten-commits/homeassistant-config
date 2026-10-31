@@ -518,6 +518,29 @@ views:
   - type: grid
     cards:
     - type: heading
+      heading: Stamm-Einkauf
+      heading_style: title
+      icon: mdi:cart-heart
+    - type: markdown
+      text_only: true
+      content: Was ihr jede Woche braucht, mit Komma getrennt. Kommt freitags um 14 Uhr automatisch auf die Liste (was schon draufsteht, nicht doppelt).
+    - type: entities
+      entities:
+      - entity: input_text.einkauf_stamm
+        name: Jede Woche
+      grid_options:
+        columns: full
+    - type: button
+      name: Jetzt auf die Liste
+      icon: mdi:cart-arrow-down
+      show_state: false
+      tap_action:
+        action: perform-action
+        perform_action: script.einkauf_stamm_hinzufuegen
+      grid_options:
+        columns: full
+        rows: 1
+    - type: heading
       heading: Schnell hinzufügen
       heading_style: title
       icon: mdi:cart-plus

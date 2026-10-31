@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Fristen aus der Akte für die Morgen-Nachricht (packages/tagesbrief.yaml): was in den nächsten 7 Tagen fällig ist.
+"""Fristen aus der Akte für die Morgen-Nachricht (packages/tagesbrief.yaml): was in den nächsten 7 Tagen (oder Argument 1: Tage) fällig ist.
 Liest /config/akte.json nur. Ausgabe: {"fristen": [{"datum", "tag", "was", "titel"}]}"""
 import json
+import sys
 from datetime import date, datetime, timedelta
 
 TAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+TAGE_VORAUS = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 7   # Wochenvorschau: 14
 
 
 def main():
@@ -23,11 +25,11 @@ def main():
                 d = datetime.strptime(fr["datum"], "%Y-%m-%d").date()
             except (KeyError, ValueError, TypeError):
                 continue
-            if heute <= d <= heute + timedelta(days=7):
+            if heute <= d <= heute + timedelta(days=TAGE_VORAUS):
                 aus.append({"datum": d.isoformat(), "tag": "heute" if d == heute else f"{TAGE[d.weekday()]} {d.strftime('%d.%m.')}",
                             "was": str(fr.get("was", ""))[:80], "titel": str(e.get("titel") or e.get("absender") or "")[:60]})
     aus.sort(key=lambda x: x["datum"])
-    print(json.dumps({"fristen": aus[:6]}, ensure_ascii=False))
+    print(json.dumps({"fristen": aus[:8]}, ensure_ascii=False))
 
 
 if __name__ == "__main__":
