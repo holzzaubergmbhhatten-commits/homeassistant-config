@@ -1,4 +1,6 @@
 # Müllabfuhr der GIB Wesermarsch (claude_tools/muell.py): Termine aus dem Kalender der GIB-Abfall-App.
+# - Einfachste Art: Screenshots der Liste „Alle Termine“ aus der GIB-Abfall-App mit dem Text „Müll“ an den Bot schicken –
+#   Claude liest die Termine ab (mehrere Bilder werden zusammengelegt).
 # - Einrichten: in der GIB-Abfall-App den Kalender-Link (iCal/„Kalender abonnieren“) kopieren und dem Telegram-Bot
 #   schicken: „Müll-Link: https://…“ – oder die .ics-Datei an den Bot schicken. Link und Termine bleiben lokal.
 # - Monitor: am Vortag ab 12 Uhr „Morgen wird abgeholt: …“, am Abholtag bis 10 Uhr „Heute …“ (sensor.haus_hinweise).
@@ -140,3 +142,42 @@ automation:
           message: >-
             {{ '⚠️ Müll-Kalender: ' ~ m.fehler if m.fehler | default('') else '✅ Müll-Kalender übernommen (bis '
                ~ (m.bis | default('?')) ~ '). Nächste Abholung: ' ~ m.text }}
+
+  # Screenshot der Terminliste mit Text „Müll“ an den Bot → Termine ablesen
+  - id: muell_telegram_foto
+    alias: "Müll: Screenshot der Termine aus Telegram"
+    mode: queued
+    triggers:
+      - trigger: event
+        event_type: telegram_attachment
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ (trigger.event.data.file_mime_type | default('')).startswith('image/')
+             and (trigger.event.data.text | default('', true)) is match('^\s*(m(ü|ue)ll|abfall|tonnen?)', ignorecase=True) }}
+    actions:
+      - variables:
+          name: "muell_{{ now().strftime('%Y%m%d_%H%M%S') }}_{{ range(100, 999) | random }}.jpg"
+      - action: telegram_bot.download_file
+        continue_on_error: true
+        data:
+          file_id: "{{ trigger.event.data.file_id }}"
+          directory_path: /media/eingang
+          file_name: "{{ name }}"
+      - action: shell_command.muell
+        continue_on_error: true
+        data:
+          aktion: foto
+          wert: "{{ {'datei': '/media/eingang/' ~ name} | to_json | base64_encode }}"
+        response_variable: roh
+      - variables:
+          m: >-
+            {% set a = roh.stdout | default('') if roh is defined and roh is mapping else '' %}
+            {{ a | from_json if (a | string).startswith('{') else {'fehler': 'keine Antwort'} }}
+      - event: muell_neu
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ trigger.event.data.chat_id }}"
+          message: >-
+            {{ '⚠️ Müll: ' ~ m.fehler if m.fehler | default('') else '✅ ' ~ m.meldung ~ ' (gespeichert bis ' ~ (m.bis | default('?')) ~ '). Nächste: ' ~ m.text }}

@@ -4,6 +4,8 @@
 Die Termine kommen als Kalender (iCal/ICS) aus der GIB-Abfall-App oder von gib-entsorgung.de:
   muell.py link <base64-Text>    Link aus der Nachricht "Müll-Link: https://…" merken (webcal:// geht auch) und gleich holen
   muell.py datei <base64-JSON {datei}>   ICS-Datei (per Telegram geschickt) übernehmen
+  muell.py foto <base64-JSON {datei}>    Screenshot der Terminliste aus der GIB-App (per Telegram mit Text „Müll“) –
+                                 Claude liest die Termine ab, sie werden zu den vorhandenen dazugelegt
   muell.py holen                 Termine neu laden (einmal am Tag) und den Stand ausgeben
   muell.py stand                 nur den Stand ausgeben (für sensor.muell)
 Link und Termine bleiben lokal (/config/muell_link.txt, /config/muell.json) – die Adresse steht nicht im Repository.
@@ -50,18 +52,42 @@ def ics_lesen(text):
     return sorted({(t["datum"], t["art"]): t for t in termine}.values(), key=lambda t: (t["datum"], t["art"]))
 
 
-def speichern(termine, quelle):
+def speichern(termine, quelle, dazu=False):
     if not termine:
         raise ValueError("Im Kalender stehen keine Abfuhrtermine")
     alt = json_laden()
-    # ältere Termine behalten, neue Daten ersetzen den Zeitraum der Datei
-    von = termine[0]["datum"]
-    behalten = [t for t in alt.get("termine", []) if t["datum"] < von]
+    if dazu:
+        # Screenshots: zu den vorhandenen Terminen dazulegen (jedes Bild zeigt nur einen Ausschnitt)
+        alle = {(t["datum"], t["art"]): t for t in alt.get("termine", []) + termine}
+        termine, behalten = sorted(alle.values(), key=lambda t: (t["datum"], t["art"])), []
+    else:
+        # ältere Termine behalten, neue Daten ersetzen den Zeitraum der Datei
+        von = termine[0]["datum"]
+        behalten = [t for t in alt.get("termine", []) if t["datum"] < von]
     d = {"termine": behalten + termine, "stand": datetime.now().isoformat(timespec="minutes"), "quelle": quelle}
     tmp = DATEN + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(d, f, ensure_ascii=False)
     os.replace(tmp, DATEN)
+
+
+def foto_lesen(pfad):
+    """Abfuhrtermine von einem Screenshot ablesen (Claude, Schlüssel aus der Anthropic-Integration)."""
+    if not os.path.realpath(pfad).startswith("/media/eingang/"):
+        raise ValueError("Pfad nicht erlaubt")
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import kueche
+    with open(pfad, "rb") as f:
+        bild = base64.b64encode(f.read()).decode("ascii")
+    a = kueche.claude("Du liest Abfuhrtermine aus Screenshots einer Müll-App ab. Antworte nur mit JSON.", [
+        {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": bild}},
+        {"type": "text", "text": f"Heute ist {date.today().isoformat()}. Lies ALLE sichtbaren Abfuhrtermine ab (nur vollständig sichtbare "
+                                 "Einträge mit Datum darüber). Antworte nur mit JSON: {\"termine\": [{\"datum\": \"JJJJ-MM-TT\", "
+                                 "\"art\": \"Biotonne\"}]} – art genau wie angezeigt, z. B. \"Restmülltonne (verlegt)\"."}],
+        max_tokens=3000, effort="low", timeout=50)
+    termine = [{"datum": t["datum"], "art": str(t.get("art", "Müll")).strip()[:60]} for t in a.get("termine") or []
+               if isinstance(t, dict) and re.match(r"^\d{4}-\d\d-\d\d$", str(t.get("datum", "")))]
+    return termine
 
 
 def json_laden():
@@ -137,6 +163,12 @@ def main():
             speichern(ics_lesen(f.read()), "datei")
         os.remove(pfad)
         meldung = "datei"
+    elif aktion == "foto":
+        pfad = json.loads(wert).get("datei", "")
+        neu = foto_lesen(pfad)
+        speichern(neu, "foto", dazu=True)
+        os.remove(pfad)
+        meldung = f"{len(neu)} Termine vom Bild übernommen"
     elif aktion == "holen":
         try:
             meldung = holen()

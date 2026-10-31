@@ -553,7 +553,7 @@ automation:
             - titel: "Shelly Plug S einstecken und benennen"
               notiz: "Shelly-App: Geräte „Waschmaschine“, „Trockner“, „Spülmaschine“ nennen, in Home Assistant hinzufügen (Shelly wird meist automatisch gefunden). Dann kommt „… ist fertig“ von selbst."
             - titel: "Müll-Kalender der GIB eintragen"
-              notiz: "GIB-Abfall-App → Einstellungen → Kalender-Export/iCal: Link kopieren und an den Telegram-Bot schicken mit „Müll-Link: …“ – oder die .ics-Datei an den Bot schicken."
+              notiz: "GIB-Abfall-App → „Alle Termine“ → Screenshots machen und mit dem Text „Müll“ an den Telegram-Bot schicken. Einmal im Jahr wiederholen, wenn der neue Kalender da ist."
             - titel: "IKEA Temperatursensoren kaufen und anlernen"
               notiz: "Im IKEA-Hub (DIRIGERA) hinzufügen und dem Raum zuordnen – erscheinen dann automatisch, Batterie wird überwacht."
             - titel: "Wassermelder + Rauchmelder kaufen"
