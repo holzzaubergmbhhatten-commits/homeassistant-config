@@ -36,6 +36,11 @@ automation:
   - condition: template
     value_template: >-
       {{ not (trigger.event.data.text | default('') | string) is match('^\s*/?go2rtc\s*$', ignorecase=True) }}
+  # Einkaufsliste schicken/zeigen beantwortet packages/einkauf.yaml
+  - condition: template
+    value_template: >-
+      {% set t = trigger.event.data.text | default('') | string %}
+      {{ not (t is search('einkaufs?(liste|zettel)', ignorecase=True) and not (t is search('(setz|pack|füg|fueg|schreib|trag|tu|nimm|notier)\w*\\b.{0,60}\\b(auf|zur|in)\s+(die\s+|der\s+|den\s+)?einkaufs', ignorecase=True))) }}
   # Akte-Befehle beantwortet packages/akte.yaml
   - condition: template
     value_template: >-
@@ -67,7 +72,7 @@ automation:
     continue_on_error: true
     data:
       aktion: offen
-      wert: "{{ {'chat': trigger.event.data.chat_id, 'von': trigger.event.data.from_first | default('', true)} | to_json | base64_encode }}"
+      wert: "{{ {'chat': trigger.event.data.chat_id, 'von': trigger.event.data.from_first | default('', true), 'text': trigger.event.data.text | default('')} | to_json | base64_encode }}"
     response_variable: akte_offen
   - if: "{{ akte_offen is defined and akte_offen is mapping and '\"offen\": true' in (akte_offen.stdout | default('') | string) }}"
     then:

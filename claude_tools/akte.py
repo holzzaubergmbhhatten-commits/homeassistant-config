@@ -2450,7 +2450,11 @@ def main():
         return
     name_merken(auftrag.get("chat"), auftrag.get("von"))
     if aktion == "offen":   # schnell: wartet die Akte in diesem Chat auf eine Antwort?
-        print(json.dumps({"offen": bool(rueckfrage_offen(auftrag.get("chat")))}))
+        # eine neue Bitte/Frage („Kannst du mir … schicken?“) ist keine Antwort auf die Rückfrage – die geht normal weiter
+        t = str(auftrag.get("text") or "").strip()
+        neu = bool(re.match(r"(?i)^(kannst|könntest|koenntest|würdest|wuerdest|schick|sende|zeig|gib|was|wie|wann|wo|wer|warum|mach|bitte)\b", t)) \
+            or len(t) > 120
+        print(json.dumps({"offen": bool(rueckfrage_offen(auftrag.get("chat"))) and not neu}))
         return
     for d in (ABLAGE, EINGANG, SEITEN):
         os.makedirs(d, exist_ok=True)

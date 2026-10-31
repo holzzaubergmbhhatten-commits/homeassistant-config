@@ -102,3 +102,68 @@ automation:
                   {% set t = '🛒 Einkaufsliste: alles erledigt ✅' if namen | count == 0
                      else '🛒 Einkaufsliste (' ~ (namen | count) ~ '):\n• ' ~ (namen | join('\n• ')) %}
                   {{ t | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}
+
+  # „Schick mir / Mirka die Einkaufsliste“, „Was steht auf der Einkaufsliste?“ → Liste an den Absender und/oder die Genannten
+  - id: einkaufsliste_auf_wunsch
+    alias: "Einkaufsliste: per Telegram auf Wunsch (auch an Mirka)"
+    mode: queued
+    triggers:
+      - trigger: event
+        event_type: telegram_text
+    conditions:
+      - condition: template
+        value_template: >-
+          {% set t = trigger.event.data.text | default('') | string %}
+          {{ (t is search('einkaufs?(liste|zettel)', ignorecase=True) and not (t is search('(setz|pack|füg|fueg|schreib|trag|tu|nimm|notier)\w*\\b.{0,60}\\b(auf|zur|in)\s+(die\s+|der\s+|den\s+)?einkaufs', ignorecase=True))) }}
+    actions:
+      - action: todo.get_items
+        target:
+          entity_id: todo.einkaufsliste
+        data:
+          status: needs_action
+        response_variable: liste
+      - variables:
+          t: "{{ trigger.event.data.text | string }}"
+          von: "{{ trigger.event.data.from_first | default('', true) }}"
+          namen_liste: "{{ liste['todo.einkaufsliste']['items'] | map(attribute='summary') | list }}"
+          text: >-
+            {{ '🛒 Die Einkaufsliste ist leer ✅' if namen_liste | count == 0
+               else '🛒 Einkaufsliste (' ~ (namen_liste | count) ~ '):\n• ' ~ (namen_liste | join('\n• ')) }}
+          an: >-
+            {% set ns = namespace(l=[]) %}
+            {% for n, muster in [('Mirka', 'mirka|mika|mirca'), ('Marco', 'marco|marko'), ('Mathilda', 'mathilda|mucki')] %}
+              {% if t is search('\\b(' ~ muster ~ ')\\b', ignorecase=True) and n | lower != von | lower %}{% set ns.l = ns.l + [n] %}{% endif %}
+            {% endfor %}
+            {{ ns.l }}
+          an_mich: >-
+            {{ an | count == 0 or t is search('\\b(mir|mich|uns)\\b', ignorecase=True) }}
+      - if: "{{ an_mich }}"
+        then:
+          - action: telegram_bot.send_message
+            continue_on_error: true
+            data:
+              chat_id: "{{ trigger.event.data.chat_id }}"
+              message: "{{ text }}"
+      - repeat:
+          for_each: "{{ an }}"
+          sequence:
+            - action: shell_command.akte
+              continue_on_error: true
+              data:
+                aktion: nachricht
+                wert: >-
+                  {{ {'an': repeat.item, 'text': text, 'von': von,
+                      'chats': (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list}
+                     | to_json | base64_encode }}
+              response_variable: ergebnis
+            - variables:
+                e: >-
+                  {% set x = ergebnis.stdout | default('') if ergebnis is defined and ergebnis is mapping else '' %}
+                  {{ x | from_json if (x | string).startswith('{') else {'ok': false, 'fehler': 'keine Antwort'} }}
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                chat_id: "{{ trigger.event.data.chat_id }}"
+                message: >-
+                  {{ '✅ Einkaufsliste an ' ~ (e.an | default(repeat.item)) ~ ' geschickt.' if e.ok | default(false)
+                     else '⚠️ An ' ~ repeat.item ~ ' ging es nicht: ' ~ (e.fehler | default('?')) }}
