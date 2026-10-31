@@ -196,6 +196,8 @@
     .zahlen b { font-size: 21px; }
     .kopf h1 { font-size: 22px; }
   }
+  .mittag { margin-top: 10px; padding: 8px 10px; border-radius: 12px; background: var(--sand2, #ece3cf); display: grid; gap: 4px; }
+  .mittag .knoepfe { margin-top: 2px; }
 </style>
 <link rel="stylesheet" href="/local/hausstil.css?v=1">
 </head>
@@ -268,8 +270,8 @@ const zahl = v => v == null || !isFinite(v) ? "" : (Math.abs(v - Math.round(v)) 
 const STANDARD = {
   einstellungen: { erwachsene: 2, kinder: [{ alter: 8 }], kinder_gleich: true, tage: [0, 1, 2, 3, 4, 5, 6], budget: 75, stil: ["Familienlieblinge"],
     reste: "1", ernaehrung: "keine", allergien: [], zeit: 30, geraete: ["Herd", "Backofen"], platz: ["Kühlschrank", "Gefrierschrank"],
-    arbeitszeiten: "", hinweise: "", laden: "Rewe", angebote: true, auswaerts_tage: [], eingerichtet: false },
-  rezepte: [], plan: {}, vorrat: [], hinweis_woche: {},
+    arbeitszeiten: "", hinweise: "", laden: "Rewe", angebote: true, auswaerts_tage: [], mittag_tage: [5, 6], mittag_art: "snack", eingerichtet: false },
+  rezepte: [], plan: {}, vorrat: [], hinweis_woche: {}, mittag: {},
 };
 let daten = null, reiter = "woche", woche = montagVon(new Date()), arbeit = null, fehlerText = "", suche = "";
 let koch = null;               // Kochmodus: {g, schritt, ansicht, faktor, abgehakt:Set}
@@ -371,11 +373,27 @@ function zeichnen() {
   $("inhalt").scrollTop = scroll;
 }
 
+// Mittagessen (Standard: Sa/So als Snack) – je Tag wählbar: Snack, Mahlzeit oder keins
+function mittagGeplant(d) { const k = iso(d), m = (daten.mittag || {})[k], wd = d.getDay() === 0 ? 6 : d.getDay() - 1;
+  return m ? m.groesse !== "kein" : (daten.einstellungen.mittag_tage || []).includes(wd); }
+function mittagZeile(d) {
+  const k = iso(d), m = (daten.mittag || {})[k], wd = d.getDay() === 0 ? 6 : d.getDay() - 1;
+  if (!m && !(daten.einstellungen.mittag_tage || []).includes(wd)) return "";
+  const gr = m ? m.groesse : (daten.einstellungen.mittag_art || "snack");
+  const wahl = [["snack", "Snack"], ["mahlzeit", "Mahlzeit"], ["kein", "Kein"]].map(([w, t]) =>
+    `<button class="knopf klein-k ${gr === w ? "voll" : ""}" data-a="mwahl" data-k="${k}" data-w="${w}" ${arbeit ? "disabled" : ""}>${t}</button>`).join("");
+  if (gr === "kein") return `<div class="mittag"><span class="klein"><b>Mittag:</b> kein Mittagessen geplant</span><div class="knoepfe">${wahl}</div></div>`;
+  return `<div class="mittag"><div><b>Mittag${gr === "snack" ? " (Snack)" : ""}:</b> ${m && m.titel ? esc(m.titel) : `<span class="klein">noch nichts – „Vorschlag“ antippen oder Woche planen</span>`}</div>
+    ${m && m.kurz ? `<div class="klein">${esc(m.kurz)}${m.zeit_min ? " · " + m.zeit_min + " min" : ""}</div>` : ""}
+    <div class="knoepfe">${wahl}
+      ${m && (m.schritte || []).length ? `<button class="knopf klein-k" data-a="mkochen" data-k="${k}">${ic("play")} Kochen</button>` : ""}
+      <button class="knopf klein-k" data-a="mtausch" data-k="${k}" ${arbeit ? "disabled" : ""}>${ic(m && m.titel ? "neu" : "zauber")} ${m && m.titel ? "Tauschen" : "Vorschlag"}</button></div></div>`;
+}
 function wocheSeite() {
   const tage = wocheTage(), heute = iso(new Date());
   const plan = tage.map(d => daten.plan[iso(d)]).filter(Boolean);
   const kochen = plan.filter(g => g.art === "kochen").length;
-  const kosten = plan.reduce((s, g) => s + (+g.kosten_eur || 0), 0);
+  const kosten = plan.reduce((s, g) => s + (+g.kosten_eur || 0), 0) + tage.reduce((s, d) => { const m = (daten.mittag || {})[iso(d)]; return s + (m && m.groesse !== "kein" ? +m.kosten_eur || 0 : 0); }, 0);
   const zeiten = plan.filter(g => g.art === "kochen" && g.zeit_min).map(g => g.zeit_min);
   const schnitt = zeiten.length ? Math.round(zeiten.reduce((a, b) => a + b, 0) / zeiten.length) : daten.einstellungen.zeit;
   const diese = iso(montagVon(new Date())) === iso(woche);
@@ -409,7 +427,7 @@ function wocheSeite() {
     if (!g) {
       h += `<div class="tag leer ${k === heute ? "heute" : ""}">${kopfTag}<div class="inhalt"><div class="titel">Noch nichts geplant</div>
         <div class="knoepfe"><button class="knopf klein-k" data-a="aendern" data-k="${k}">${ic("stift")} Festlegen</button>
-        <button class="knopf klein-k" data-a="tausch" data-k="${k}" ${arbeit ? "disabled" : ""}>${ic("zauber")} Vorschlag</button></div></div></div>`;
+        <button class="knopf klein-k" data-a="tausch" data-k="${k}" ${arbeit ? "disabled" : ""}>${ic("zauber")} Vorschlag</button></div>${mittagZeile(d)}</div></div>`;
       continue;
     }
     const kochbar = g.art === "kochen" && (g.schritte || []).length;
@@ -426,7 +444,7 @@ function wocheSeite() {
         <button class="knopf klein-k" data-a="aendern" data-k="${k}">${ic("stift")} Ändern</button>
         ${kochbar && !g.rezept_id ? `<button class="knopf klein-k" data-a="merken" data-k="${k}">${ic("stern")} Merken</button>` : ""}
         ${g.art === "kochen" ? `<button class="knopf klein-k" data-a="gekocht" data-k="${k}">${ic("haken")} ${g.gekocht ? "Doch nicht" : "Gekocht"}</button>` : ""}
-      </div></div></div>`;
+      </div>${mittagZeile(d)}</div></div>`;
   }
   return h;
 }
@@ -503,6 +521,10 @@ function einstellungenSeite() {
     <div class="karte"><h2 class="serif">Wann geht ihr regelmäßig essen?</h2><div class="klein">Diese Tage plant Claude jede Woche als „Essen gehen“ ein.
       Einzelne Tage (z. B. Geburtstag im Restaurant) im Wochenplan bei „Ändern“ → „Auswärts essen“ – oder per Telegram: „Samstag gehen wir essen“.</div>
       <div class="tage7" style="margin-top:10px">${TAGE.map((t, i) => `<button class="${(e.auswaerts_tage || []).includes(i) ? "an" : ""}" data-a="eaus" data-i="${i}">${t.slice(0, 2)}<i>${(e.auswaerts_tage || []).includes(i) ? ic("haken") : ""}</i></button>`).join("")}</div></div>
+    <div class="karte"><h2 class="serif">Mittagessen</h2><div class="klein">An diesen Tagen plant Claude zusätzlich ein Mittagessen mit ein (Zutaten kommen mit auf die Einkaufsliste).
+      Im Wochenplan kann jeder Tag einzeln auf Snack, Mahlzeit oder „Kein“ gestellt werden.</div>
+      <div class="tage7" style="margin-top:10px">${TAGE.map((t, i) => `<button class="${(e.mittag_tage || []).includes(i) ? "an" : ""}" data-a="emittag" data-i="${i}">${t.slice(0, 2)}<i>${(e.mittag_tage || []).includes(i) ? ic("haken") : ""}</i></button>`).join("")}</div>
+      <label class="f">Normalerweise</label>${kacheln([["snack", "Snack", "klein & schnell"], ["mahlzeit", "Mahlzeit", "vollwertig, warm"]], e.mittag_art || "snack", "mittag_art", false)}</div>
     <div class="karte"><h2 class="serif">Wochenbudget</h2><div class="klein">Wie viel ihr pro Woche fürs Abendessen ausgeben möchtet (für ${portionenVon(e)} Personen).</div>
       <div class="zaehler"><b id="budgetzahl">${e.budget} €</b></div>
       <input type="range" id="budget" min="25" max="200" step="5" value="${e.budget}">
@@ -595,6 +617,7 @@ function einkaufBerechnen(von, bis) {
 function kostenVon(von, bis) {
   let summe = 0;
   for (const [k, g] of Object.entries(daten.plan)) if (k >= von && k <= bis && g.art === "kochen") summe += +g.kosten_eur || 0;
+  for (const [k, g] of Object.entries(daten.mittag || {})) if (k >= von && k <= bis && g.groesse !== "kein") summe += +g.kosten_eur || 0;
   return summe;
 }
 function einkaufBlatt(von0, bis0) {
@@ -815,6 +838,16 @@ async function aktion(el) {
     return;
   }
   if (a === "ekwahl") { const z = einkauf.liste[+el.dataset.i]; z.an = !z.an; einkaufBlatt(einkauf.von, einkauf.bis); return; }
+  if (a === "mwahl") {
+    daten.mittag = daten.mittag || {}; const m = daten.mittag[k], w = el.dataset.w;
+    if (w === "kein") { daten.mittag[k] = Object.assign({}, m || {}, { groesse: "kein" }); zeichnen(); speichern(); return; }
+    if (m && m.titel && m.groesse === w) return;
+    daten.mittag[k] = Object.assign({}, m || {}, { groesse: w }); zeichnen();
+    if (await speichern()) ki({ art: "mittag", datum: k, groesse: w }, w === "snack" ? "Claude sucht einen Mittagssnack …" : "Claude sucht ein Mittagessen …");
+    return;
+  }
+  if (a === "mtausch") { const m = (daten.mittag || {})[k]; ki({ art: "mittag", datum: k, groesse: m && m.groesse !== "kein" ? m.groesse : (daten.einstellungen.mittag_art || "snack") }, "Claude sucht etwas anderes für mittags …"); return; }
+  if (a === "mkochen") { const m = (daten.mittag || {})[k]; if (m) kochenOeffnen(m); return; }
   if (a === "ektag") { einkauf = null; einkaufBlatt(k, k); return; }
   if (a === "pruefen" || a === "ekladen") {
     if (a === "ekladen") {
@@ -874,6 +907,7 @@ async function aktion(el) {
   if (a === "kindweg") { entwurfLesen(); entwurf.kinder.splice(+el.dataset.i, 1); zeichnen(); return; }
   if (a === "ebool") { entwurfLesen(); entwurf[el.dataset.f] = !entwurf[el.dataset.f]; zeichnen(); return; }
   if (a === "eaus") { entwurfLesen(); const i = +el.dataset.i, t = new Set(entwurf.auswaerts_tage || []); t.has(i) ? t.delete(i) : t.add(i); entwurf.auswaerts_tage = [...t].sort(); zeichnen(); return; }
+  if (a === "emittag") { entwurfLesen(); const i = +el.dataset.i, t = new Set(entwurf.mittag_tage || []); t.has(i) ? t.delete(i) : t.add(i); entwurf.mittag_tage = [...t].sort(); zeichnen(); return; }
   if (a === "etag") { entwurfLesen(); const i = +el.dataset.i, t = new Set(entwurf.tage); t.has(i) ? t.delete(i) : t.add(i); entwurf.tage = [...t].sort(); zeichnen(); return; }
   if (a === "ewahl") {
     entwurfLesen();

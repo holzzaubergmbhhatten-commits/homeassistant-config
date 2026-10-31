@@ -19,7 +19,8 @@ Daten (lokal, nicht im Repository): /config/www/kueche_daten.json
               schritte: [{text, timer_min}], quelle, favorit, notiz}],
    plan: {"JJJJ-MM-TT": {art: kochen|reste|auswaerts|frei, titel, kurz, grund, portionen, zeit_min, kosten_eur,
                          zutaten, schritte, rezept_id, gekocht}},
-   vorrat: [{name, menge, quelle: ernte|vorrat, seit}], hinweis_woche: {"JJJJ-MM-TT": "…"}}
+   vorrat: [{name, menge, quelle: ernte|vorrat, seit}], hinweis_woche: {"JJJJ-MM-TT": "…"},
+   mittag: {"JJJJ-MM-TT": {groesse: snack|mahlzeit|kein, …wie ein Gericht…}}  – Mittagessen (Standard: Sa/So, als Snack)}
 Schlüssel kommen aus den Integrationen (Anthropic, Telegram), nicht aus dem Repository.
 """
 import base64
@@ -50,8 +51,8 @@ STANDARD = {
                       "budget": 75, "stil": ["Familienlieblinge"], "reste": "1", "ernaehrung": "keine", "allergien": [],
                       "zeit": 30, "geraete": ["Herd", "Backofen"], "platz": ["Kühlschrank", "Gefrierschrank"],
                       "arbeitszeiten": "", "hinweise": "", "laden": "Rewe", "angebote": True, "auswaerts_tage": [],
-                      "eingerichtet": False},
-    "rezepte": [], "plan": {}, "vorrat": [], "hinweis_woche": {},
+                      "mittag_tage": [5, 6], "mittag_art": "snack", "eingerichtet": False},
+    "rezepte": [], "plan": {}, "vorrat": [], "hinweis_woche": {}, "mittag": {},
 }
 
 
@@ -390,6 +391,30 @@ def rezept_einsetzen(d, g):
 
 # ---------- Aufgaben im Hintergrund ----------
 
+MITTAG_TEXT = {"snack": "kleiner Mittagssnack (schnell, max. 15–20 min, z. B. Brotzeit, Suppe, Toast, Wraps, Salat, Pfannkuchen, "
+                         "Reste vom Vorabend aufpeppen) – leicht, damit abends noch Hunger da ist",
+               "mahlzeit": "vollwertiges Mittagessen (warm, sättigend – abends darf es dann leichter sein)"}
+
+
+def mittag_tage(d, liste):
+    """[(Datum, Größe)] für die Tage, an denen ein Mittagessen geplant wird (Einstellung + Wahl je Tag, „kein“ = auslassen)."""
+    e = d["einstellungen"]
+    aus = []
+    for t in liste:
+        wahl = ((d.get("mittag") or {}).get(t.isoformat()) or {}).get("groesse")
+        if wahl == "kein":
+            continue
+        if wahl in MITTAG_TEXT or t.weekday() in (e.get("mittag_tage") or []):
+            aus.append((t, wahl if wahl in MITTAG_TEXT else (e.get("mittag_art") if e.get("mittag_art") in MITTAG_TEXT else "snack")))
+    return aus
+
+
+def mittag_sauber(g, groesse):
+    m = gericht_sauber(dict(g, art="kochen"))
+    m["groesse"] = groesse
+    return m
+
+
 def plan_machen(auftrag):
     d = daten_laden()
     start = date.fromisoformat(auftrag.get("von") or montag(date.today() + timedelta(days=2)).isoformat())
@@ -407,6 +432,7 @@ def plan_machen(auftrag):
             d["plan"][t.isoformat()] = {"art": "auswaerts", "titel": "Essen gehen", "grund": "regelmäßig laut Einstellungen", "fest": True}
     feste = {k: v for k, v in (d.get("plan") or {}).items() if start.isoformat() <= k <= bis.isoformat() and v.get("fest")}
     liste = [start + timedelta(days=i) for i in range(tage)]
+    mittage = mittag_tage(d, liste)
     angebote_holen(d, start)
     frage = (kontext(d, auftrag, start, bis)
              + f"\n\nPlane die Abendessen für {de(start)} bis {de(bis)} – also für diese Tage: "
@@ -416,6 +442,9 @@ def plan_machen(auftrag):
              + (f"\nBesonderer Wunsch: {auftrag['wunsch']}" if auftrag.get("wunsch") else "")
              + "\nTage, an denen wir laut Einstellungen nicht kochen: art \"frei\" (titel z. B. \"Brotzeit\" oder \"Auswärts\")."
              + "\nReste-Abende: art \"reste\", titel \"Reste: <Gericht>\" – das Gericht am Vortag dann mit doppelter Portionenzahl planen."
+             + ("\nMITTAGESSEN zusätzlich für diese Tage (passend zum Abendessen, nicht dasselbe; Reste vom Vorabend gern nutzen): "
+                + "; ".join(f"{de(t)} ({t.isoformat()}): {MITTAG_TEXT[g]}" for t, g in mittage)
+                + ". Im JSON unter \"mittag\": [{\"datum\": \"JJJJ-MM-TT\", …Gericht…}] – Zutaten auch hier mit Mengen." if mittage else "")
              + "\nAntworte NUR mit JSON: {\"tage\": [{\"datum\": \"JJJJ-MM-TT\", …Gericht…}], \"hinweis\": \"1–2 Sätze zur Woche\","
              + " \"kosten_gesamt_eur\": 70}\nGericht-Format: " + GERICHT_FORMAT)
     status(True, "Claude plant die Woche …", art="plan")
@@ -429,17 +458,26 @@ def plan_machen(auftrag):
             if k in feste or not re.match(r"^\d{4}-\d\d-\d\d$", k) or not (start.isoformat() <= k <= bis.isoformat()):
                 continue
             d["plan"][k] = gericht_sauber(rezept_einsetzen(d, g))
+        groessen = {t.isoformat(): gr for t, gr in mittage}
+        for g in a.get("mittag") or []:
+            k = str(g.get("datum", "")) if isinstance(g, dict) else ""
+            if k in groessen:
+                d.setdefault("mittag", {})[k] = mittag_sauber(rezept_einsetzen(d, g), groessen[k])
         if a.get("hinweis"):
             d["hinweis_woche"][montag(start).isoformat()] = str(a["hinweis"])[:300] + (
                 f" Geschätzte Kosten: ca. {round(float(a['kosten_gesamt_eur']))} €." if a.get("kosten_gesamt_eur") else "")
         # alte Pläne (älter als 8 Wochen) entfernen
         grenze = (date.today() - timedelta(days=56)).isoformat()
         d["plan"] = {k: v for k, v in d["plan"].items() if k >= grenze}
+        d["mittag"] = {k: v for k, v in (d.get("mittag") or {}).items() if k >= grenze}
         json_schreiben(DATEN, d)
     bilder_suchen([(start + timedelta(days=i)).isoformat() for i in range(tage)])
     text = "Essensplan " + de(start) + " – " + de(bis) + ":\n" + "\n".join(
         f"• {TAGE[date.fromisoformat(k).weekday()][:2]}: {v.get('titel')}" for k, v in sorted(d["plan"].items())
         if start.isoformat() <= k <= bis.isoformat())
+    m = [f"• {TAGE[t.weekday()][:2]} mittags: {d['mittag'][t.isoformat()].get('titel')}" for t, _ in mittage if (d.get("mittag") or {}).get(t.isoformat(), {}).get("titel")]
+    if m:
+        text += "\n" + "\n".join(m)
     return text + ("\n" + d["hinweis_woche"].get(montag(start).isoformat(), "") if d["hinweis_woche"].get(montag(start).isoformat()) else "")
 
 
@@ -515,6 +553,29 @@ def tausch_machen(auftrag):
         json_schreiben(DATEN, d)
     bilder_suchen([tag.isoformat()])
     return f"{de(tag)}: {g.get('titel')} – {g.get('kurz', '')}"
+
+
+def mittag_machen(auftrag):
+    d = daten_laden()
+    tag = date.fromisoformat(auftrag["datum"])
+    groesse = auftrag.get("groesse") if auftrag.get("groesse") in MITTAG_TEXT else "snack"
+    alt = (d.get("mittag") or {}).get(tag.isoformat(), {})
+    abend = (d.get("plan") or {}).get(tag.isoformat(), {})
+    vorabend = (d.get("plan") or {}).get((tag - timedelta(days=1)).isoformat(), {})
+    frage = (kontext(d, auftrag, tag, tag)
+             + f"\n\nPlane ein Mittagessen für {de(tag)}: {MITTAG_TEXT[groesse]}."
+             + (f" Abends gibt es: {abend.get('titel')} – mittags etwas anderes." if abend.get("titel") else "")
+             + (f" Am Vorabend gab es {vorabend.get('titel')} (Reste dürfen verwendet werden)." if vorabend.get("titel") else "")
+             + (f" Bisher geplant war: {alt.get('titel')} – bitte etwas anderes." if alt.get("titel") and not auftrag.get("wunsch") else "")
+             + (f" Unser Wunsch: {auftrag['wunsch']}" if auftrag.get("wunsch") else "")
+             + "\nAntworte NUR mit JSON im Gericht-Format: " + GERICHT_FORMAT)
+    status(True, f"Claude sucht ein Mittagessen für {de(tag)} …", art="mittag")
+    g = claude(GRUND, frage, max_tokens=4000, effort="low")
+    with Sperre():
+        d = daten_laden()
+        d.setdefault("mittag", {})[tag.isoformat()] = mittag_sauber(rezept_einsetzen(d, g), groesse)
+        json_schreiben(DATEN, d)
+    return f"{de(tag)} mittags: {g.get('titel')} – {g.get('kurz', '')}"
 
 
 def seite_holen(url):
@@ -663,7 +724,7 @@ def pruefen_machen(auftrag):
             + (", schwierig: " + "; ".join(f"{x['text']} → {x['alternative'] or x['hinweis']}" for x in probleme) if probleme else " – alles da."))
 
 
-ARBEIT = {"plan": plan_machen, "tausch": tausch_machen, "rezept": rezept_machen, "pruefen": pruefen_machen}
+ARBEIT = {"plan": plan_machen, "tausch": tausch_machen, "mittag": mittag_machen, "rezept": rezept_machen, "pruefen": pruefen_machen}
 
 
 def im_hintergrund(auftrag):
@@ -723,8 +784,9 @@ def stand():
         tag = heute + timedelta(days=i)
         g = (d.get("plan") or {}).get(tag.isoformat())
         if g:
+            m = (d.get("mittag") or {}).get(tag.isoformat()) or {}
             woche.append({"datum": tag.isoformat(), "tag": TAGE[tag.weekday()][:2], "text": g.get("titel", ""), "art": g.get("art", ""),
-                          "zeit": g.get("zeit_min", 0)})
+                          "zeit": g.get("zeit_min", 0), "mittag": m.get("titel", "") if m.get("groesse") != "kein" else ""})
     h = (d.get("plan") or {}).get(heute.isoformat()) or {}
     hinweis = ""
     if h.get("art") == "kochen" and h.get("zeit_min"):
@@ -732,7 +794,8 @@ def stand():
     if h.get("art") == "reste":
         hinweis = "Reste aufwärmen"
     morgen = (d.get("plan") or {}).get((heute + timedelta(days=1)).isoformat()) or {}
-    return {"gericht": h.get("titel", ""), "hinweis": hinweis, "grund": h.get("grund", ""), "morgen": morgen.get("titel", ""),
+    hm = (d.get("mittag") or {}).get(heute.isoformat()) or {}
+    return {"mittag": hm.get("titel", "") if hm.get("groesse") != "kein" else "", "gericht": h.get("titel", ""), "hinweis": hinweis, "grund": h.get("grund", ""), "morgen": morgen.get("titel", ""),
             "woche": woche, "rezepte": len(d.get("rezepte") or []), "vorrat": [x.get("name") for x in d.get("vorrat") or []][:20],
             "eingerichtet": bool(d["einstellungen"].get("eingerichtet")), "laeuft": json_laden(STATUS, {}).get("laeuft", False)}
 
@@ -749,8 +812,9 @@ def einkauf(auftrag):
     von, bis = auftrag.get("von") or date.today().isoformat(), auftrag.get("bis") or (date.today() + timedelta(days=6)).isoformat()
     vorrat = [str(x.get("name", "")).lower() for x in d.get("vorrat") or []]
     summe = {}
-    for k, g in sorted((d.get("plan") or {}).items()):
-        if not (von <= k <= bis) or g.get("art") != "kochen":
+    alle = [(k, g, "") for k, g in (d.get("plan") or {}).items()] + [(k, g, " (mittags)") for k, g in (d.get("mittag") or {}).items()]
+    for k, g, wann in sorted(alle, key=lambda x: x[0]):
+        if not (von <= k <= bis) or g.get("art") != "kochen" or g.get("groesse") == "kein":
             continue
         for z in g.get("zutaten") or []:
             name = z.get("name", "")
@@ -763,7 +827,7 @@ def einkauf(auftrag):
                 s["ohne_menge"] = True
             else:
                 s["menge"] += float(z["menge"])
-            s["fuer"].append(f"{TAGE[date.fromisoformat(k).weekday()][:2]} {g.get('titel', '')}")
+            s["fuer"].append(f"{TAGE[date.fromisoformat(k).weekday()][:2]}{wann} {g.get('titel', '')}")
     liste = []
     for s in sorted(summe.values(), key=lambda s: (BEREICHE.index(s["bereich"]) if s["bereich"] in BEREICHE else 99, s["name"])):
         menge = zahl_text(s["menge"]) if s["menge"] else ""
@@ -810,6 +874,11 @@ def telegram(auftrag):
     plan = "\n".join(f"{de(date.fromisoformat(k))} ({k}): {v.get('art')} – {v.get('titel')} ({v.get('zeit_min', '?')} min)"
                      + (f"; Zutaten: {', '.join(z.get('name', '') for z in v.get('zutaten') or [])}" if v.get("zutaten") else "")
                      for k, v in sorted((d.get("plan") or {}).items()) if (heute - timedelta(days=2)).isoformat() <= k <= (heute + timedelta(days=13)).isoformat())
+    mittag = "\n".join(f"{de(date.fromisoformat(k))} ({k}) mittags ({v.get('groesse')}): {v.get('titel')}"
+                        for k, v in sorted((d.get("mittag") or {}).items()) if v.get("titel") and v.get("groesse") != "kein"
+                        and (heute - timedelta(days=1)).isoformat() <= k <= (heute + timedelta(days=13)).isoformat())
+    if mittag:
+        plan = (plan + "\n" if plan else "") + mittag
     rezepte = "; ".join(f"{r['id']}: {r.get('titel')}{' (Liebling)' if r.get('favorit') else ''}" for r in d.get("rezepte") or [])[:3000]
     frage = (f"Heute ist {de(heute)} {heute.year} ({heute.isoformat()}), {datetime.now().strftime('%H:%M')} Uhr.\n"
              f"Essensplan:\n{plan or '(noch nichts geplant)'}\n\nGespeicherte Rezepte: {rezepte or 'keine'}\n"
