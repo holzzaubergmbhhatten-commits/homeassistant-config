@@ -152,7 +152,8 @@ function zeichnen() {
   if (!GERAETE.length) {
     $("inhalt").innerHTML = `<div class="karte leer"><h2>Noch keine Omada-Geräte</h2><p class="klein">Sobald in Home Assistant die Integration „TP-Link Omada“ eingerichtet ist,
       erscheinen hier alle Switches mit ihren Ports, die Access Points und der Router – automatisch.<br><br>
-      Einstellungen → Geräte &amp; Dienste → Integration hinzufügen → „TP-Link Omada“ → Adresse des Controllers, eigener Benutzer, „SSL prüfen“ aus.</p></div>`;
+      Einstellungen → Geräte &amp; Dienste → Integration hinzufügen → „TP-Link Omada“ → Adresse des Controllers, eigener Benutzer, „SSL prüfen“ aus.</p>
+      <p><button class="knopf voll" data-suchen="1">Adresse des Controllers suchen</button></p><div id="suchergebnis" class="klein"></div></div>`;
     return;
   }
   const weg = GERAETE.filter(g => !online(g));
@@ -164,6 +165,15 @@ function zeichnen() {
 // ---------- Bedienung (Monitor meldet Finger doppelt → nur einmal auswerten) ----------
 async function aktion(t) {
   const h = hass();
+  if (t.dataset.suchen) {
+    $("suchergebnis").textContent = "Sucht im Heimnetz … (ca. 20 Sekunden)";
+    try { const r = await h.callWS({ type: "call_service", domain: "script", service: "netzwerk_controller_suchen", service_data: {}, return_response: true });
+      const a = (r && r.response) || {}, g = a.gefunden || [];
+      $("suchergebnis").innerHTML = g.length ? `Gefunden: <b>${g.map(x => esc(x.url)).join(" oder ")}</b> – diese Adresse bei „Host“ eintragen (SSL prüfen: aus). Steht auch in Telegram.`
+        : `Nichts gefunden${a.fehler ? " (" + esc(a.fehler) + ")" : ""}. Ist die OC200 eingeschaltet und im selben Netz wie Home Assistant?`;
+    } catch (e) { $("suchergebnis").textContent = "Fehler: " + (e.message || e); }
+    return;
+  }
   if (t.dataset.port) { wahl = wahl === t.dataset.port ? null : t.dataset.port; zeichnen(); return; }
   if (t.dataset.zu) { wahl = null; zeichnen(); return; }
   if (t.dataset.merken) {

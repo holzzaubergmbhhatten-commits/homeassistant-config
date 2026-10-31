@@ -5,6 +5,7 @@
 # Beschriftungen lokal in /config/www/netzwerk_daten.json (nicht im Repository). Keine IP-/MAC-Adressen.
 shell_command:
   netzwerk: python3 /config/claude_tools/netzwerk.py {{ aktion }} {{ wert | default('') }}
+  omada_finden: python3 /config/claude_tools/omada_finden.py
 
 script:
   netzwerk_speichern:
@@ -25,6 +26,32 @@ script:
           antwort: >-
             {% set a = ergebnis.stdout | default('') if ergebnis is defined and ergebnis is mapping else '' %}
             {{ a | from_json if (a | string).startswith('{') else {'ok': false, 'fehler': a or 'keine Antwort'} }}
+      - stop: fertig
+        response_variable: antwort
+
+  # Sucht die Adresse des Omada-Controllers (OC200) im Heimnetz – Ergebnis auf der Seite und per Telegram an Marco
+  netzwerk_controller_suchen:
+    alias: "Netzwerk: Omada-Controller suchen"
+    icon: mdi:magnify
+    mode: single
+    sequence:
+      - action: shell_command.omada_finden
+        response_variable: roh
+      - variables:
+          antwort: >-
+            {% set a = roh.stdout | default('') if roh is defined and roh is mapping else '' %}
+            {{ a | from_json if (a | string).startswith('{') else {'ok': false, 'fehler': a or 'keine Antwort'} }}
+          marco: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\\d+$') | first | default('') }}"
+      - if: "{{ marco != '' }}"
+        then:
+          - action: telegram_bot.send_message
+            continue_on_error: true
+            data:
+              chat_id: "{{ marco | int }}"
+              message: >-
+                {% if antwort.gefunden | default([]) %}📡 Omada-Controller gefunden: {{ antwort.gefunden | map(attribute='url') | join(' oder ') }}
+                – diese Adresse bei der Integration „TP-Link Omada“ als Host eintragen (SSL prüfen: aus).
+                {%- else %}📡 Kein Omada-Controller im Netz {{ antwort.netz | default('') }} gefunden{{ (': ' ~ antwort.fehler) if antwort.fehler is defined else '' }}.{% endif %}
       - stop: fertig
         response_variable: antwort
 
