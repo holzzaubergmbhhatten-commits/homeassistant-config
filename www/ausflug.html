@@ -181,14 +181,17 @@ function heim(i) {
 function mapsLink(i, wie) {
   const zuhause = heim(i);
   const modus = { Fahrrad: "bicycling", Auto: "driving", "Zu Fuß": "walking", Bahn: "transit" }[wie] || "driving";
-  const ziel = i.lat && i.lon ? `${i.lat},${i.lon}` : encodeURIComponent(i.adresse || i.name);
-  const stopps = (i.zwischenstopps || []).map(z => `${z.lat},${z.lon}`);
+  // Claudes Koordinaten sind oft nur grob (z. B. 53.35, 8.47) → Ziel lieber über die Adresse, die findet Google genau.
+  // Zwischenstopps nur mit genauen Koordinaten (mind. 3 Nachkommastellen), sonst weglassen statt Umweg.
+  const genau = v => (String(v).split(".")[1] || "").length >= 3;
+  const ziel = i.adresse ? i.adresse : (i.lat && i.lon && genau(i.lat) && genau(i.lon) ? `${i.lat},${i.lon}` : i.name);
+  const stopps = (i.zwischenstopps || []).filter(z => genau(z.lat) && genau(z.lon)).map(z => `${z.lat},${z.lon}`);
   let u = `https://www.google.com/maps/dir/?api=1&travelmode=${modus}`;
   if (zuhause) u += `&origin=${zuhause}`;
   if ((wie === "Fahrrad" || wie === "Zu Fuß") && zuhause) {   // Rundtour: über die Stopps zum Ziel und zurück nach Hause
     u += `&destination=${zuhause}&waypoints=${encodeURIComponent([...stopps, ziel].join("|"))}`;
   } else {
-    u += `&destination=${ziel}` + (stopps.length && modus !== "transit" ? `&waypoints=${encodeURIComponent(stopps.join("|"))}` : "");
+    u += `&destination=${encodeURIComponent(ziel)}` + (stopps.length && modus !== "transit" ? `&waypoints=${encodeURIComponent(stopps.join("|"))}` : "");
   }
   return u;
 }

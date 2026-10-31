@@ -38,7 +38,9 @@ Antworte am Ende NUR mit JSON:
   "einkehr": "Café/Restaurant mit Name"}],
  "hinweis": "1 Satz zum Wetter/Tag"}
 5 bis 6 Ideen, verschieden (nicht alles dieselbe Art). Bei Fahrrad: Rundtour, Entfernung = Tour gesamt in km; zwischenstopps =
-2–3 schöne Punkte auf dem Weg (für die Route). Koordinaten möglichst genau (Eingang/Parkplatz)."""
+2–3 schöne Punkte auf dem Weg (für die Route), die WIRKLICH zwischen Ovelgönne und dem Ziel liegen (kein Umweg).
+Adresse immer vollständig mit Straße, PLZ und Ort (Google Maps findet das Ziel darüber). Koordinaten mit 4 Nachkommastellen
+und nur, wenn du sie aus einer Quelle kennst – sonst lat/lon weglassen statt schätzen."""
 
 
 def json_laden(pfad, leer):

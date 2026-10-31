@@ -1801,7 +1801,7 @@ views:
   # Ausflugsplaner: Rad, Auto, zu Fuß, Bahn – Ideen mit Bildern, Ablauf und Google-Maps-Route (packages/ausflug.yaml)
   cards:
   - type: iframe
-    url: /local/ausflug.html?v=2
+    url: /local/ausflug.html?v=3
     aspect_ratio: 53.3%
 - title: Küche
   path: kueche
