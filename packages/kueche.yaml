@@ -216,7 +216,7 @@ automation:
       - condition: template
         value_template: >-
           {% set t = trigger.event.data.text | default('') | string %}
-          {{ t is match('^\s*/?(essen|essensplan|wochenplan|speiseplan|rezepte?|ernte|vorrat|kochen|kochplan)\\b(?!\s+(ist|wird)\s+(fertig|gleich))', ignorecase=True)
+          {{ t is match('^\s*/?(essen|essensplan|wochenplan|speiseplan|rezepte?|ernte|vorrat|kochen|kochplan|arbeitszeiten?)\\b(?!\s+(ist|wird)\s+(fertig|gleich))', ignorecase=True)
              or t is search('was\s+gibt\W{0,2}\s*(e?s\s+)?(heute|morgen|übermorgen|uebermorgen|am\s+\w+|diese\s+woche)?\s*(zu\s+essen|zum\s+(abend|mittag)\w*)|was\s+(essen|kochen)\s+wir|^\s*plan\w*\s+(die\s+|uns\s+)?(nächste|naechste|diese|kommende)\s+woche|(essens|wochen|speise)plan|\\bgeerntet\\b', ignorecase=True) }}
     actions:
       - variables:

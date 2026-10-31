@@ -599,6 +599,9 @@ Antworte NUR mit JSON:
    {"art": "vorrat_weg", "name": "Kürbis"}                                    – verbraucht/aufgebraucht
    {"art": "rezept", "url": "https://…", "text": "", "datum": ""}           – Rezept aus Link oder Text speichern (optional einplanen)
    {"art": "einkauf", "von": "JJJJ-MM-TT", "bis": "JJJJ-MM-TT"}              – Zutaten auf die Einkaufsliste
+   {"art": "einstellung", "feld": "arbeitszeiten" | "hinweise", "text": "…"} – feste Wochenzeiten (Arbeit, Schule, Chor,
+       Training) bzw. Vorlieben merken; text = der KOMPLETTE neue Inhalt des Feldes (Bisheriges übernehmen, Neues ergänzen
+       oder ersetzen), übersichtlich je Person und Wochentag
  ]}
 Regeln: Fragen ("Was gibt's heute/morgen/diese Woche?", "Wie lange braucht das?", "Was brauche ich für …?") nur beantworten,
 aktionen leer. "Ernte: …", "Wir haben … geerntet" → vorrat mit quelle "ernte". Ein Link → rezept. Bei "planen", "tag" und "rezept"
@@ -616,6 +619,8 @@ def telegram(auftrag):
     frage = (f"Heute ist {de(heute)} {heute.year} ({heute.isoformat()}), {datetime.now().strftime('%H:%M')} Uhr.\n"
              f"Essensplan:\n{plan or '(noch nichts geplant)'}\n\nGespeicherte Rezepte: {rezepte or 'keine'}\n"
              f"Vorrat/Ernte: {vorrat_text(d) or 'nichts eingetragen'}\n"
+             f"Gespeicherte Arbeitszeiten/feste Termine: {d['einstellungen'].get('arbeitszeiten') or '(leer)'}\n"
+             f"Gespeicherte Vorlieben: {d['einstellungen'].get('hinweise') or '(leer)'}\n"
              f"Termine: {termine_text(auftrag.get('termine'), heute, heute + timedelta(days=13)) or 'keine'}\n\n"
              f"Nachricht von {auftrag.get('von') or 'der Familie'}: {auftrag.get('text', '')}")
     a = claude(TELEGRAM, frage, max_tokens=2500, effort="low", timeout=45)
@@ -642,6 +647,8 @@ def telegram(auftrag):
                 r = next((r for r in d["rezepte"] if r.get("id") == x.get("rezept_id")), None)
                 if r:
                     d["plan"][dat] = gericht_sauber(dict(r, art="kochen", rezept_id=r["id"], grund="Wunsch"))
+            elif art == "einstellung" and x.get("feld") in ("arbeitszeiten", "hinweise") and str(x.get("text", "")).strip():
+                d["einstellungen"][x["feld"]] = str(x["text"]).strip()[:1500]
             elif art in ("planen", "tag", "rezept", "einkauf"):
                 folge.append(x)
         json_schreiben(DATEN, d)
