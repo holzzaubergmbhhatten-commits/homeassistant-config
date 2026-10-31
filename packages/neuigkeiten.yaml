@@ -1,5 +1,5 @@
 # Einmalig: Übersicht der Neuerungen (31.10.2026) per Telegram an Mirka (claude_tools/neuigkeiten.py, Markierungsdatei
-# /config/.neuigkeiten_2026_10_31 verhindert Wiederholungen). Klappt es nicht, bekommt Marco nach dem Start einen Hinweis.
+# /config/.neuigkeiten_2026_10_31_b verhindert Wiederholungen). Klappt es nicht, bekommt Marco nach dem Start einen Hinweis.
 shell_command:
   neuigkeiten: python3 /config/claude_tools/neuigkeiten.py {{ wert }}
 
