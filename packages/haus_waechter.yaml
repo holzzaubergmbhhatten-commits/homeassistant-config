@@ -454,6 +454,16 @@ automation:
                   die Morgen-Ansage pausiert, und läuft 10 Minuten am Stück Wasser, kommt sofort eine Nachricht.
                   Jeden Abend um 19 Uhr kommt ein kurzer Bericht. Tipp: Wasser in der Conel-App auf „Abwesend“ stellen.
                   {% else %}🏡 Willkommen zurück! Urlaubsmodus ist aus, die Morgen-Ansage läuft wieder.{% endif %}
+      # CO-Melder (FireAngel) hängt zu Hause am Kamin und fährt im Wohnwagen mit – Erinnerung an Marco
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
+          message: >-
+            {% if trigger.to_state.state == 'on' %}🚐 Fahrt ihr mit dem Wohnwagen? Dann den CO-Melder (FireAngel) im Wohnzimmer
+            abnehmen und in den Wohnwagen stellen.
+            {% else %}🔥 Den CO-Melder (FireAngel) aus dem Wohnwagen wieder ins Wohnzimmer an den Kamin hängen – bevor der Kamin
+            das nächste Mal brennt. Kurz den Testknopf drücken.{% endif %}
 
   - id: haus_urlaub_licht
     alias: "Haus-Wächter: Urlaub – Licht wie bewohnt"
