@@ -898,14 +898,80 @@ function geraetKarte(g, i) {
       : `<div class="klein">Kein Verbrauchszähler gefunden.</div>`}
     ${t.info ? `<div class="klein">${esc(t.info)}</div>` : ""}</div>`;
 }
+/* ---------- Kochfeld-Schätzung aus dem Hausverbrauch (kein eigenes Messgerät) ----------
+   Hausverbrauch = PV + Netz − Akku (wie im Energiefluss), minus die gemessenen Shelly-Geräte = „Rest“.
+   Grundlast = kleinster Rest der letzten 90 Minuten. Liegt der Rest zu Kochzeiten deutlich darüber → Kochfeld (geschätzt).
+   Ungenau, wenn zur selben Zeit Wärmepumpe/Heizstab, Wasserkocher, Waschmaschine o. Ä. anspringen. */
+const KOCH_ZEITEN = [[10.5, 14.5], [16.5, 21.5]];   // Uhrzeiten (dezimal), in denen gekocht wird
+const KOCH_SCHWELLE = 1000, KOCH_MAX = 6400, KOCH_GRUND_MIN = 90;
+let KSCH = null, KSCH_ZEIT = 0;
+const kochZeit = d => { const h = d.getHours() + d.getMinutes() / 60; return KOCH_ZEITEN.some(([a, b]) => h >= a && h < b); };
+const kochSchaetzen = () => !!E.netz && !GER.some(g => g.typ.art === "koch");
+function hausJetztW() {
+  const netz = kw(E.netz); if (netz == null) return null;
+  return Math.max(0, (Math.max(0, kw(E.pvLeistung) || 0) + netz * NETZ_VZ - (kw(E.akkuLeistung) || 0) * AKKU_VZ) * 1000);
+}
+async function ladeKochSchaetzung() {
+  KSCH_ZEIT = Date.now();
+  if (!kochSchaetzen()) return;
+  const ids = [E.pvLeistung, E.netz, E.akkuLeistung, ...GER.map(g => g.leistung)].filter(Boolean);
+  const heute = new Date(); heute.setHours(0, 0, 0, 0); const von = new Date(heute); von.setDate(von.getDate() - 6); von.setHours(-2);
+  let r; try { r = await stats(von, new Date(), "5minute", ids, ["mean"]); } catch (e) { return; }
+  const werte = id => { const o = {}; (r[id] || []).forEach(x => { o[zeit(x.start)] = x.mean || 0; }); return o; };
+  const pv = werte(E.pvLeistung), nz = werte(E.netz), ak = werte(E.akkuLeistung), bek = GER.map(g => werte(g.leistung));
+  const zeiten = Object.keys(nz).map(Number).sort((a, b) => a - b);
+  const rest = zeiten.map(t => Math.max(0, (pv[t] || 0) + nz[t] * NETZ_VZ - (ak[t] || 0) * AKKU_VZ) - bek.reduce((s, o) => s + (o[t] || 0), 0));
+  const punkte = zeiten.map((t, i) => {
+    const vorher = []; for (let j = i - 1; j >= 0 && zeiten[j] >= t - KOCH_GRUND_MIN * 60e3; j--) vorher.push(rest[j]);
+    const grund = vorher.length >= 3 ? Math.min(...vorher) : null, mehr = grund == null ? 0 : rest[i] - grund;
+    return { t, rest: rest[i], grund, koch: kochZeit(new Date(t)) && mehr > KOCH_SCHWELLE ? Math.min(mehr, KOCH_MAX) : 0 };
+  });
+  const tage = [...Array(7)].map((_, i) => { const d = new Date(heute); d.setDate(d.getDate() - 6 + i); const b = new Date(d); b.setDate(b.getDate() + 1);
+    const p = punkte.filter(x => x.t >= +d && x.t < +b);
+    return { d, v: p.reduce((s, x) => s + x.koch, 0) * 5 / 60 / 1000, min: p.filter(x => x.koch).length * 5 }; });
+  KSCH = { punkte, tage, daten: punkte.some(x => x.grund != null) };
+  if (reiter === "geraete") zeichnen();
+}
+function kochJetzt() {
+  if (!KSCH || !KSCH.punkte.length) return null;
+  const h = hausJetztW(); if (h == null) return null;
+  const restJetzt = h - GER.reduce((s, g) => s + (zahl(g.leistung) || 0), 0);
+  const grenze = Date.now() - KOCH_GRUND_MIN * 60e3, alt = KSCH.punkte.filter(x => x.t >= grenze).map(x => x.rest);
+  if (alt.length < 3) return null;
+  const grund = Math.min(...alt), mehr = restJetzt - grund, zeitOk = kochZeit(new Date());
+  return { w: zeitOk && mehr > KOCH_SCHWELLE ? Math.min(mehr, KOCH_MAX) : 0, mehr, grund, zeitOk };
+}
+function kochZustand(k) {
+  if (!k) return { text: "sammelt noch Daten …", klasse: "ruhe", lauf: false, w: null };
+  if (k.w > 0) return { text: "läuft wahrscheinlich", klasse: "ok", lauf: true, w: k.w };
+  return { text: k.zeitOk ? "aus (kein Sprung im Hausverbrauch)" : "aus – gerade keine Kochzeit", klasse: "ruhe", lauf: false, w: 0 };
+}
+function kochKarte() {
+  const t = typenschild("Kochfeld"), z = kochZustand(kochJetzt()), tage = KSCH ? KSCH.tage : [], heute = tage.length ? tage[6] : { v: 0, min: 0 };
+  const max = Math.max(0.05, ...tage.map(x => x.v)), mittel = tage.length ? tage.slice(0, 6).reduce((s, x) => s + x.v, 0) / 6 : 0;
+  return `<div class="gkarte"><div class="gkopf"><div id="kbild" class="${z.lauf ? "lauf" : ""}">${geraetBild("koch")}</div>
+      <div><div class="gname">Kochfeld <small class="klein">(geschätzt)</small></div><div class="gwatt" id="kwatt">${z.w == null ? "–" : z.w ? "≈ " + fmt(z.w / 1000, 1) + " <small>kW</small>" : "0 <small>W</small>"}</div>
+        <div class="gstatus ${z.klasse}" id="kstat">${esc(z.text)}</div></div></div>
+    <div><div class="gskala"><i id="kskala" style="width:${Math.min(100, (z.w || 0) / t.nenn * 100)}%"></i></div>
+      <div class="klein" style="margin-top:3px">Typenschild ${fmt(t.nenn / 1000, 1)} kW · ${esc(t.modell)} · Sicherung ${t.sicherung}</div></div>
+    ${tage.length ? `<div class="gwoche">${tage.map((x, j) => `<div class="${j === 6 ? "heute" : ""}" style="height:${Math.max(3, x.v / max * 100)}%" title="${fmt(x.v, 2)} kWh · ${x.min} Min."></div>`).join("")}</div>
+      <div class="gtage">${tage.map(x => `<span>${TAGE[(x.d.getDay() + 6) % 7]}</span>`).join("")}</div>
+      <div class="klein">Heute ca. <b>${fmt(heute.v, 1)} kWh</b> (≈ ${fmt(heute.v * PREIS, 2)} €, ${heute.min} Min. gekocht) · Ø ${fmt(mittel, 1)} kWh/Tag · aufs Jahr ca. <b>${fmt(mittel * 365, 0)} kWh ≈ ${fmt(mittel * 365 * PREIS, 0)} €</b></div>`
+      : `<div class="klein">Lädt die letzten 7 Tage …</div>`}
+    <div class="klein">Kein eigenes Messgerät: geschätzt aus dem Hausverbrauch (Sprung über ${fmt(KOCH_SCHWELLE / 1000, 1)} kW zu Kochzeiten 10:30–14:30 und 16:30–21:30, ohne die gemessenen Geräte).
+      Läuft gleichzeitig Wärmepumpe, Heizstab oder Wasserkocher, zählt das mit.</div></div>`;
+}
+
 function geraeteSeite() {
-  if (!GER.length) return `<div class="karte"><h2>Geräte</h2><div class="klein">Noch keine Shelly-Steckdosen in Home Assistant gefunden. Sie erscheinen hier, sobald die Shelly-Integration sie eingebunden hat (Einstellungen → Geräte &amp; Dienste → Shelly).</div></div>`;
+  if (kochSchaetzen() && Date.now() - KSCH_ZEIT > 5 * 60e3) setTimeout(ladeKochSchaetzung, 20);
+  if (!GER.length) return `<div class="karte"><h2>Geräte</h2><div class="klein">Noch keine Shelly-Steckdosen in Home Assistant gefunden. Sie erscheinen hier, sobald die Shelly-Integration sie eingebunden hat (Einstellungen → Geräte &amp; Dienste → Shelly).</div></div>`
+    + (kochSchaetzen() ? `<div class="geraete" id="geraete">${kochKarte()}</div>` : "");
   if (Date.now() - GSTAT_ZEIT > 5 * 60e3) setTimeout(ladeGeraete, 10);
   const gesamt = GER.reduce((s, g) => s + (zahl(g.leistung) || 0), 0);
   return `<div class="karte"><h2>Geräte an Steckdosen</h2><div class="klein">Live-Verbrauch der Shelly-Steckdosen, Typenschild aus dem Haus-Handbuch und die letzten 7 Tage.
       Zusammen gerade <b id="ggesamt">${fmt(gesamt, 0)} W</b>. Strompreis
       <input id="preis" type="number" step="0.01" value="${PREIS}" style="width:70px;padding:3px 6px;border-radius:8px;border:1px solid var(--linie);background:var(--bg);color:var(--text)"> €/kWh</div></div>
-    <div class="geraete" id="geraete">${GER.map(geraetKarte).join("")}</div>`;
+    <div class="geraete" id="geraete">${GER.map(geraetKarte).join("")}${kochSchaetzen() ? kochKarte() : ""}</div>`;
 }
 function geraeteLive() {
   GER.forEach((g, i) => { const w = zahl(g.leistung), z = zustand(g), t = g.typ;
@@ -914,6 +980,10 @@ function geraeteLive() {
     $("gstat" + i).className = "gstatus " + z.klasse; $("gstat" + i).textContent = z.text;
     $("gbild" + i).classList.toggle("lauf", z.lauf);
     $("gskala" + i).style.width = (t.nenn ? Math.min(100, (w || 0) / t.nenn * 100) : Math.min(100, (w || 0) / 30)) + "%"; });
+  if ($("kwatt")) { const z = kochZustand(kochJetzt());
+    $("kwatt").innerHTML = z.w == null ? "–" : z.w ? "≈ " + fmt(z.w / 1000, 1) + " <small>kW</small>" : "0 <small>W</small>";
+    $("kstat").className = "gstatus " + z.klasse; $("kstat").textContent = z.text; $("kbild").classList.toggle("lauf", z.lauf);
+    $("kskala").style.width = Math.min(100, (z.w || 0) / KOCH_MAX * 100) + "%"; }
   if ($("ggesamt")) $("ggesamt").textContent = fmt(GER.reduce((s, g) => s + (zahl(g.leistung) || 0), 0), 0) + " W";
 }
 document.addEventListener("change", ev => { if (ev.target.id === "preis") { PREIS = parseFloat(ev.target.value) || 0.32; try { localStorage.setItem("strompreis", PREIS); } catch (e) { /* egal */ } zeichnen(); } });
