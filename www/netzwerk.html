@@ -73,6 +73,37 @@ function meldung(t) { const m = $("meldung"); m.textContent = t; m.style.display
 const DATEN_URL = "/local/netzwerk_daten.json";
 
 const fwLaeuft = {};
+// Port-Belegung, wie Marco sie angesagt hat (31.10.2026). Wird einmal übernommen, wo noch nichts eingetragen ist,
+// danach gilt nur noch die eigene Beschriftung (am Port antippen und ändern).
+const VORBELEGUNG = [
+  { modell: /SG2428P/i, ports: {
+    1: { name: "Zuleitung draußen", notiz: "Access Points draußen" },
+    2: { name: "IKEA Dirigera Hub" },
+    3: { name: "PV-Anlage", dose: "Dachboden" },
+    4: { name: "Access Point HWR", dose: "HWR-Raum" },
+    5: { name: "Access Point Hoftor", dose: "Hoftor vorne" },
+    6: { name: "Viessmann Gridbox" },
+    7: { name: "Home Assistant", dose: "Küche, normale Dose" },
+    8: { name: "Klingel Haustür" },
+    21: { name: "Access Point Bad", dose: "Bad", notiz: "soll später in den Flur" },
+    23: { name: "OC200 Controller" },
+    24: { name: "Router ER605", notiz: "geht in Port 3 vom ER605" } } },
+  { modell: /ER605/i, ports: {
+    1: { name: "Internet Starlink", notiz: "WAN – zum Starlink-Router" },
+    2: { name: "frei (Fritzbox tot)", notiz: "Fritzbox kann raus" },
+    3: { name: "Switch SG2428P", notiz: "geht in Port 24 vom Switch" } } }
+];
+async function vorbelegen() {
+  let neu = false;
+  for (const g of GERAETE) {
+    const v = VORBELEGUNG.find(x => x.modell.test(g.modell + " " + g.name)); if (!v) continue;
+    for (const [nr, b] of Object.entries(v.ports)) {
+      const k = g.id + "|" + nr; if (daten.ports[k]) continue;
+      daten.ports[k] = Object.assign({ name: "", dose: "", notiz: "" }, b); neu = true;
+    }
+  }
+  if (neu) await speichern();
+}
 let GERAETE = [], daten = { ports: {}, geraete: {} }, wahl = null, letzterFinger = 0;
 
 // ---------- Geräte finden ----------
@@ -238,6 +269,7 @@ async function start() {
   design();
   try { await Promise.all([finden(), laden()]); } catch (e) { $("inhalt").innerHTML = `<div class="karte">Fehler: ${esc(e.message || e)}</div>`; return; }
   zeichnen();
+  vorbelegen().then(zeichnen).catch(() => {});
   setInterval(() => { design(); if (!wahl) zeichnen(); }, 5000);
   setInterval(() => finden().catch(() => {}), 5 * 60e3);
 }
