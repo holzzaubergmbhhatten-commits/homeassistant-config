@@ -167,15 +167,26 @@ async function beobachten() {
 }
 
 // ---------- Route & Text ----------
-function heim() { const h = hass(); return h && h.config ? `${h.config.latitude},${h.config.longitude}` : ""; }
+// Zuhause aus Home Assistant – aber nicht, wenn dort noch der Werks-Standort (Amsterdam) steht oder er weit weg vom Ziel liegt.
+// Dann ohne Startpunkt: Google Maps nimmt den aktuellen Standort des Handys.
+function heim(i) {
+  const h = hass(), la = h && h.config && +h.config.latitude, lo = h && h.config && +h.config.longitude;
+  if (!la || !lo || (Math.abs(la - 52.3731) < 0.01 && Math.abs(lo - 4.8903) < 0.01)) return "";
+  if (i && i.lat && i.lon) {
+    const km = 111 * Math.hypot(la - i.lat, (lo - i.lon) * Math.cos(la * Math.PI / 180));
+    if (km > 250) return "";
+  }
+  return `${la},${lo}`;
+}
 function mapsLink(i, wie) {
+  const zuhause = heim(i);
   const modus = { Fahrrad: "bicycling", Auto: "driving", "Zu Fuß": "walking", Bahn: "transit" }[wie] || "driving";
   const ziel = i.lat && i.lon ? `${i.lat},${i.lon}` : encodeURIComponent(i.adresse || i.name);
   const stopps = (i.zwischenstopps || []).map(z => `${z.lat},${z.lon}`);
   let u = `https://www.google.com/maps/dir/?api=1&travelmode=${modus}`;
-  if (heim()) u += `&origin=${heim()}`;
-  if ((wie === "Fahrrad" || wie === "Zu Fuß") && heim()) {   // Rundtour: über die Stopps zum Ziel und zurück nach Hause
-    u += `&destination=${heim()}&waypoints=${encodeURIComponent([...stopps, ziel].join("|"))}`;
+  if (zuhause) u += `&origin=${zuhause}`;
+  if ((wie === "Fahrrad" || wie === "Zu Fuß") && zuhause) {   // Rundtour: über die Stopps zum Ziel und zurück nach Hause
+    u += `&destination=${zuhause}&waypoints=${encodeURIComponent([...stopps, ziel].join("|"))}`;
   } else {
     u += `&destination=${ziel}` + (stopps.length && modus !== "transit" ? `&waypoints=${encodeURIComponent(stopps.join("|"))}` : "");
   }
