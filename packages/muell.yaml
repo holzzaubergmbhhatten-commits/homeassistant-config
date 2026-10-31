@@ -153,8 +153,12 @@ automation:
     conditions:
       - condition: template
         value_template: >-
+          {# Telegram-Album: nur das erste Bild hat den Text „Müll“ – weitere Bilder ohne Text innerhalb von 2 Minuten gehören dazu #}
+          {% set zuletzt = this.attributes.last_triggered if this is defined and this.attributes.last_triggered else none %}
           {{ (trigger.event.data.file_mime_type | default('')).startswith('image/')
-             and (trigger.event.data.text | default('', true)) is match('^\s*(m(ü|ue)ll|abfall|tonnen?)', ignorecase=True) }}
+             and ((trigger.event.data.text | default('', true)) is match('^\s*(m(ü|ue)ll|abfall|tonnen?)', ignorecase=True)
+                  or ((trigger.event.data.text | default('', true)) == '' and zuletzt is not none
+                      and (now() - zuletzt).total_seconds() < 120)) }}
     actions:
       - variables:
           name: "muell_{{ now().strftime('%Y%m%d_%H%M%S') }}_{{ range(100, 999) | random }}.jpg"

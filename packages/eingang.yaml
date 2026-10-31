@@ -40,7 +40,10 @@ automation:
     conditions:
       - condition: template
         value_template: >-
-          {{ (trigger.event.data.file_mime_type | default('')).startswith('image/')
+          {% set m = states.automation | selectattr('attributes.id', 'defined') | selectattr('attributes.id', 'eq', 'muell_telegram_foto') | first | default(none) %}
+          {% set muell_album = m is not none and m.attributes.last_triggered is not none
+             and (now() - m.attributes.last_triggered).total_seconds() < 120 and (trigger.event.data.text | default('', true)) == '' %}
+          {{ (trigger.event.data.file_mime_type | default('')).startswith('image/') and not muell_album
              and not ((trigger.event.data.text | default('', true))
                       is match('^\s*(\+|rezept|m(ü|ue)ll|abfall|tonnen?|beleg|akte|weiter|seite|rückseite|rueckseite|wappen|(fotos?|bilder?|schadensfotos?)\s+(zu|zum|zur|für|fuer|von|vom)\\b|anh(ä|ae)ngen\\b|(an|zu|dran)\s.{0,60}h(ä|ae)ngen\\b)', ignorecase=True)) }}
     actions:
