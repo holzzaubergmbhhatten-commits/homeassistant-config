@@ -2,7 +2,7 @@
    Grundriss, Mucki): Farben und Schrift wie das Familien-Handbuch „Zuhause“ – Olivgrün, Sand, Creme, Terrakotta,
    Überschriften in Cormorant Garamond, Text in Montserrat, Wappen vor dem Seitentitel.
    Wird in jeder Seite NACH deren eigenem <style> eingebunden und überschreibt nur die Farbvariablen und Schriften. */
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Montserrat:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Montserrat:wght@400;500;600;700&family=Noto+Color+Emoji&display=swap');
 
 :root {
   --haus-gruen: #536b45; --haus-dunkel: #33442b; --haus-sand: #d8c7a3; --haus-creme: #f7f4ed; --haus-braun: #765c3d;
@@ -15,8 +15,10 @@
   --bg: #161a13; --karte: #232a1f; --text: #efe9dc; --grau: #a9a493; --linie: #343d2e; --trenn: #343d2e; --hell: #161a13;
   --blau: #a9be8f; --akzent: #a9be8f; --gruen: #8fb36f; --orange: #e08a63; --rot: #e0705c; --lila: #c9a97f;
 }
-html, body { font-family: "Montserrat", -apple-system, "Segoe UI", Roboto, sans-serif; }
-h1, h2, .serif { font-family: "Cormorant Garamond", Georgia, "Times New Roman", serif; letter-spacing: 0; }
+/* Emoji-Schriften immer am Ende, sonst zeigt der Monitor-Rechner (Linux) statt der Symbole leere Kästchen */
+html, body { font-family: "Montserrat", -apple-system, "Segoe UI", Roboto, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"; }
+button, input, select, textarea { font-family: inherit; }
+h1, h2, .serif { font-family: "Cormorant Garamond", Georgia, "Times New Roman", serif, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"; letter-spacing: 0; }
 h1 { font-weight: 700; color: var(--haus-dunkel); }
 .dunkel h1 { color: #e8dfc8; }
 h2 { font-weight: 700; }
