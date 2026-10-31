@@ -77,7 +77,7 @@ const fwLaeuft = {};
 // danach gilt nur noch die eigene Beschriftung (am Port antippen und ändern).
 const VORBELEGT = 2;   // hochzählen, wenn die Vorbelegung korrigiert wird (überschreibt nur unveränderte Einträge)
 const VORBELEGUNG = [
-  { modell: /SG2428P/i, ports: {
+  { modell: /SG2428P/i, art: "switch", minPorts: 20, ports: {
     1: { name: "Zuleitung draußen", notiz: "Access Points draußen" },
     2: { name: "IKEA Dirigera Hub" },
     3: { name: "Access Point HWR", dose: "HWR-Raum" },
@@ -89,17 +89,23 @@ const VORBELEGUNG = [
     21: { name: "Access Point Bad", dose: "Bad", notiz: "soll später in den Flur" },
     23: { name: "OC200 Controller" },
     24: { name: "Router ER605", notiz: "geht in Port 3 vom ER605" } } },
-  { modell: /ER605/i, ports: {
+  { modell: /ER605/i, art: "router", ports: {
     1: { name: "Internet Starlink", notiz: "WAN – zum Starlink-Router" },
     2: { name: "frei (Fritzbox tot)", notiz: "Fritzbox kann raus" },
     3: { name: "Switch SG2428P", notiz: "geht in Port 24 vom Switch" } } }
 ];
+// passende Vorbelegung: nach Modell, sonst nach Art (großer Switch / Router)
+function vorlage(g) {
+  return VORBELEGUNG.find(x => x.modell.test(g.modell + " " + g.name))
+    || VORBELEGUNG.find(x => x.art === g.art && g.ports.length >= (x.minPorts || 1) && GERAETE.filter(y => y.art === g.art && y.ports.length >= (x.minPorts || 1)).length === 1);
+}
+function vorName(g, nr) { const v = vorlage(g); return v && v.ports[nr] ? v.ports[nr] : null; }
 async function vorbelegen() {
   if ((daten.vorbelegt || 0) >= VORBELEGT) return;
   const alteNamen = new Set(VORBELEGUNG.flatMap(v => Object.values(v.ports).map(b => b.name)));
   let gefunden = false;
   for (const g of GERAETE) {
-    const v = VORBELEGUNG.find(x => x.modell.test(g.modell + " " + g.name)); if (!v || !g.ports.length) continue;
+    const v = vorlage(g); if (!v || !g.ports.length) continue;
     gefunden = true;
     for (const [nr, b] of Object.entries(v.ports)) {
       const k = g.id + "|" + nr, alt = daten.ports[k];
@@ -132,7 +138,10 @@ async function finden() {
       if (e.entity_id.startsWith("binary_sensor.") && /link|verbind|status/i.test(text)) p.link = e.entity_id;
       if (e.entity_id.startsWith("sensor.") && /power|leistung|watt/i.test(text)) p.watt = e.entity_id;
       if (e.entity_id.startsWith("sensor.") && /speed|geschw/i.test(text)) p.tempo = e.entity_id;
-      if (!p.portname && e.original_name && !/^port\s*\d+/i.test(e.original_name)) p.portname = e.original_name.replace(/\s*(poe|port\s*\d+)\s*/ig, " ").trim();
+      if (!p.portname && e.original_name) {
+        const rest = e.original_name.replace(/port\s*\d+/ig, " ").replace(/\b(poe|leistung|power|status|link|verbindung|geschwindigkeit|speed|modus|mode|profile?|profil|aktiviert|enabled)\b/ig, " ").replace(/^[\s\-–:()]+|[\s\-–:()]+$/g, "").replace(/\s+/g, " ");
+        if (rest.length > 1) p.portname = rest;
+      }
     }
     const istPortlos = !Object.keys(ports).length;
     const art = /^EAP|access ?point/i.test(modell + " " + name) ? "ap" : (/^ER\d|gateway|router/i.test(modell + " " + name) ? "router" : (istPortlos ? "sonst" : "switch"));
@@ -157,7 +166,7 @@ function wertText(id) { const s = st(id); if (!s || ["unknown", "unavailable"].i
 function wertName(id, g) { const s = st(id); return ((s && s.attributes.friendly_name) || id).replace(g.name, "").trim() || id; }
 function portKachel(g, p) {
   const k = g.id + "|" + p.nr, b = daten.ports[k] || {}, poe = p.poe && st(p.poe) && st(p.poe).state === "on", link = p.link && st(p.link) && st(p.link).state === "on";
-  const name = b.name || p.portname || "";
+  const name = b.name || (vorName(g, p.nr) || {}).name || p.portname || "";
   return `<button class="port ${poe ? "poe" : ""} ${link ? "link" : ""} ${wahl === k ? "gewaehlt" : ""}" data-port="${esc(k)}"><span class="led"></span><span class="nr">${p.nr}</span><span class="buchse"></span>
     <span class="name">${esc(name || "–")}</span>${p.watt ? `<span class="w">${esc(wertText(p.watt))}</span>` : ""}</button>`;
 }
@@ -180,7 +189,7 @@ function blatt() {
   const [gid, nr] = wahl.split("|"), g = GERAETE.find(x => x.id === gid), p = g && g.ports.find(x => String(x.nr) === nr); if (!p) return "";
   const b = daten.ports[wahl] || {}, poe = p.poe && st(p.poe), an = poe && poe.state === "on";
   return `<div class="blatt"><div class="zeile" style="justify-content:space-between"><h2 style="margin:0">${esc(g.name)} · Port ${p.nr}</h2><button class="knopf" data-zu="1">Schließen</button></div>
-    <label>Was hängt dran?<input id="bname" value="${esc(b.name || p.portname || "")}" placeholder="z. B. Kamera Hoftor, Access Point Flur"></label>
+    <label>Was hängt dran?<input id="bname" value="${esc(b.name || (vorName(g, p.nr) || {}).name || p.portname || "")}" placeholder="z. B. Kamera Hoftor, Access Point Flur"></label>
     <label>Dose / Raum<input id="bdose" value="${esc(b.dose || "")}" placeholder="z. B. Dose Büro 2, Patchfeld 7"></label>
     <label>Notiz<input id="bnotiz" value="${esc(b.notiz || "")}" placeholder="z. B. Kabel neu 2026"></label>
     <div class="zeile" style="margin-top:14px"><button class="knopf voll" data-merken="1">Speichern</button>
