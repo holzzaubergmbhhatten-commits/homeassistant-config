@@ -1220,45 +1220,125 @@ views:
         - type: heading
           heading: Hof-Tor
           heading_style: subtitle
-        - type: picture
-          image: http://localhost:1984/api/stream.mjpeg?src=draussen_hot_tor_kamera
-          alt_text: Hof-Tor
-          tap_action:
-            action: navigate
-            navigation_path: /flur-display/kamera-hof-tor
+        # Monitor (breiter Bildschirm, Kiosk-Browser am Home-Assistant-PC): flüssiges Bild von go2rtc;
+        # Handy/Laptop: Kamera über Home Assistant (localhost:1984 gibt es nur auf dem PC selbst)
+        - type: conditional
+          conditions:
+          - condition: screen
+            media_query: "(min-width: 1500px)"
+          card:
+            type: picture
+            image: http://localhost:1984/api/stream.mjpeg?src=draussen_hot_tor_kamera
+            alt_text: Hof-Tor
+            tap_action:
+              action: navigate
+              navigation_path: /flur-display/kamera-hof-tor
+        - type: conditional
+          conditions:
+          - condition: screen
+            media_query: "(max-width: 1499px)"
+          card:
+            type: picture-entity
+            entity: camera.draussen_hot_tor_kamera
+            camera_view: live
+            show_name: false
+            show_state: false
+            tap_action:
+              action: navigate
+              navigation_path: /flur-display/kamera-hof-tor
       - type: vertical-stack
         cards:
         - type: heading
           heading: Giebel vorne
           heading_style: subtitle
-        - type: picture
-          image: http://localhost:1984/api/stream.mjpeg?src=draussen_giebel_vorne
-          alt_text: Giebel vorne
-          tap_action:
-            action: navigate
-            navigation_path: /flur-display/kamera-giebel-vorne
+        # Monitor (breiter Bildschirm, Kiosk-Browser am Home-Assistant-PC): flüssiges Bild von go2rtc;
+        # Handy/Laptop: Kamera über Home Assistant (localhost:1984 gibt es nur auf dem PC selbst)
+        - type: conditional
+          conditions:
+          - condition: screen
+            media_query: "(min-width: 1500px)"
+          card:
+            type: picture
+            image: http://localhost:1984/api/stream.mjpeg?src=draussen_giebel_vorne
+            alt_text: Giebel vorne
+            tap_action:
+              action: navigate
+              navigation_path: /flur-display/kamera-giebel-vorne
+        - type: conditional
+          conditions:
+          - condition: screen
+            media_query: "(max-width: 1499px)"
+          card:
+            type: picture-entity
+            entity: camera.draussen_giebel_vorne
+            camera_view: live
+            show_name: false
+            show_state: false
+            tap_action:
+              action: navigate
+              navigation_path: /flur-display/kamera-giebel-vorne
       - type: vertical-stack
         cards:
         - type: heading
           heading: Giebel hinten
           heading_style: subtitle
-        - type: picture
-          image: http://localhost:1984/api/stream.mjpeg?src=draussen_giebel_hinten
-          alt_text: Giebel hinten
-          tap_action:
-            action: navigate
-            navigation_path: /flur-display/kamera-giebel-hinten
+        # Monitor (breiter Bildschirm, Kiosk-Browser am Home-Assistant-PC): flüssiges Bild von go2rtc;
+        # Handy/Laptop: Kamera über Home Assistant (localhost:1984 gibt es nur auf dem PC selbst)
+        - type: conditional
+          conditions:
+          - condition: screen
+            media_query: "(min-width: 1500px)"
+          card:
+            type: picture
+            image: http://localhost:1984/api/stream.mjpeg?src=draussen_giebel_hinten
+            alt_text: Giebel hinten
+            tap_action:
+              action: navigate
+              navigation_path: /flur-display/kamera-giebel-hinten
+        - type: conditional
+          conditions:
+          - condition: screen
+            media_query: "(max-width: 1499px)"
+          card:
+            type: picture-entity
+            entity: camera.draussen_giebel_hinten
+            camera_view: live
+            show_name: false
+            show_state: false
+            tap_action:
+              action: navigate
+              navigation_path: /flur-display/kamera-giebel-hinten
       - type: vertical-stack
         cards:
         - type: heading
           heading: Hof hinten
           heading_style: subtitle
-        - type: picture
-          image: http://localhost:1984/api/stream.mjpeg?src=draussen_hof_hinten
-          alt_text: Hof hinten
-          tap_action:
-            action: navigate
-            navigation_path: /flur-display/kamera-hof-hinten
+        # Monitor (breiter Bildschirm, Kiosk-Browser am Home-Assistant-PC): flüssiges Bild von go2rtc;
+        # Handy/Laptop: Kamera über Home Assistant (localhost:1984 gibt es nur auf dem PC selbst)
+        - type: conditional
+          conditions:
+          - condition: screen
+            media_query: "(min-width: 1500px)"
+          card:
+            type: picture
+            image: http://localhost:1984/api/stream.mjpeg?src=draussen_hof_hinten
+            alt_text: Hof hinten
+            tap_action:
+              action: navigate
+              navigation_path: /flur-display/kamera-hof-hinten
+        - type: conditional
+          conditions:
+          - condition: screen
+            media_query: "(max-width: 1499px)"
+          card:
+            type: picture-entity
+            entity: camera.draussen_hof_hinten
+            camera_view: live
+            show_name: false
+            show_state: false
+            tap_action:
+              action: navigate
+              navigation_path: /flur-display/kamera-hof-hinten
       - type: vertical-stack
         cards:
         - type: button
@@ -1316,12 +1396,32 @@ views:
         tap_action:
           action: navigate
           navigation_path: /flur-display/start
-    - type: picture
-      image: http://localhost:1984/api/stream.mjpeg?src=draussen_hot_tor_kamera_hd
-      alt_text: Hof-Tor
-      tap_action:
-        action: navigate
-        navigation_path: /flur-display/kameras
+    # Monitor (breiter Bildschirm, Kiosk-Browser am Home-Assistant-PC): flüssiges Bild von go2rtc;
+    # Handy/Laptop: Kamera über Home Assistant (localhost:1984 gibt es nur auf dem PC selbst)
+    - type: conditional
+      conditions:
+      - condition: screen
+        media_query: "(min-width: 1500px)"
+      card:
+        type: picture
+        image: http://localhost:1984/api/stream.mjpeg?src=draussen_hot_tor_kamera_hd
+        alt_text: Hof-Tor
+        tap_action:
+          action: navigate
+          navigation_path: /flur-display/kameras
+    - type: conditional
+      conditions:
+      - condition: screen
+        media_query: "(max-width: 1499px)"
+      card:
+        type: picture-entity
+        entity: camera.draussen_hot_tor_kamera
+        camera_view: live
+        show_name: false
+        show_state: false
+        tap_action:
+          action: navigate
+          navigation_path: /flur-display/kameras
 - title: Giebel vorne
   path: kamera-giebel-vorne
   icon: mdi:cctv
@@ -1405,12 +1505,32 @@ views:
           data:
             kamera: draussen_giebel_vorne
             richtung: rechts
-    - type: picture
-      image: http://localhost:1984/api/stream.mjpeg?src=draussen_giebel_vorne_hd
-      alt_text: Giebel vorne
-      tap_action:
-        action: navigate
-        navigation_path: /flur-display/kameras
+    # Monitor (breiter Bildschirm, Kiosk-Browser am Home-Assistant-PC): flüssiges Bild von go2rtc;
+    # Handy/Laptop: Kamera über Home Assistant (localhost:1984 gibt es nur auf dem PC selbst)
+    - type: conditional
+      conditions:
+      - condition: screen
+        media_query: "(min-width: 1500px)"
+      card:
+        type: picture
+        image: http://localhost:1984/api/stream.mjpeg?src=draussen_giebel_vorne_hd
+        alt_text: Giebel vorne
+        tap_action:
+          action: navigate
+          navigation_path: /flur-display/kameras
+    - type: conditional
+      conditions:
+      - condition: screen
+        media_query: "(max-width: 1499px)"
+      card:
+        type: picture-entity
+        entity: camera.draussen_giebel_vorne
+        camera_view: live
+        show_name: false
+        show_state: false
+        tap_action:
+          action: navigate
+          navigation_path: /flur-display/kameras
 - title: Giebel hinten
   path: kamera-giebel-hinten
   icon: mdi:cctv
@@ -1494,12 +1614,32 @@ views:
           data:
             kamera: draussen_giebel_hinten
             richtung: rechts
-    - type: picture
-      image: http://localhost:1984/api/stream.mjpeg?src=draussen_giebel_hinten_hd
-      alt_text: Giebel hinten
-      tap_action:
-        action: navigate
-        navigation_path: /flur-display/kameras
+    # Monitor (breiter Bildschirm, Kiosk-Browser am Home-Assistant-PC): flüssiges Bild von go2rtc;
+    # Handy/Laptop: Kamera über Home Assistant (localhost:1984 gibt es nur auf dem PC selbst)
+    - type: conditional
+      conditions:
+      - condition: screen
+        media_query: "(min-width: 1500px)"
+      card:
+        type: picture
+        image: http://localhost:1984/api/stream.mjpeg?src=draussen_giebel_hinten_hd
+        alt_text: Giebel hinten
+        tap_action:
+          action: navigate
+          navigation_path: /flur-display/kameras
+    - type: conditional
+      conditions:
+      - condition: screen
+        media_query: "(max-width: 1499px)"
+      card:
+        type: picture-entity
+        entity: camera.draussen_giebel_hinten
+        camera_view: live
+        show_name: false
+        show_state: false
+        tap_action:
+          action: navigate
+          navigation_path: /flur-display/kameras
 - title: Hof hinten
   path: kamera-hof-hinten
   icon: mdi:cctv
@@ -1583,12 +1723,32 @@ views:
           data:
             kamera: draussen_hof_hinten
             richtung: rechts
-    - type: picture
-      image: http://localhost:1984/api/stream.mjpeg?src=draussen_hof_hinten_hd
-      alt_text: Hof hinten
-      tap_action:
-        action: navigate
-        navigation_path: /flur-display/kameras
+    # Monitor (breiter Bildschirm, Kiosk-Browser am Home-Assistant-PC): flüssiges Bild von go2rtc;
+    # Handy/Laptop: Kamera über Home Assistant (localhost:1984 gibt es nur auf dem PC selbst)
+    - type: conditional
+      conditions:
+      - condition: screen
+        media_query: "(min-width: 1500px)"
+      card:
+        type: picture
+        image: http://localhost:1984/api/stream.mjpeg?src=draussen_hof_hinten_hd
+        alt_text: Hof hinten
+        tap_action:
+          action: navigate
+          navigation_path: /flur-display/kameras
+    - type: conditional
+      conditions:
+      - condition: screen
+        media_query: "(max-width: 1499px)"
+      card:
+        type: picture-entity
+        entity: camera.draussen_hof_hinten
+        camera_view: live
+        show_name: false
+        show_state: false
+        tap_action:
+          action: navigate
+          navigation_path: /flur-display/kameras
 - title: Küche
   path: kueche
   icon: mdi:silverware-fork-knife
@@ -1717,14 +1877,36 @@ views:
         action: more-info
       grid_options:
         columns: 6
-    - type: picture
-      image: http://localhost:1984/api/stream.mjpeg?src=draussen_hot_tor_kamera
-      alt_text: Hof-Tor
-      tap_action:
-        action: navigate
-        navigation_path: /flur-display/kamera-hof-tor
+    # Monitor (breiter Bildschirm, Kiosk-Browser am Home-Assistant-PC): flüssiges Bild von go2rtc;
+    # Handy/Laptop: Kamera über Home Assistant (localhost:1984 gibt es nur auf dem PC selbst)
+    - type: conditional
+      conditions:
+      - condition: screen
+        media_query: "(min-width: 1500px)"
       grid_options:
         columns: 6
+      card:
+        type: picture
+        image: http://localhost:1984/api/stream.mjpeg?src=draussen_hot_tor_kamera
+        alt_text: Hof-Tor
+        tap_action:
+          action: navigate
+          navigation_path: /flur-display/kamera-hof-tor
+    - type: conditional
+      conditions:
+      - condition: screen
+        media_query: "(max-width: 1499px)"
+      grid_options:
+        columns: 6
+      card:
+        type: picture-entity
+        entity: camera.draussen_hot_tor_kamera
+        camera_view: live
+        show_name: false
+        show_state: false
+        tap_action:
+          action: navigate
+          navigation_path: /flur-display/kamera-hof-tor
     - type: button
       name: Hoftor öffnen
       icon: mdi:gate-open
