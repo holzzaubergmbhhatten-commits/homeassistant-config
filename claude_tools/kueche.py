@@ -204,6 +204,9 @@ def einstellungen_text(e):
              + f" → {portionen(e)} Portionen pro Mahlzeit.",
              f"Wir kochen normalerweise an: {', '.join(TAGE[t] for t in sorted(e.get('tage') or []))}.",
              f"Wochenbudget fürs Abendessen: ca. {e.get('budget', 75)} € (Laden: {e.get('laden') or 'Supermarkt'}).",
+             f"Wir kaufen bei {e.get('laden') or 'einem normalen Supermarkt'} ein: nur Zutaten planen, die es dort im normalen "
+             "Sortiment gibt (bei Discountern wie Aldi, Lidl, Netto, Penny keine Spezialzutaten; Saisonware beachten), damit wir im "
+             "Laden nicht umplanen müssen.",
              f"Stil: {', '.join(e.get('stil') or []) or 'von allem etwas'}.",
              {"0": "Reste: jeden Abend frisch kochen.", "1": "Reste: 1 freier Abend pro Woche (ein Gericht doppelt kochen, am nächsten Tag Reste).",
               "2": "Reste: 2 freie Abende (zweimal groß kochen).", "3": "Reste: 3 freie Abende (wenig kochen, viel Ruhe)."}.get(str(e.get("reste")), ""),
@@ -537,7 +540,43 @@ def rezept_machen(auftrag):
             + ". Zu finden in der Küche unter „Rezepte“." + (f"\nHinweis: {rezept['notiz']}" if rezept["notiz"] else ""))
 
 
-ARBEIT = {"plan": plan_machen, "tausch": tausch_machen, "rezept": rezept_machen}
+PRUEFEN = """Du prüfst für eine Familie ihre Einkaufsliste, bevor sie in den Supermarkt fährt: Gibt es die Artikel in diesem Laden
+normalerweise (Standardsortiment, Saison)? Nutze die Websuche gezielt für Artikel, bei denen du unsicher bist (Online-Shop
+oder Sortiment des Ladens, z. B. "<Laden> <Artikel>"). Live-Bestände einer Filiale kann niemand sehen – es geht ums Sortiment.
+Für jeden Artikel: "ok" (gibt es dort praktisch immer), "unsicher" (nicht immer / nur manchmal / nur größere Filialen) oder
+"fehlt" (führt dieser Laden normalerweise nicht). Bei "unsicher"/"fehlt" eine Alternative nennen, die es dort sicher gibt und
+im Rezept funktioniert. "produkt": wenn sinnvoll, ein typisches Produkt mit Packungsgröße bei diesem Laden (z. B. "Ja! Sahne 200 g").
+Antworte am Ende NUR mit JSON: {"artikel": [{"text": "<genau wie in der Liste>", "status": "ok"|"unsicher"|"fehlt",
+"hinweis": "kurz", "alternative": "", "produkt": ""}]}"""
+
+
+def pruefen_machen(auftrag):
+    d = daten_laden()
+    laden = d["einstellungen"].get("laden") or "Rewe"
+    liste = einkauf(auftrag)["liste"]
+    if not liste:
+        raise ValueError("Für diese Tage steht nichts auf der Einkaufsliste")
+    status(True, f"Claude prüft das Sortiment bei {laden} …", art="pruefen")
+    a = claude(PRUEFEN, f"Laden: {laden} (Gegend 26939 Ovelgönne / Brake, Wesermarsch). Monat: {date.today().strftime('%m/%Y')}.\n"
+                        "Einkaufsliste:\n" + "\n".join(f"- {x['text']}" for x in liste),
+               max_tokens=8000, effort="low", timeout=240,
+               werkzeuge=[{"type": "web_search_20260209", "name": "web_search", "max_uses": 8,
+                           "user_location": {"type": "approximate", "city": "Ovelgönne", "region": "Niedersachsen",
+                                             "country": "DE", "timezone": "Europe/Berlin"}}])
+    artikel = [{"text": str(x.get("text", ""))[:80], "status": x.get("status") if x.get("status") in ("ok", "unsicher", "fehlt") else "unsicher",
+                "hinweis": str(x.get("hinweis") or "")[:120], "alternative": str(x.get("alternative") or "")[:60],
+                "produkt": str(x.get("produkt") or "")[:60]} for x in a.get("artikel") or [] if isinstance(x, dict) and x.get("text")]
+    with Sperre():
+        d = daten_laden()
+        d["pruefung"] = {"laden": laden, "von": auftrag.get("von"), "bis": auftrag.get("bis"), "stand": datetime.now().isoformat(timespec="minutes"),
+                         "artikel": artikel}
+        json_schreiben(DATEN, d)
+    probleme = [x for x in artikel if x["status"] != "ok"]
+    return (f"Sortiment bei {laden} geprüft: {len(artikel) - len(probleme)} Artikel gibt es sicher"
+            + (", schwierig: " + "; ".join(f"{x['text']} → {x['alternative'] or x['hinweis']}" for x in probleme) if probleme else " – alles da."))
+
+
+ARBEIT = {"plan": plan_machen, "tausch": tausch_machen, "rezept": rezept_machen, "pruefen": pruefen_machen}
 
 
 def im_hintergrund(auftrag):
@@ -666,6 +705,7 @@ Antworte NUR mit JSON:
    {"art": "vorrat_weg", "name": "Kürbis"}                                    – verbraucht/aufgebraucht
    {"art": "rezept", "url": "https://…", "text": "", "datum": ""}           – Rezept aus Link oder Text speichern (optional einplanen)
    {"art": "einkauf", "von": "JJJJ-MM-TT", "bis": "JJJJ-MM-TT"}              – Zutaten auf die Einkaufsliste
+   {"art": "pruefen", "von": "JJJJ-MM-TT", "bis": "JJJJ-MM-TT"}              – prüfen, ob es alles im Laden gibt
    {"art": "einstellung", "feld": "arbeitszeiten" | "hinweise", "text": "…"} – feste Wochenzeiten (Arbeit, Schule, Chor,
        Training) bzw. Vorlieben merken; text = der KOMPLETTE neue Inhalt des Feldes (Bisheriges übernehmen, Neues ergänzen
        oder ersetzen), übersichtlich je Person und Wochentag
@@ -716,7 +756,7 @@ def telegram(auftrag):
                     d["plan"][dat] = gericht_sauber(dict(r, art="kochen", rezept_id=r["id"], grund="Wunsch"))
             elif art == "einstellung" and x.get("feld") in ("arbeitszeiten", "hinweise") and str(x.get("text", "")).strip():
                 d["einstellungen"][x["feld"]] = str(x["text"]).strip()[:1500]
-            elif art in ("planen", "tag", "rezept", "einkauf"):
+            elif art in ("planen", "tag", "rezept", "einkauf", "pruefen"):
                 folge.append(x)
         json_schreiben(DATEN, d)
     return {"antwort": str(a.get("antwort") or "Erledigt.")[:1500], "folge": folge}

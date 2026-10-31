@@ -272,6 +272,7 @@ automation:
                       {% set x = repeat.item %}
                       {{ {'art': 'plan', 'von': x.von | default(''), 'tage': x.tage | default(7), 'wunsch': x.wunsch | default(''), 'chat': chat}
                          if x.art == 'planen' else
+                         {'art': 'pruefen', 'von': x.von | default(''), 'bis': x.bis | default(''), 'chat': chat} if x.art == 'pruefen' else
                          ({'art': 'tausch', 'datum': x.datum | default(''), 'wunsch': x.wunsch | default(''), 'chat': chat} if x.art == 'tag' else
                           {'art': 'rezept', 'url': x.url | default(''), 'text': x.text | default(''), 'datum': x.datum | default(''), 'chat': chat}) }}
                   response_variable: ki

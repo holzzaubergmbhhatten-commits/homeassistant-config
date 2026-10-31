@@ -78,6 +78,7 @@
   .marke { font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 8px; background: var(--beige2); color: var(--braun2); white-space: nowrap; }
   .marke.gruen { background: var(--gruen2); color: var(--gruen); }
   .marke.gold { background: #FBEFCB; color: #7A5A12; }
+  .marke.rot { background: #FDE8E6; color: var(--rot); }
   .marke.grau { background: transparent; border: 1px solid var(--linie); color: var(--grau); }
   .tag .knoepfe { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
   .tag.leer .titel { color: var(--grau); font-weight: 600; }
@@ -300,6 +301,7 @@ async function beobachten() {
     arbeit = null;
     if (s.fehler) fehlerText = s.fehler; else meldung("Fertig");
     await laden(); zeichnen();
+    if (einkauf && $("schleier").classList.contains("offen")) einkaufBlatt(einkauf.von, einkauf.bis);
     const h = hass(); if (h) h.callService("script", "kueche_aktualisieren", {}).catch(() => {});
   }
 }
@@ -466,6 +468,8 @@ function einstellungenSeite() {
       <div class="zaehler"><b id="budgetzahl">${e.budget} €</b></div>
       <input type="range" id="budget" min="25" max="200" step="5" value="${e.budget}">
       <label class="f">Wo kauft ihr meistens ein?</label>${kacheln(LAEDEN, e.laden, "laden", false)}
+      <label class="f">Oder anderer Laden / eure Filiale (z. B. „Edeka Brake“, „Famila Nordenham“, „Markant“)</label>
+      <input type="text" id="ladenfrei" placeholder="Laden und Ort eintippen" value="${LAEDEN.includes(e.laden) ? "" : esc(e.laden)}">
       <div style="margin-top:10px"><button class="knopf ${e.angebote !== false ? "voll" : ""}" data-a="ebool" data-f="angebote">${ic("haken")} Sonderangebote berücksichtigen</button></div>
       <div class="klein" style="margin-top:6px">Claude schaut vor dem Planen in den aktuellen Prospekt eures Ladens und plant günstige Angebote mit ein.</div></div>
     <div class="karte"><h2 class="serif">Was ist euer Stil?</h2><div class="klein">Wähle bis zu 3 aus.</div>${kacheln(STILE, e.stil, "stil", true)}</div>
@@ -566,11 +570,21 @@ function einkaufBlatt(von0, bis0) {
     ${gewaehlt ? `<div class="hinweis" style="margin:10px 0 0">Geschätzt <b>ca. ${zahl(Math.round(gewaehlt))} €</b>${!eintag && budget && einkauf.von === iso(woche) ? ` von ${budget} € Budget`
       + (gewaehlt > budget ? " – etwas drüber, „Tauschen“ bei einem teuren Gericht hilft" : "") : ""}${daten.einstellungen.laden ? " bei " + esc(daten.einstellungen.laden) : ""} (ohne Gewähr)</div>` : ""}`;
   if (!l.length) h += `<div class="leerbild">Für diese Tage braucht ihr nichts.</div>`;
+  const pr = daten.pruefung || {};
+  const prAktuell = pr.artikel && pr.laden === daten.einstellungen.laden;
+  const prFinden = z => prAktuell ? pr.artikel.find(x => x.text.toLowerCase() === z.text.toLowerCase())
+    || pr.artikel.find(x => x.text.toLowerCase().includes(z.text.toLowerCase().split(" ").pop())) : null;
+  h += `<div class="zeile" style="margin-top:10px"><button class="knopf klein-k" data-a="pruefen" ${arbeit ? "disabled" : ""}>${ic("haken")} Gibt es alles bei ${esc(daten.einstellungen.laden || "eurem Laden")}? Prüfen</button>
+    ${prAktuell ? `<span class="klein">geprüft ${esc(pr.stand.slice(8, 10) + "." + pr.stand.slice(5, 7) + ". " + pr.stand.slice(11, 16))}</span>` : ""}</div>`;
+  if (arbeit) h += `<div class="arbeit" style="margin-top:10px"><span class="warten"></span>${esc(arbeit.text)}</div>`;
   let bereich = "";
   l.forEach((z, i) => {
     if (z.bereich !== bereich) { bereich = z.bereich; h += `<h3>${esc(bereich)}</h3>`; }
     h += `<div class="ek ${z.an ? "an" : ""}" data-a="ekwahl" data-i="${i}"><span class="box">${z.an ? ic("haken") : ""}</span>
-      <div class="mitte"><b>${esc(z.text)}</b><div class="klein">${esc(z.notiz)}${z.basis ? " · habt ihr meist da" : ""}${z.vorrat ? " · im Vorrat" : ""}</div></div>
+      <div class="mitte"><b>${esc(z.text)}</b><div class="klein">${esc(z.notiz)}${z.basis ? " · habt ihr meist da" : ""}${z.vorrat ? " · im Vorrat" : ""}</div>
+      ${(p => !p ? "" : `<div class="marken">${p.status === "ok" ? `<span class="marke gruen">gibt es dort${p.produkt ? ": " + esc(p.produkt) : ""}</span>`
+        : `<span class="marke ${p.status === "fehlt" ? "rot" : "gold"}">${p.status === "fehlt" ? "gibt es dort meist nicht" : "nicht immer da"}${p.hinweis ? " – " + esc(p.hinweis) : ""}</span>`
+          + (p.alternative ? `<button class="knopf klein-k" data-a="alternative" data-i="${i}" data-t="${esc(p.alternative)}">Stattdessen: ${esc(p.alternative)}</button>` : "")}</div>`)(prFinden(z))}</div>
       ${z.preis > 0 ? `<span class="klein">ca. ${zahl(Math.round(z.preis * 10) / 10)} €</span>` : ""}</div>`;
   });
   h += `<div class="zeile" style="margin-top:14px"><button class="knopf voll" data-a="ekok">${ic("wagen")} ${l.filter(z => z.an).length} Sachen auf die Einkaufsliste</button>
@@ -702,6 +716,8 @@ async function aktion(el) {
   }
   if (a === "ekwahl") { const z = einkauf.liste[+el.dataset.i]; z.an = !z.an; einkaufBlatt(einkauf.von, einkauf.bis); return; }
   if (a === "ektag") { einkauf = null; einkaufBlatt(k, k); return; }
+  if (a === "pruefen") { ki({ art: "pruefen", von: einkauf.von, bis: einkauf.bis }, `Claude prüft das Sortiment bei ${daten.einstellungen.laden || "eurem Laden"} …`); einkaufBlatt(einkauf.von, einkauf.bis); return; }
+  if (a === "alternative") { const z = einkauf.liste[+el.dataset.i]; z.notiz = z.notiz + " · statt " + z.text; z.text = el.dataset.t; z.an = true; einkaufBlatt(einkauf.von, einkauf.bis); return; }
   if (a === "ekok") {
     const liste = einkauf.liste.filter(z => z.an).map(z => ({ text: z.text, notiz: z.notiz }));
     if (!liste.length) { meldung("Nichts ausgewählt"); return; }
@@ -753,7 +769,7 @@ async function aktion(el) {
       const l = new Set(entwurf[f] || []);
       if (l.has(w)) l.delete(w); else { if (f === "stil" && l.size >= 3) { meldung("Höchstens 3 auswählen"); return; } l.add(w); }
       entwurf[f] = [...l];
-    } else entwurf[f] = w;
+    } else { entwurf[f] = w; if (f === "laden" && $("ladenfrei")) $("ladenfrei").value = ""; }
     zeichnen(); return;
   }
   if (a === "esichern") {
@@ -795,6 +811,7 @@ function entwurfLesen() {
   if (z("arbeitszeiten") != null) entwurf.arbeitszeiten = z("arbeitszeiten");
   if (z("hinweise") != null) entwurf.hinweise = z("hinweise");
   if (z("budget") != null) entwurf.budget = +z("budget");
+  if (z("ladenfrei") != null && z("ladenfrei").trim()) entwurf.laden = z("ladenfrei").trim();
 }
 document.addEventListener("input", ev => {
   if (ev.target.id === "budget") { entwurf.budget = +ev.target.value; $("budgetzahl").textContent = ev.target.value + " €"; }
