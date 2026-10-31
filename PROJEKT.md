@@ -99,3 +99,21 @@ Kamerabild per Telegram, Belegung FW/Stellplätze (ohne Namen), Nachricht auf de
 Erinnerungen (⏰-Aufgabe mit Uhrzeit, jede Minute geprüft). Dazu 07:00 Morgen-Übersicht und
 22:30 Abend-Check Licht mit Knöpfen (abschaltbar über input_boolean.*_pause).
 Skripte müssen in Sprachassistenten → Entitäten freigeben für Assist freigegeben werden.
+
+## Stand 31.10.2026: Küche, Haus-Wächter, Müll, Morgen-Nachricht
+- Der Touchmonitor hängt jetzt in der **Küche** (wird dort am meisten genutzt). Für den Flur kommt ein zweiter
+  Monitor an den alten Shuttle-PC (schlankes Linux + Kiosk-Browser, **nicht** HAOS); Vorschlag iiyama ProLite T2252MSC-B2.
+- **Küche** (`packages/kueche.yaml`, `claude_tools/kueche.py`, `www/kueche.html`, Reiter „Küche“): Essensplan wie eine
+  Planer-App. Einrichten (Personen, Kochtage, Budget, Stil, Reste, Ernährung, Allergien, Zeit, Geräte, Arbeitszeiten),
+  Claude plant passend zu Familienkalender, Mathildas Stundenplan (`mucki_daten.json`), Vorrat/Ernte und Garten.
+  Kochmodus mit Timern (Ansage Küchen-HomePod), Rezepte aus Link/Text/Foto, Einkauf → `todo.einkaufsliste`.
+  Freitag 16:30 automatisch Plan für die nächste Woche (abschaltbar: `input_boolean.kueche_auto_pause`).
+  Telegram: „Was gibt's heute zu essen?“, „Lasagne am Samstag“, „Plan nächste Woche“, „Ernte: …“, Rezept-Link,
+  Foto mit Text „Rezept“. Daten lokal in `/config/www/kueche_daten.json`.
+- **Haus-Wächter** (`packages/haus_waechter.yaml`): Batterien (≤ 20 % oder stumm) → Telegram + Monitor,
+  Wasser-Alarm (Conel/SafeFloor-Leckage, Wassermelder), Dauerfluss, Rauchmelder, Waschmaschine/Trockner/Spülmaschine
+  fertig (Shelly Plug S mit diesem Namen), Sonnenstrom-Tipp, Urlaubsmodus. Kennungen (Viessmann/Conel/Melder) findet
+  `claude_tools/haus_kennungen.py`. Keine automatische Wasser-Absperrung.
+- **Müll** (`packages/muell.yaml`): GIB-Abfall-App → Kalender-Link an den Bot („Müll-Link: …“) oder .ics-Datei.
+- **Morgen-Nachricht** (`packages/tagesbrief.yaml`): Mo–Fr 6:40, Sa/So 8:10 an alle per Telegram.
+- Hinweise oben auf der Startseite: `sensor.haus_hinweise`.
