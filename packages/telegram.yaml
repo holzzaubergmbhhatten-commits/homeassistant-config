@@ -254,6 +254,11 @@ automation:
         - "… sollte es heißen", "Titel ist …", "nicht X sondern Y" nach einem eingetragenen Termin: aktion "aendern",
           alt_titel/alt_datum des gerade eingetragenen Termins, neuer Titel in "titel" (sinnvoll eingesetzt, z. B.
           aus "Abschluss" wird "Anschluss" → der Titel wird entsprechend korrigiert, nicht einfach nur dieses Wort).
+        WIEDERHOLUNG: "jede Woche", "jeden Dienstag", "immer montags", "wöchentlich" → wiederholung "woechentlich";
+          "alle zwei Wochen" → "zweiwoechentlich"; "jeden Monat" → "monatlich"; "jedes Jahr" → "jaehrlich".
+          Bei "neu" ist datum der erste Termin. Sagt jemand NACHTRÄGLICH, dass ein vorhandener Termin regelmäßig ist
+          ("der Termin ist jeden Dienstag"), dann aktion "aendern" mit alt_titel/alt_datum dieses Termins und NUR
+          "wiederholung" (titel/datum/uhrzeit leer). Sonst "wiederholung" leer lassen.
         Relative Angaben wie "morgen", "übermorgen" oder "nächsten Dienstag" rechnest du in ein Datum um.
         Enthält die Nachricht zusätzlich andere Wünsche (z. B. Einkaufsliste), schreibe diese in das Feld rest.
 
@@ -317,6 +322,10 @@ automation:
             text: null
         dauer_minuten:
           description: Dauer in Minuten
+          selector:
+            text: null
+        wiederholung:
+          description: 'Bei neu/aendern: woechentlich, zweiwoechentlich, monatlich, jaehrlich – oder leer'
           selector:
             text: null
         rest:
@@ -408,6 +417,33 @@ automation:
               {% set t %}📅 Eingetragen: {{ titel }} am {{ datum_de }} (ganztägig){% endset %}{{ t
               | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}
             parse_mode: html
+      # Regelmäßiger Termin: den gerade eingetragenen Termin zur Serie machen (Kalenderdatei, siehe kalender.py)
+      - if: "{{ (d.wiederholung | default('', true) | string | lower | trim) in ['woechentlich', 'zweiwoechentlich', 'monatlich', 'jaehrlich'] }}"
+        then:
+        - delay: 2
+        - action: shell_command.kalender_bearbeiten
+          continue_on_error: true
+          data:
+            auftrag: >-
+              {{ {'aktion': 'aendern', 'alt_titel': titel, 'alt_datum': datum,
+                  'wiederholung': d.wiederholung | string | lower | trim} | to_json | base64_encode }}
+          response_variable: serie
+        - variables:
+            serie_text: >-
+              {{ (serie.stdout | default('', true) | trim) if serie is defined and serie is mapping else '' }}
+        - if: "{{ serie_text[:1] == '✏' }}"
+          then:
+          - action: homeassistant.reload_config_entry
+            continue_on_error: true
+            target:
+              entity_id: '{{ kalender }}'
+        - action: telegram_bot.send_message
+          continue_on_error: true
+          data:
+            chat_id: '{{ chat }}'
+            message: >-
+              {{ ('🔁 Wiederholt sich ab jetzt ' ~ serie_text.split(' – ab jetzt ')[-1].replace(' 🔁', '') ~ '.')
+                 if ' – ab jetzt ' in serie_text else (serie_text or '⚠️ Die Wiederholung konnte ich nicht eintragen.') }}
     # Ändern / Löschen: Zusatzprogramm bearbeitet die Kalenderdatei (vorher Sicherheitskopie
     # nach /media/kalender_sicherung), danach wird der Kalender neu geladen.
     - conditions: '{{ aktion in [''aendern'', ''loeschen''] }}'
@@ -418,7 +454,8 @@ automation:
           auftrag: >-
             {{ {'aktion': aktion, 'alt_titel': d.alt_titel | default('', true), 'alt_datum': d.alt_datum,
                 'titel': d.titel | default('', true), 'datum': d.datum | default('', true),
-                'uhrzeit': d.uhrzeit | default('', true), 'dauer_minuten': d.dauer_minuten | default('', true)}
+                'uhrzeit': d.uhrzeit | default('', true), 'dauer_minuten': d.dauer_minuten | default('', true),
+                'wiederholung': d.wiederholung | default('', true)}
                | to_json | base64_encode }}
         response_variable: ergebnis
       - variables:

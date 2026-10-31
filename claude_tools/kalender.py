@@ -7,7 +7,8 @@ Home Assistant den Kalender neu (siehe packages/telegram.yaml).
 
 Aufruf: python3 kalender.py <base64-JSON>
 JSON: {"aktion": "aendern"|"loeschen", "alt_titel": str, "alt_datum": "JJJJ-MM-TT",
-       "titel": str, "datum": "JJJJ-MM-TT", "uhrzeit": "HH:MM", "dauer_minuten": int|str}
+       "titel": str, "datum": "JJJJ-MM-TT", "uhrzeit": "HH:MM", "dauer_minuten": int|str,
+       "wiederholung": ""|"woechentlich"|"zweiwoechentlich"|"monatlich"|"jaehrlich"}
 Ausgabe (stdout): eine Zeile Text für die Antwort im Telegram-Chat.
 """
 import base64
@@ -22,6 +23,8 @@ import zoneinfo
 
 TZ = zoneinfo.ZoneInfo("Europe/Berlin")
 TAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+REGELN = {"woechentlich": ("RRULE:FREQ=WEEKLY", "jede Woche"), "zweiwoechentlich": ("RRULE:FREQ=WEEKLY;INTERVAL=2", "alle 2 Wochen"),
+          "monatlich": ("RRULE:FREQ=MONTHLY", "jeden Monat"), "jaehrlich": ("RRULE:FREQ=YEARLY", "jedes Jahr")}
 SICHERUNG = "/media/kalender_sicherung"  # außerhalb von Git, bleibt bei jedem Update erhalten
 
 
@@ -51,10 +54,21 @@ def lese_zeitpunkt(zeile):
     return zeit, False
 
 
-def schreibe_zeitpunkt(name, wert, ganztags):
+def schreibe_zeitpunkt(name, wert, ganztags, ortszeit=False):
     if ganztags:
         return f"{name};VALUE=DATE:{wert.strftime('%Y%m%d')}"
+    if ortszeit:   # Serien in deutscher Ortszeit, sonst rutschen sie bei Sommer-/Winterzeit um eine Stunde
+        return f"{name};TZID=Europe/Berlin:{wert.astimezone(TZ).strftime('%Y%m%dT%H%M%S')}"
     return f"{name}:{wert.astimezone(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+
+
+def ortszeit_zeile(z):
+    """DTSTART/DTEND einer Serie auf Europe/Berlin umstellen (ganztägige bleiben)."""
+    if z.startswith(("DTSTART", "DTEND")):
+        wert, ganz = lese_zeitpunkt(z)
+        if not ganz:
+            return schreibe_zeitpunkt("DTSTART" if z.startswith("DTSTART") else "DTEND", wert, False, True)
+    return z
 
 
 def text(wert):
@@ -106,15 +120,17 @@ def main():
             print(f"❓ Am {alt_datum} gibt es mehrere Termine – bitte den Titel dazuschreiben.")
             return
         b, zeilen, summary, start, ganz = treffer[0]
+        regel = REGELN.get(text(auftrag.get("wiederholung")).lower())
         if any(z.startswith("RRULE") for z in zeilen):
-            # Serie: nur den Namen für alle Termine ändern; Verschieben/Löschen einzelner Termine geht nicht
+            # Serie: Name und Wiederholung für alle Termine ändern; Verschieben/Löschen einzelner Termine geht nicht
             neuer_titel = text(auftrag.get("titel"))
-            if aktion == "aendern" and neuer_titel and not text(auftrag.get("datum")) and not text(auftrag.get("uhrzeit")):
-                neue_zeilen = [("SUMMARY:" + neuer_titel) if z.startswith("SUMMARY") else
-                               ("SEQUENCE:" + str(int(z.split(":", 1)[1] or 0) + 1)) if z.startswith("SEQUENCE:") else z
-                               for z in zeilen]
+            if aktion == "aendern" and (neuer_titel or regel) and not text(auftrag.get("datum")) and not text(auftrag.get("uhrzeit")):
+                neue_zeilen = [("SUMMARY:" + neuer_titel) if (z.startswith("SUMMARY") and neuer_titel) else
+                               regel[0] if (z.startswith("RRULE") and regel) else
+                               ("SEQUENCE:" + str(int(z.split(":", 1)[1] or 0) + 1)) if z.startswith("SEQUENCE:") else
+                               ortszeit_zeile(z) for z in zeilen]
                 speichere(datei, inhalt[: b.start()] + nl.join(neue_zeilen) + inhalt[b.end():])
-                print(f"✏️ Geändert: {summary} heißt jetzt „{neuer_titel}“ (alle Termine der Serie)")
+                print(f"✏️ Geändert: {neuer_titel or summary}" + (f" – {regel[1]}" if regel else "") + " (alle Termine der Serie)")
                 return
             print(f"🔁 {summary} ist ein Serientermin – den Namen kann ich für alle Termine ändern, "
                   "einzelne Termine der Serie verschieben oder löschen kann ich noch nicht.")
@@ -156,17 +172,19 @@ def main():
             if z.startswith("SUMMARY"):
                 z = "SUMMARY:" + titel
             elif z.startswith("DTSTART"):
-                z = schreibe_zeitpunkt("DTSTART", n_start, n_ganz)
+                z = schreibe_zeitpunkt("DTSTART", n_start, n_ganz, bool(regel))
             elif z.startswith("DTEND"):
-                z = schreibe_zeitpunkt("DTEND", n_ende, n_ganz)
+                z = schreibe_zeitpunkt("DTEND", n_ende, n_ganz, bool(regel))
             elif z.startswith("SEQUENCE:"):
                 z = "SEQUENCE:" + str(int(z.split(":", 1)[1] or 0) + 1)
             neue_zeilen.append(z)
         if not ende_z:
-            neue_zeilen.insert(-1, schreibe_zeitpunkt("DTEND", n_ende, n_ganz))
+            neue_zeilen.insert(-1, schreibe_zeitpunkt("DTEND", n_ende, n_ganz, bool(regel)))
+        if regel:   # aus dem einzelnen Termin wird eine Serie (z. B. jeden Dienstag)
+            neue_zeilen.insert(-1, regel[0])
         neu_inhalt = inhalt[: b.start()] + nl.join(neue_zeilen) + inhalt[b.end():]
         speichere(datei, neu_inhalt)
-        print("✏️ Geändert: " + beschreibe(titel, n_start, n_ganz))
+        print("✏️ Geändert: " + beschreibe(titel, n_start, n_ganz) + (f" – ab jetzt {regel[1]} 🔁" if regel else ""))
         return
 
     print(f"❓ Diesen Termin habe ich nicht gefunden ({auftrag.get('alt_titel') or '?'}, {alt_datum or '?'}).")
