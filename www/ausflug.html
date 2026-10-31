@@ -149,6 +149,8 @@ function weiten() {
 }
 
 let daten = { gemerkt: [], erlebt: [], ideen: [], wunsch: {} }, reiter = "planen", arbeit = null, fehlerText = "", offen = {};
+// Das Eingabefeld gibt es nur, solange man wirklich schreibt – sonst springt die Bildschirmtastatur ungefragt auf
+let wunschOffen = false;
 let w = { wie: "Fahrrad", wann: iso(new Date()), dauer: "Halber Tag", wer: "Familie mit Mathilda", interessen: ["Natur & Deich", "Café & Essen"], weite: "bis 30 km", wunsch: "" };
 
 // ---------- Tippen (Monitor meldet Finger doppelt) ----------
@@ -173,7 +175,7 @@ async function beobachten() {
   clearTimeout(beobachten.t);
   let s = {};
   try { const r = await fetch(STATUS_URL + "?t=" + Date.now(), { cache: "no-store" }); if (r.ok) s = await r.json(); } catch (e) { /* gleich nochmal */ }
-  if (s.laeuft) { arbeit = { text: s.text || "Claude sucht …" }; zeichnen(); beobachten.t = setTimeout(beobachten, 3000); return; }
+  if (s.laeuft) { arbeit = { text: s.text || "Claude sucht …" }; if (!wunschOffen) zeichnen(); beobachten.t = setTimeout(beobachten, 3000); return; }
   if (arbeit) { arbeit = null; if (s.fehler) fehlerText = s.fehler; await laden(); reiter = s.fehler ? reiter : "ideen"; zeichnen(); }
 }
 
@@ -218,6 +220,8 @@ function planText(i, a) {
 
 // ---------- Zeichnen ----------
 function zeichnen() {
+  const fokus = document.activeElement;
+  if (!wunschOffen && fokus && fokus !== document.body && fokus.blur) fokus.blur();
   for (const b of document.querySelectorAll("#reiter button")) b.classList.toggle("an", b.dataset.r === reiter);
   const kopf = (arbeit ? `<div class="arbeit"><span class="warten"></span>${esc(arbeit.text)}</div>` : "")
     + (fehlerText ? `<div class="fehler">${esc(fehlerText)} <button class="knopf klein-k" data-a="fehlerweg">OK</button></div>` : "");
@@ -239,7 +243,9 @@ function planenSeite() {
     <div class="zwei"><div><label class="f">Wer kommt mit?</label>${chips(WER, w.wer, "wer")}</div>
     <div><label class="f">Wie weit höchstens?</label>${chips(weiten(), w.weite, "weite")}</div></div>
     <label class="f">Was mögt ihr? (mehrere)</label>${chips(INTERESSEN, w.interessen, "interessen", true)}
-    <label class="f">Besonderer Wunsch (optional)</label><input type="text" id="wunsch" value="${esc(w.wunsch)}" placeholder="z. B. mit Eis essen, Hund darf mit, Spa nur für Mirka …"></div>
+    <label class="f">Besonderer Wunsch (optional)</label>${wunschOffen
+      ? `<div class="zeile"><input type="text" id="wunsch" value="${esc(w.wunsch)}" placeholder="z. B. mit Eis essen, Hund darf mit, Spa nur für Mirka …" style="flex:1"><button class="knopf" data-a="wunsch-fertig">Fertig</button></div>`
+      : `<button class="knopf voll" data-a="wunsch-auf" style="justify-content:flex-start;font-weight:400${w.wunsch ? "" : ";opacity:.6"}">${esc(w.wunsch || "Antippen zum Schreiben, z. B. mit Eis essen, Spa nur für Mirka …")}</button>`}</div>
     <button class="knopf voll gross" data-a="suchen" ${arbeit ? "disabled" : ""}>${ic("zauber")} Ideen finden</button>`;
 }
 function ideeKarte(i, idx, quelle) {
@@ -287,6 +293,8 @@ async function aktion(el) {
   if (el.disabled) return;
   const a = el.dataset.a;
   if (a === "reiter") { leseWunsch(); reiter = el.dataset.r; zeichnen(); $("inhalt").scrollTop = 0; return; }
+  if (a === "wunsch-auf") { wunschOffen = true; zeichnen(); setTimeout(() => { const f = $("wunsch"); if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); } }, 60); return; }
+  if (a === "wunsch-fertig") { leseWunsch(); zeichnen(); return; }
   if (a === "fehlerweg") { fehlerText = ""; zeichnen(); return; }
   if (a === "wahl") {
     leseWunsch();
@@ -334,7 +342,11 @@ async function aktion(el) {
   if (a === "erlebt") { daten.erlebt.push(Object.assign({}, i, { anfrage, datum: iso(new Date()) })); if (q === "gemerkt") daten.gemerkt.splice(+el.dataset.i, 1); speichern(); zeichnen(); meldung("Schön! Steht jetzt unter „Erlebt“"); return; }
   if (a === "weg") { daten[q].splice(+el.dataset.i, 1); speichern(); zeichnen(); return; }
 }
-function leseWunsch() { if ($("wunsch")) w.wunsch = $("wunsch").value; }
+function leseWunsch() {
+  if ($("wunsch")) { w.wunsch = $("wunsch").value.trim(); $("wunsch").blur(); }
+  wunschOffen = false;
+}
+document.addEventListener("keydown", ev => { if (ev.key === "Enter" && ev.target && ev.target.id === "wunsch") { ev.preventDefault(); leseWunsch(); zeichnen(); } });
 
 function design() { const h = hass(); document.documentElement.classList.toggle("dunkel", !!(h && h.themes && h.themes.darkMode)); }
 let versuche = 0;
