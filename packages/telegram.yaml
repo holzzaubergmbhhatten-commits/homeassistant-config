@@ -578,6 +578,36 @@ automation:
             {% set t %}⚠️ Terminerkennung nicht verfügbar ({{ ai_entity or 'keine KI-Aufgabe gefunden' }}) – die
             Nachricht geht direkt an Claude.{% endset %}{{ t | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}
           parse_mode: html
+    # Wetterfragen: Vorhersage direkt mitgeben – sonst sagt Claude manchmal, es käme an den Wetterdienst nicht heran
+    - action: weather.get_forecasts
+      continue_on_error: true
+      target:
+        entity_id: weather.touchmonitor_home
+      data:
+        type: daily
+      response_variable: wetter_tage
+    - action: weather.get_forecasts
+      continue_on_error: true
+      target:
+        entity_id: weather.touchmonitor_home
+      data:
+        type: hourly
+      response_variable: wetter_stunden
+    - variables:
+        wetter_kontext: >-
+          {%- set e = 'weather.touchmonitor_home' %}
+          {%- if text is search('wetter|regen|regnet|schauer|sonne|sonnig|temperatur|grad\\b|warm|kalt|wind|sturm|b(ö|oe)e|schnee|frost|glatt|gewitter|nebel|schirm|jacke|w(ä|ae)sche\s+(raus|drau(ß|ss)en)|draußen', ignorecase=True)
+                and states(e) not in ['unknown', 'unavailable'] %}
+          {%- set tage = wetter_tage[e].forecast if wetter_tage is defined and wetter_tage is mapping and e in wetter_tage else [] %}
+          {%- set std = wetter_stunden[e].forecast if wetter_stunden is defined and wetter_stunden is mapping and e in wetter_stunden else [] %}
+          WETTER für zu Hause (Ovelgönne, Wesermarsch) – echte Daten, benutze sie für die Antwort und sag NICHT, dass du das Wetter nicht abrufen kannst:
+          Jetzt: {{ states(e) }}, {{ state_attr(e, 'temperature') }} °C, Wind {{ state_attr(e, 'wind_speed') }} {{ state_attr(e, 'wind_speed_unit') or '' }}, Luftfeuchte {{ state_attr(e, 'humidity') }} %.
+          Nächste Stunden: {% for f in std[:14] %}{{ (f.datetime | as_datetime | as_local).strftime('%H') }} Uhr {{ f.condition }} {{ f.temperature }}° {{ f.precipitation | default(0) }} mm{{ ' · ' if not loop.last }}{% endfor %}
+          Nächste Tage: {% for f in tage[:5] %}{{ ['Mo','Di','Mi','Do','Fr','Sa','So'][(f.datetime | as_datetime | as_local).weekday()] }} {{ f.condition }} {{ f.templow | default('?') }}–{{ f.temperature }}° {{ f.precipitation | default(0) }} mm{{ ' · ' if not loop.last }}{% endfor %}
+          {%- for w in state_attr('sensor.unwetter', 'warnungen') or [] %}
+          Warnung DWD: {{ w.titel or w.ereignis }}{% endfor %}
+          (Zustände wie "cloudy", "rainy", "partlycloudy" auf Deutsch umschreiben.)
+          {%- endif %}
     - action: conversation.process
       data:
         text: >-
@@ -585,7 +615,9 @@ automation:
           {{ verlauf }}
           )
 
-          Neue Nachricht: {% endif %}{{ text }}
+          {% endif %}{% if wetter_kontext | trim %}({{ wetter_kontext | trim }})
+
+          {% endif %}{% if verlauf or wetter_kontext | trim %}Neue Nachricht: {% endif %}{{ text }}
         language: de
         agent_id: '{{ agent }}'
         conversation_id: 'telegram_{{ chat }}'
