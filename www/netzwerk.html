@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Netzwerk</title>
+<!--
+  Netzwerk (Dashboard-Reiter „Netzwerk“, packages/netzwerk.yaml): alle Geräte der Integration „TP-Link Omada“.
+  Switches als Frontansicht mit Ports (PoE an/aus, eigene Beschriftung), Access Points und Router mit Status und Werten.
+  Port antippen → Beschriftung ändern, PoE schalten, Gerät per PoE neu starten (mit Rückfrage).
+  Beschriftungen: /local/netzwerk_daten.json über script.netzwerk_speichern. Keine IP-/MAC-Adressen auf der Seite.
+-->
+<style>
+  :root { --bg: #f7f4ed; --karte: #fff; --text: #2d3329; --grau: #6b7266; --linie: #eee8d9; --gruen: #536b45; --dunkel: #33442b;
+    --sand: #d8c7a3; --sand2: #efe8d8; --terra: #c96f4a; --ok: #4f7a3a; --rot: #b3412e; --gelb: #d9a72b; }
+  .dunkel { --bg: #161a13; --karte: #232a1f; --text: #efe9dc; --grau: #a9a493; --linie: #343d2e; --gruen: #a9be8f; --dunkel: #c9d8b4;
+    --sand: #4a4636; --sand2: #2c3326; --ok: #8fb36f; --rot: #e0705c; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: Montserrat, -apple-system, Roboto, sans-serif; }
+  body { display: flex; flex-direction: column; overflow: hidden; touch-action: manipulation; }
+  button { font: inherit; border: 0; background: none; color: inherit; cursor: pointer; padding: 0; }
+  .kopf { display: flex; align-items: center; gap: 12px; padding: 10px 14px 8px; flex-wrap: wrap; }
+  .kopf h1 { margin: 0; font-size: 26px; }
+  .kopf .stand { font-size: 13px; color: var(--grau); }
+  main { flex: 1; overflow: auto; padding: 12px 14px 90px; -webkit-overflow-scrolling: touch; }
+  .karte { background: var(--karte); border: 1px solid var(--linie); border-radius: 20px; padding: 16px; margin-bottom: 12px; box-shadow: 0 4px 16px rgba(51,68,43,.08); }
+  .karte h2 { margin: 0; font-size: 22px; }
+  .klein { font-size: 13px; color: var(--grau); line-height: 1.45; }
+  .zeile { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .punkt { width: 11px; height: 11px; border-radius: 50%; display: inline-block; background: var(--ok); box-shadow: 0 0 0 3px rgba(79,122,58,.18); }
+  .punkt.aus { background: var(--rot); box-shadow: 0 0 0 3px rgba(179,65,46,.2); }
+  .knopf { padding: 11px 15px; border-radius: 13px; background: var(--sand2); font-weight: 600; font-size: 15px; color: var(--dunkel); }
+  .knopf.voll { background: var(--dunkel); color: #fff; } .dunkel .knopf.voll { color: #161a13; }
+  .knopf.rot { background: var(--terra); color: #fff; }
+  .geraete { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+  /* Switch-Front */
+  .front { background: #2b2f2a; border-radius: 12px; padding: 12px; margin-top: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 8px; }
+  .port { background: #3c423a; border-radius: 9px; padding: 6px 4px 5px; color: #e8e4d8; text-align: center; display: grid; gap: 3px; min-height: 74px; position: relative; }
+  .port .nr { font-size: 11px; opacity: .75; }
+  .port .buchse { width: 30px; height: 22px; margin: 0 auto; border-radius: 3px; background: #191c18; position: relative; }
+  .port .buchse::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: 0; height: 6px; background: #3c423a; border-radius: 2px 2px 0 0; }
+  .port .led { position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: #555; }
+  .port.poe .led { background: #f2b632; box-shadow: 0 0 6px #f2b632; animation: blink 2.4s ease-in-out infinite; }
+  .port.link .buchse { box-shadow: 0 0 0 2px #6fbf4a inset; }
+  .port .name { font-size: 10.5px; line-height: 1.15; max-height: 2.4em; overflow: hidden; color: #fff; }
+  .port .w { font-size: 10px; color: #f2b632; }
+  .port.gewaehlt { outline: 3px solid var(--sand); }
+  @keyframes blink { 50% { opacity: .45; } }
+  .werte { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; margin-top: 10px; }
+  .wert { background: var(--bg); border-radius: 11px; padding: 7px 9px; font-size: 12px; color: var(--grau); }
+  .wert b { display: block; font-size: 16px; color: var(--text); }
+  .update { background: rgba(217,167,43,.18); border-radius: 10px; padding: 6px 10px; font-size: 13px; margin-top: 8px; }
+  .blatt { position: fixed; left: 0; right: 0; bottom: 0; background: var(--karte); border-radius: 22px 22px 0 0; padding: 18px; box-shadow: 0 -8px 30px rgba(0,0,0,.2); z-index: 10; max-height: 80vh; overflow: auto; }
+  .blatt label { display: grid; gap: 4px; font-size: 13px; color: var(--grau); margin-top: 10px; }
+  .blatt input { font: inherit; font-size: 16px; padding: 10px 12px; border-radius: 11px; border: 1px solid var(--linie); background: var(--bg); color: var(--text); }
+  .meldung { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--dunkel); color: #fff; padding: 11px 18px; border-radius: 99px; display: none; z-index: 20; }
+  .leer { text-align: center; padding: 40px 20px; }
+</style>
+<link rel="stylesheet" href="/local/hausstil.css?v=2">
+</head>
+<body>
+<div class="kopf"><h1>Netzwerk</h1><span class="stand" id="stand"></span></div>
+<main id="inhalt"><div class="leer klein">Lädt …</div></main>
+<div class="meldung" id="meldung"></div>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
+const st = id => { const h = hass(); return id && h && h.states[id]; };
+function meldung(t) { const m = $("meldung"); m.textContent = t; m.style.display = "block"; clearTimeout(meldung.t); meldung.t = setTimeout(() => m.style.display = "none", 4000); }
+const DATEN_URL = "/local/netzwerk_daten.json";
+
+let GERAETE = [], daten = { ports: {}, geraete: {} }, wahl = null, letzterFinger = 0;
+
+// ---------- Geräte finden ----------
+async function finden() {
+  const h = hass();
+  const [reg, devs] = await Promise.all([h.callWS({ type: "config/entity_registry/list" }), h.callWS({ type: "config/device_registry/list" })]);
+  const omada = reg.filter(e => e.platform === "tplink_omada" && !e.disabled_by && e.device_id && !e.entity_id.startsWith("device_tracker."));
+  const nachGeraet = {};
+  for (const e of omada) (nachGeraet[e.device_id] = nachGeraet[e.device_id] || []).push(e);
+  GERAETE = Object.entries(nachGeraet).map(([id, ents]) => {
+    const d = devs.find(x => x.id === id) || {}, modell = d.model || "", name = d.name_by_user || d.name || "Omada-Gerät";
+    const ports = {};
+    for (const e of ents) {
+      const text = [e.original_name, e.name, e.entity_id, e.translation_key].filter(Boolean).join(" ");
+      const m = text.match(/port[ _-]?(\d+)/i); if (!m) continue;
+      const p = (ports[m[1]] = ports[m[1]] || { nr: +m[1], ents: [] }); p.ents.push(e.entity_id);
+      if (e.entity_id.startsWith("switch.") && /poe/i.test(text)) p.poe = e.entity_id;
+      else if (e.entity_id.startsWith("switch.") && !p.poe) p.poe = e.entity_id;
+      if (e.entity_id.startsWith("binary_sensor.") && /link|verbind|status/i.test(text)) p.link = e.entity_id;
+      if (e.entity_id.startsWith("sensor.") && /power|leistung|watt/i.test(text)) p.watt = e.entity_id;
+      if (e.entity_id.startsWith("sensor.") && /speed|geschw/i.test(text)) p.tempo = e.entity_id;
+      if (!p.portname && e.original_name && !/^port\s*\d+/i.test(e.original_name)) p.portname = e.original_name.replace(/\s*(poe|port\s*\d+)\s*/ig, " ").trim();
+    }
+    const istPortlos = !Object.keys(ports).length;
+    const art = /^EAP|access ?point/i.test(modell + " " + name) ? "ap" : (/^ER\d|gateway|router/i.test(modell + " " + name) ? "router" : (istPortlos ? "sonst" : "switch"));
+    const update = ents.find(e => e.entity_id.startsWith("update."));
+    const werte = ents.filter(e => e.entity_id.startsWith("sensor.") && !/port[ _-]?\d+/i.test([e.original_name, e.entity_id].join(" "))).map(e => e.entity_id);
+    return { id, name, modell, art, ports: Object.values(ports).sort((a, b) => a.nr - b.nr), ents: ents.map(e => e.entity_id), update: update && update.entity_id, werte };
+  }).sort((a, b) => ({ router: 0, switch: 1, ap: 2, sonst: 3 }[a.art] - { router: 0, switch: 1, ap: 2, sonst: 3 }[b.art]) || a.name.localeCompare(b.name, "de"));
+}
+async function laden() {
+  try { const r = await fetch(DATEN_URL + "?t=" + Date.now(), { cache: "no-store" }); if (r.ok) daten = Object.assign({ ports: {}, geraete: {} }, await r.json()); } catch (e) { /* noch leer */ }
+}
+async function speichern() {
+  const h = hass(); if (!h) return false;
+  try { const r = await h.callWS({ type: "call_service", domain: "script", service: "netzwerk_speichern", service_data: { daten: JSON.stringify(daten) }, return_response: true });
+    const a = (r && r.response) || {}; if (a.ok === false) { meldung("Nicht gespeichert: " + (a.fehler || "?")); return false; } return true;
+  } catch (e) { meldung("Nicht gespeichert: " + (e.message || e)); return false; }
+}
+
+// ---------- Anzeige ----------
+const online = g => g.ents.some(id => st(id) && st(id).state !== "unavailable");
+function wertText(id) { const s = st(id); if (!s || ["unknown", "unavailable"].includes(s.state)) return "–"; const u = s.attributes.unit_of_measurement || ""; const v = parseFloat(s.state); return (isFinite(v) ? v.toLocaleString("de-DE", { maximumFractionDigits: 1 }) : s.state) + (u ? " " + u : ""); }
+function wertName(id, g) { const s = st(id); return ((s && s.attributes.friendly_name) || id).replace(g.name, "").trim() || id; }
+function portKachel(g, p) {
+  const k = g.id + "|" + p.nr, b = daten.ports[k] || {}, poe = p.poe && st(p.poe) && st(p.poe).state === "on", link = p.link && st(p.link) && st(p.link).state === "on";
+  const name = b.name || p.portname || "";
+  return `<button class="port ${poe ? "poe" : ""} ${link ? "link" : ""} ${wahl === k ? "gewaehlt" : ""}" data-port="${esc(k)}"><span class="led"></span><span class="nr">${p.nr}</span><span class="buchse"></span>
+    <span class="name">${esc(name || "–")}</span>${p.watt ? `<span class="w">${esc(wertText(p.watt))}</span>` : ""}</button>`;
+}
+function geraetKarte(g) {
+  const on = online(g), ort = (daten.geraete[g.id] || {}).ort || "";
+  const art = { router: "Router", switch: "Switch", ap: "Access Point", sonst: "Gerät" }[g.art];
+  const upd = g.update && st(g.update) && st(g.update).state === "on";
+  return `<div class="karte"><div class="zeile" style="justify-content:space-between"><div><h2>${esc(g.name)}</h2>
+      <div class="klein">${esc(art)}${g.modell ? " · " + esc(g.modell) : ""}${ort ? " · " + esc(ort) : ""}</div></div>
+      <div class="zeile"><span class="punkt ${on ? "" : "aus"}"></span><b style="color:${on ? "var(--ok)" : "var(--rot)"}">${on ? "online" : "offline"}</b></div></div>
+    ${g.werte.length ? `<div class="werte">${g.werte.slice(0, 8).map(id => `<div class="wert">${esc(wertName(id, g))}<b>${esc(wertText(id))}</b></div>`).join("")}</div>` : ""}
+    ${upd ? `<div class="update">Firmware-Update verfügbar (${esc(st(g.update).attributes.latest_version || "")}) – am besten im Omada-Controller einspielen.</div>` : ""}
+    ${g.ports.length ? `<div class="front">${g.ports.map(p => portKachel(g, p)).join("")}</div>
+      <div class="klein" style="margin-top:6px">Gelbe Lampe = PoE an (Strom übers Kabel). Port antippen zum Beschriften oder Neustarten.</div>` : ""}
+    <div style="margin-top:10px"><button class="knopf" data-ort="${esc(g.id)}" style="padding:7px 12px;font-size:13px">Standort eintragen</button></div></div>`;
+}
+function blatt() {
+  if (!wahl) return "";
+  const [gid, nr] = wahl.split("|"), g = GERAETE.find(x => x.id === gid), p = g && g.ports.find(x => String(x.nr) === nr); if (!p) return "";
+  const b = daten.ports[wahl] || {}, poe = p.poe && st(p.poe), an = poe && poe.state === "on";
+  return `<div class="blatt"><div class="zeile" style="justify-content:space-between"><h2 style="margin:0">${esc(g.name)} · Port ${p.nr}</h2><button class="knopf" data-zu="1">Schließen</button></div>
+    <label>Was hängt dran?<input id="bname" value="${esc(b.name || p.portname || "")}" placeholder="z. B. Kamera Hoftor, Access Point Flur"></label>
+    <label>Dose / Raum<input id="bdose" value="${esc(b.dose || "")}" placeholder="z. B. Dose Büro 2, Patchfeld 7"></label>
+    <label>Notiz<input id="bnotiz" value="${esc(b.notiz || "")}" placeholder="z. B. Kabel neu 2026"></label>
+    <div class="zeile" style="margin-top:14px"><button class="knopf voll" data-merken="1">Speichern</button>
+      ${poe ? `<button class="knopf" data-poe="${esc(p.poe)}">PoE ${an ? "ausschalten" : "einschalten"}</button>
+        ${an ? `<button class="knopf rot" data-neustart="${esc(p.poe)}">Gerät neu starten</button>` : ""}` : `<span class="klein">Kein PoE-Schalter an diesem Port.</span>`}</div>
+    <div class="klein" style="margin-top:8px">Neu starten = PoE 10 Sekunden aus, dann wieder an. Hilft, wenn eine Kamera oder ein Access Point hängt.</div></div>`;
+}
+function zeichnen() {
+  const h = hass();
+  if (!GERAETE.length) {
+    $("inhalt").innerHTML = `<div class="karte leer"><h2>Noch keine Omada-Geräte</h2><p class="klein">Sobald in Home Assistant die Integration „TP-Link Omada“ eingerichtet ist,
+      erscheinen hier alle Switches mit ihren Ports, die Access Points und der Router – automatisch.<br><br>
+      Einstellungen → Geräte &amp; Dienste → Integration hinzufügen → „TP-Link Omada“ → Adresse des Controllers, eigener Benutzer, „SSL prüfen“ aus.</p></div>`;
+    return;
+  }
+  const weg = GERAETE.filter(g => !online(g));
+  $("stand").textContent = `${GERAETE.length} Geräte · ${weg.length ? weg.length + " offline" : "alle online"}`;
+  $("inhalt").innerHTML = (weg.length ? `<div class="karte" style="border-color:var(--terra)"><b style="color:var(--rot)">Nicht erreichbar:</b> ${weg.map(g => esc(g.name)).join(", ")}</div>` : "")
+    + `<div class="geraete">${GERAETE.map(geraetKarte).join("")}</div>` + blatt();
+}
+
+// ---------- Bedienung (Monitor meldet Finger doppelt → nur einmal auswerten) ----------
+async function aktion(t) {
+  const h = hass();
+  if (t.dataset.port) { wahl = wahl === t.dataset.port ? null : t.dataset.port; zeichnen(); return; }
+  if (t.dataset.zu) { wahl = null; zeichnen(); return; }
+  if (t.dataset.merken) {
+    daten.ports[wahl] = { name: $("bname").value.trim(), dose: $("bdose").value.trim(), notiz: $("bnotiz").value.trim() };
+    if (await speichern()) { meldung("Gespeichert"); wahl = null; zeichnen(); } return;
+  }
+  if (t.dataset.ort) {
+    const g = GERAETE.find(x => x.id === t.dataset.ort), alt = (daten.geraete[g.id] || {}).ort || "";
+    const neu = prompt(`Wo steht „${g.name}“? (z. B. Technikschrank Keller, Flur OG Decke)`, alt); if (neu == null) return;
+    daten.geraete[g.id] = { ort: neu.trim() }; if (await speichern()) { meldung("Gespeichert"); zeichnen(); } return;
+  }
+  if (t.dataset.poe) {
+    const an = st(t.dataset.poe).state === "on";
+    if (an && !confirm("PoE an diesem Port ausschalten? Das Gerät daran geht dann aus.")) return;
+    await h.callService("switch", an ? "turn_off" : "turn_on", { entity_id: t.dataset.poe }); meldung(an ? "PoE aus" : "PoE an"); return;
+  }
+  if (t.dataset.neustart) {
+    if (!confirm("Gerät an diesem Port neu starten? (10 Sekunden ohne Strom)")) return;
+    await h.callService("script", "netzwerk_poe_neustart", { schalter: t.dataset.neustart }); meldung("Startet neu – dauert 1–2 Minuten"); return;
+  }
+}
+let start0 = null;
+document.addEventListener("touchstart", ev => { const t = ev.touches[0]; start0 = { x: t.clientX, y: t.clientY, el: ev.target.closest("button") }; }, { passive: true });
+document.addEventListener("touchmove", ev => { const t = ev.touches[0]; if (start0 && Math.hypot(t.clientX - start0.x, t.clientY - start0.y) > 12) start0 = null; }, { passive: true });
+document.addEventListener("touchend", ev => { letzterFinger = Date.now(); const s0 = start0; start0 = null; if (!s0 || !s0.el) return; ev.preventDefault(); aktion(s0.el); }, { passive: false });
+document.addEventListener("click", ev => { if (Date.now() - letzterFinger < 800) return; const t = ev.target.closest("button"); if (t) aktion(t); });
+
+function design() { const h = hass(); document.documentElement.classList.toggle("dunkel", !!(h && h.themes && h.themes.darkMode)); }
+let versuche = 0;
+async function start() {
+  if (!hass()) { if (++versuche === 15) $("inhalt").innerHTML = `<div class="karte leer klein">Die Seite funktioniert nur im Dashboard (Reiter „Netzwerk“).</div>`; setTimeout(start, 400); return; }
+  design();
+  try { await Promise.all([finden(), laden()]); } catch (e) { $("inhalt").innerHTML = `<div class="karte">Fehler: ${esc(e.message || e)}</div>`; return; }
+  zeichnen();
+  setInterval(() => { design(); if (!wahl) zeichnen(); }, 5000);
+  setInterval(() => finden().catch(() => {}), 5 * 60e3);
+}
+start();
+</script>
+</body>
+</html>

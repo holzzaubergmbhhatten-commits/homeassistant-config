@@ -1,0 +1,102 @@
+# Netzwerk (TP-Link Omada, Integration „TP-Link Omada“ in Home Assistant):
+# - Seite www/netzwerk.html (Reiter „Netzwerk“): Switches mit allen Ports (PoE an/aus, eigene Beschriftung „was hängt dran“),
+#   Access Points und Router, online/offline. PoE-Neustart eines Ports mit Rückfrage.
+# - Telegram, wenn ein Omada-Gerät länger als 5 Minuten nicht erreichbar ist – und wenn es wieder da ist.
+# Beschriftungen lokal in /config/www/netzwerk_daten.json (nicht im Repository). Keine IP-/MAC-Adressen.
+shell_command:
+  netzwerk: python3 /config/claude_tools/netzwerk.py {{ aktion }} {{ wert | default('') }}
+
+script:
+  netzwerk_speichern:
+    alias: "Netzwerk: Beschriftungen speichern"
+    mode: queued
+    fields:
+      daten:
+        description: Inhalt als JSON-Text
+    sequence:
+      - action: shell_command.netzwerk
+        data:
+          aktion: speichern
+          wert: >-
+            {% set s = (daten if daten is string else (daten | to_json)) | base64_encode %}
+            {% for i in range(0, s | length, 100000) %}{{ s[i:i + 100000] }} {% endfor %}
+        response_variable: ergebnis
+      - variables:
+          antwort: >-
+            {% set a = ergebnis.stdout | default('') if ergebnis is defined and ergebnis is mapping else '' %}
+            {{ a | from_json if (a | string).startswith('{') else {'ok': false, 'fehler': a or 'keine Antwort'} }}
+      - stop: fertig
+        response_variable: antwort
+
+  netzwerk_poe_neustart:
+    alias: "Netzwerk: Gerät per PoE neu starten"
+    icon: mdi:restart
+    mode: parallel
+    fields:
+      schalter:
+        description: PoE-Schalter des Ports (switch.…)
+    sequence:
+      - condition: template
+        value_template: "{{ schalter is string and schalter.startswith('switch.') and schalter in integration_entities('tplink_omada') }}"
+      - action: switch.turn_off
+        target:
+          entity_id: "{{ schalter }}"
+      - delay: "00:00:10"
+      - action: switch.turn_on
+        target:
+          entity_id: "{{ schalter }}"
+
+template:
+  - sensor:
+      # Omada-Geräte, bei denen gerade ALLE Werte „nicht verfügbar“ sind (= Gerät offline)
+      - name: Netzwerk offline
+        unique_id: netzwerk_offline
+        icon: mdi:lan-disconnect
+        state: >-
+          {% set ns = namespace(d={}) %}
+          {% for e in integration_entities('tplink_omada') if not e.startswith('device_tracker.') %}
+            {% set d = device_id(e) %}
+            {% if d %}{% set ns.d = dict(ns.d, **{d: (ns.d.get(d, true) and states(e) == 'unavailable')}) %}{% endif %}
+          {% endfor %}
+          {{ ns.d.values() | select('eq', true) | list | count }}
+        attributes:
+          geraete: >-
+            {% set ns = namespace(d={}, namen=[]) %}
+            {% for e in integration_entities('tplink_omada') if not e.startswith('device_tracker.') %}
+              {% set d = device_id(e) %}
+              {% if d %}{% set ns.d = dict(ns.d, **{d: (ns.d.get(d, true) and states(e) == 'unavailable')}) %}{% endif %}
+            {% endfor %}
+            {% for d, weg in ns.d.items() if weg %}{% set ns.namen = ns.namen + [device_attr(d, 'name_by_user') or device_attr(d, 'name') or 'Omada-Gerät'] %}{% endfor %}
+            {{ ns.namen }}
+
+automation:
+  - id: netzwerk_offline_melden
+    alias: "Netzwerk: Omada-Gerät offline / wieder da"
+    mode: queued
+    triggers:
+      - trigger: state
+        entity_id: sensor.netzwerk_offline
+        for: "00:05:00"
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.from_state.state not in ['unknown', 'unavailable'] and trigger.to_state.state not in ['unknown', 'unavailable'] }}"
+    actions:
+      - variables:
+          jetzt: "{{ trigger.to_state.attributes.geraete | default([]) }}"
+          vorher: "{{ trigger.from_state.attributes.geraete | default([]) }}"
+          neu_weg: "{{ jetzt | reject('in', vorher) | list }}"
+          wieder_da: "{{ vorher | reject('in', jetzt) | list }}"
+      - condition: template
+        value_template: "{{ neu_weg | count > 0 or wieder_da | count > 0 }}"
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                chat_id: "{{ repeat.item | int }}"
+                message: >-
+                  {% if neu_weg %}📡 Netzwerk: {{ neu_weg | join(', ') }} ist seit 5 Minuten nicht erreichbar
+                  (Strom/PoE, Kabel oder Absturz?). Neu starten geht am Monitor unter „Netzwerk“.{% endif %}
+                  {% if wieder_da %}✅ Netzwerk: {{ wieder_da | join(', ') }} ist wieder erreichbar.{% endif %}
