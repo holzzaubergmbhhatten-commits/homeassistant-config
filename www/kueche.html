@@ -224,7 +224,7 @@ const ic = (n, extra) => n === "uhr"
 const $ = id => document.getElementById(id);
 function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
 function esc(t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
-function meldung(t) { const m = $("meldung"); m.textContent = t; m.style.display = "block"; clearTimeout(meldung.t); meldung.t = setTimeout(() => m.style.display = "none", 3800); }
+function meldung(t) { const m = $("meldung"); m.textContent = t; m.style.display = "block"; clearTimeout(meldung.t); meldung.t = setTimeout(() => m.style.display = "none", t.length > 60 ? 7000 : 3800); }
 const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const vonIso = s => { const [y, m, t] = s.split("-").map(Number); return new Date(y, m - 1, t); };
 const plusTage = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
@@ -747,7 +747,9 @@ async function aktion(el) {
     try {
       const r = await h.callWS({ type: "call_service", domain: "script", service: "kueche_einkauf", service_data: { liste }, return_response: true });
       const n = (r && r.response && r.response.anzahl) || 0;
-      schliessen(); meldung(n ? `${n} Sachen auf die Einkaufsliste gesetzt` : "Stand schon alles auf der Einkaufsliste");
+      schliessen();
+      meldung(n ? `${n} Sachen stehen jetzt auf der Einkaufsliste (Startseite und Reiter „Einkauf“) – per Telegram kommt sie in 30 Sekunden an alle`
+                : "Stand schon alles auf der Einkaufsliste");
     } catch (e) { meldung("Hat nicht geklappt: " + (e.message || e)); el.disabled = false; }
     return;
   }

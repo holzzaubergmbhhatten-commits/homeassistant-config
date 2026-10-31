@@ -8,6 +8,37 @@ input_text:
     icon: mdi:account-multiple
     max: 255
 
+script:
+  # Knopf „Per Telegram schicken“ (Reiter Einkauf): aktuelle Einkaufsliste sofort an alle
+  einkaufsliste_senden:
+    alias: Einkaufsliste per Telegram schicken
+    icon: mdi:send
+    mode: single
+    sequence:
+      - action: todo.get_items
+        target:
+          entity_id: todo.einkaufsliste
+        data:
+          status: needs_action
+        response_variable: liste
+      - variables:
+          items: "{{ liste['todo.einkaufsliste']['items'] }}"
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';')
+               | reject('in', ['', 'unknown', 'unavailable']) | list }}
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                chat_id: "{{ repeat.item | int }}"
+                parse_mode: html
+                message: >-
+                  {% set namen = items | map(attribute='summary') | list %}
+                  {% set t = '🛒 Einkaufsliste ist leer ✅' if namen | count == 0
+                     else '🛒 Einkaufsliste (' ~ (namen | count) ~ '):\n• ' ~ (namen | join('\n• ')) %}
+                  {{ t | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}
+
 automation:
   - id: telegram_empfaenger_merken
     alias: "Telegram: Absender als Empfänger merken"

@@ -494,6 +494,17 @@ views:
         show_state: true
         show_icon: false
         color: amber
+    - type: button
+      name: Per Telegram schicken
+      icon: mdi:send
+      show_state: false
+      icon_height: 30px
+      tap_action:
+        action: perform-action
+        perform_action: script.einkaufsliste_senden
+      grid_options:
+        columns: full
+        rows: 1
     - type: markdown
       text_only: true
       content: Erledigtes steht unten unter **Erledigt** – antippen, und es ist wieder auf der Liste.
@@ -1756,7 +1767,7 @@ views:
   # Essensplan der Woche (Claude), Rezepte mit Kochmodus, Vorrat & Ernte, Einkauf – packages/kueche.yaml
   cards:
   - type: iframe
-    url: /local/kueche.html?v=7
+    url: /local/kueche.html?v=8
     aspect_ratio: 53.3%
 - title: Klima & Energie
   path: energie
