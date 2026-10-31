@@ -1,0 +1,316 @@
+# Küche (www/kueche.html, claude_tools/kueche.py): Essensplan wie eine Planer-App – einmal pro Woche entscheiden.
+# - Einrichten (einmal): Personen, Kochtage, Budget, Stil, Reste, Ernährung, Allergien, Zeit, Geräte, Arbeitszeiten.
+# - Woche planen: Claude plant die Abendessen passend zu unseren Terminen (Familienkalender), Mathildas Stundenplan
+#   (Muckis Seite), Arbeitszeiten, Vorrat und eigener Ernte; einzelne Tage tauschen oder selbst festlegen.
+# - Einkauf: Zutaten der Woche zusammengerechnet auf die Einkaufsliste (todo.einkaufsliste), nach Bereichen sortiert.
+# - Rezepte: aus Link, Text oder Foto (Kochbuch) – Kochmodus am Monitor Schritt für Schritt mit Timern (Ansage auf dem
+#   Küchen-HomePod, wenn ein Timer fertig ist).
+# - Telegram: "Was gibt's heute?", "Lasagne am Samstag", "Plan nächste Woche", "Ernte: 3 Kürbisse", "Essen auf die
+#   Einkaufsliste", Rezept-Link oder Foto mit "Rezept" – siehe Automationen unten.
+# Daten lokal: /config/www/kueche_daten.json (nicht im Repository), Fortschritt: /config/www/kueche_status.json.
+input_boolean:
+  kueche_auto_pause:
+    name: Essensplan nicht automatisch planen
+    icon: mdi:calendar-remove
+
+shell_command:
+  kueche: python3 /config/claude_tools/kueche.py {{ aktion }} {{ wert | default('') }}
+
+script:
+  kueche_speichern:
+    alias: "Küche: speichern"
+    mode: queued
+    fields:
+      daten:
+        description: Inhalt als JSON-Text
+    sequence:
+      - action: shell_command.kueche
+        data:
+          aktion: speichern
+          wert: >-
+            {% set s = (daten if daten is string else (daten | to_json)) | base64_encode %}
+            {% for i in range(0, s | length, 100000) %}{{ s[i:i + 100000] }} {% endfor %}
+        response_variable: ergebnis
+      - variables:
+          antwort: >-
+            {% set a = ergebnis.stdout | default('') if ergebnis is defined and ergebnis is mapping else '' %}
+            {{ a | from_json if (a | string).startswith('{') else {'ok': false, 'fehler': a or 'keine Antwort'} }}
+      - event: kueche_geaendert
+      - stop: fertig
+        response_variable: antwort
+
+  kueche_aktualisieren:
+    alias: "Küche: Anzeige aktualisieren"
+    mode: queued
+    sequence:
+      - event: kueche_geaendert
+
+  # Claude im Hintergrund: Woche planen (art plan, von, tage, wunsch), Tag tauschen (art tausch, datum, wunsch),
+  # Rezept holen (art rezept, url/text/fotos, datum). Termine und Wetter werden hier dazugegeben.
+  kueche_ki:
+    alias: "Küche: Claude planen/tauschen/Rezept"
+    mode: queued
+    fields:
+      auftrag:
+        description: JSON-Objekt (art, von, tage, datum, wunsch, url, text, fotos, chat)
+    sequence:
+      - variables:
+          a: "{{ auftrag if auftrag is mapping else (auftrag | from_json) }}"
+          start: "{{ (a.von | default(a.datum | default(now().strftime('%Y-%m-%d'), true), true))[:10] }}"
+      - action: calendar.get_events
+        continue_on_error: true
+        target:
+          entity_id: calendar.geburtstage
+        data:
+          start_date_time: "{{ start }} 00:00:00"
+          duration:
+            days: 15
+        response_variable: kal
+      - action: weather.get_forecasts
+        continue_on_error: true
+        target:
+          entity_id: weather.touchmonitor_home
+        data:
+          type: daily
+        response_variable: vorhersage
+      - variables:
+          termine: >-
+            {{ kal['calendar.geburtstage'].events if kal is defined and kal is mapping and 'calendar.geburtstage' in kal else [] }}
+          wetter: >-
+            {% set fc = vorhersage['weather.touchmonitor_home'].forecast if vorhersage is defined and vorhersage is mapping
+                        and 'weather.touchmonitor_home' in vorhersage else [] %}
+            {% for d in fc[:8] %}{{ d.datetime[:10] }} {{ d.condition }} {{ d.templow | default('?') }}–{{ d.temperature }} °C{{ '; ' if not loop.last }}{% endfor %}
+      - action: shell_command.kueche
+        continue_on_error: true
+        data:
+          aktion: ki
+          wert: >-
+            {% set s = dict(a, termine=termine, wetter=wetter) | to_json | base64_encode %}
+            {% for i in range(0, s | length, 100000) %}{{ s[i:i + 100000] }} {% endfor %}
+        response_variable: ergebnis
+      - variables:
+          antwort: >-
+            {% set x = ergebnis.stdout | default('') if ergebnis is defined and ergebnis is mapping else '' %}
+            {{ x | from_json if (x | string).startswith('{') else {'ok': false, 'fehler': x or 'keine Antwort'} }}
+      - stop: fertig
+        response_variable: antwort
+
+  # Zutaten auf die Einkaufsliste: entweder fertige Liste (von der Küchen-Seite, schon ausgewählt) oder von–bis aus dem Plan
+  kueche_einkauf:
+    alias: "Küche: Zutaten auf die Einkaufsliste"
+    mode: queued
+    fields:
+      liste:
+        description: Liste [{text, notiz}] (optional)
+      von:
+        description: JJJJ-MM-TT
+      bis:
+        description: JJJJ-MM-TT
+    sequence:
+      - if: "{{ liste is not defined or not liste }}"
+        then:
+          - action: shell_command.kueche
+            continue_on_error: true
+            data:
+              aktion: einkauf
+              wert: "{{ {'von': von | default(''), 'bis': bis | default('')} | to_json | base64_encode }}"
+            response_variable: ergebnis
+      - variables:
+          neu: >-
+            {% if liste is defined and liste %}{{ liste if liste is list else liste | from_json }}
+            {% else %}{% set x = ergebnis.stdout | default('') if ergebnis is defined and ergebnis is mapping else '' %}{{ (x | from_json).liste if (x | string).startswith('{') else [] }}{% endif %}
+      - action: todo.get_items
+        continue_on_error: true
+        target:
+          entity_id: todo.einkaufsliste
+        data:
+          status: needs_action
+        response_variable: vorhanden
+      - variables:
+          schon: >-
+            {{ (vorhanden['todo.einkaufsliste']['items'] if vorhanden is defined and vorhanden is mapping and 'todo.einkaufsliste' in vorhanden else [])
+               | map(attribute='summary') | map('lower') | list }}
+          hinzu: "{{ neu | selectattr('text', 'defined') | list }}"
+      - repeat:
+          for_each: "{{ hinzu }}"
+          sequence:
+            - if: "{{ (repeat.item.text | lower) not in schon }}"
+              then:
+                - action: todo.add_item
+                  continue_on_error: true
+                  target:
+                    entity_id: todo.einkaufsliste
+                  data:
+                    item: "{{ repeat.item.text }}"
+                    description: "{{ repeat.item.notiz | default('') }}"
+      - variables:
+          antwort:
+            anzahl: "{{ hinzu | map(attribute='text') | map('lower') | reject('in', schon) | list | count }}"
+      - stop: fertig
+        response_variable: antwort
+
+template:
+  - triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/10"
+      - trigger: event
+        event_type: kueche_geaendert
+    actions:
+      - action: shell_command.kueche
+        continue_on_error: true
+        data:
+          aktion: stand
+        response_variable: roh
+      - variables:
+          k: >-
+            {% set a = roh.stdout | default('') if roh is defined and roh is mapping else '' %}
+            {{ a | from_json if (a | string).startswith('{') else {} }}
+    sensor:
+      - name: Kueche heute
+        unique_id: kueche_heute
+        icon: mdi:silverware-fork-knife
+        state: "{{ (k.gericht | default('', true) or 'nichts geplant')[:250] }}"
+        attributes:
+          gericht: "{{ k.gericht | default('') }}"
+          hinweis: "{{ k.hinweis | default('') }}"
+          grund: "{{ k.grund | default('') }}"
+          morgen: "{{ k.morgen | default('') }}"
+          woche: "{{ k.woche | default([]) }}"
+          vorrat: "{{ k.vorrat | default([]) }}"
+          eingerichtet: "{{ k.eingerichtet | default(false) }}"
+
+automation:
+  # Freitag 16:30: Plan für die nächste Woche (nur wenn dort noch nichts steht) – an alle per Telegram, rechtzeitig zum Einkauf
+  - id: kueche_wochenplan_automatisch
+    alias: "Küche: nächste Woche automatisch planen"
+    triggers:
+      - trigger: time
+        at: "16:30:00"
+    conditions:
+      - condition: time
+        weekday: fri
+      - condition: state
+        entity_id: input_boolean.kueche_auto_pause
+        state: "off"
+    actions:
+      - action: script.kueche_ki
+        continue_on_error: true
+        data:
+          auftrag: >-
+            {{ {'art': 'plan', 'von': (now() + timedelta(days=3)).strftime('%Y-%m-%d'), 'tage': 7, 'nur_wenn_leer': true,
+                'chats': (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\\d+$') | list,
+                'nachsatz': '\n\nÄndern oder Tage tauschen: am Monitor unter Küche – oder hier schreiben, z. B. „Mittwoch lieber Pfannkuchen“. '
+                            ~ '„Essen auf die Einkaufsliste“ setzt alle Zutaten auf die Einkaufsliste.'} }}
+
+  # Telegram: alles rund ums Essen (Muster wie in packages/telegram.yaml ausgenommen)
+  - id: kueche_telegram
+    alias: "Küche: Telegram-Nachrichten zum Essen"
+    mode: queued
+    max: 10
+    triggers:
+      - trigger: event
+        event_type: telegram_text
+    conditions:
+      - condition: template
+        value_template: >-
+          {% set t = trigger.event.data.text | default('') | string %}
+          {{ t is match('^\s*/?(essen|essensplan|wochenplan|speiseplan|rezepte?|ernte|vorrat|kochen|kochplan)\\b(?!\s+(ist|wird)\s+(fertig|gleich))', ignorecase=True)
+             or t is search('was\s+gibt\W{0,2}\s*(e?s\s+)?(heute|morgen|übermorgen|uebermorgen|am\s+\w+|diese\s+woche)?\s*(zu\s+essen|zum\s+(abend|mittag)\w*)|was\s+(essen|kochen)\s+wir|^\s*plan\w*\s+(die\s+|uns\s+)?(nächste|naechste|diese|kommende)\s+woche|(essens|wochen|speise)plan|\\bgeerntet\\b', ignorecase=True) }}
+    actions:
+      - variables:
+          chat: "{{ trigger.event.data.chat_id }}"
+      - action: calendar.get_events
+        continue_on_error: true
+        target:
+          entity_id: calendar.geburtstage
+        data:
+          duration:
+            days: 14
+        response_variable: kal
+      - action: shell_command.kueche
+        continue_on_error: true
+        data:
+          aktion: telegram
+          wert: >-
+            {{ {'text': trigger.event.data.text, 'chat': chat, 'von': trigger.event.data.from_first | default('', true),
+                'termine': kal['calendar.geburtstage'].events if kal is defined and kal is mapping and 'calendar.geburtstage' in kal else []}
+               | to_json | base64_encode }}
+        response_variable: ergebnis
+      - variables:
+          r: >-
+            {% set x = ergebnis.stdout | default('') if ergebnis is defined and ergebnis is mapping else '' %}
+            {{ x | from_json if (x | string).startswith('{') else {'fehler': 'keine Antwort'} }}
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ chat }}"
+          message: "{{ '🍽 ' ~ r.antwort if r.antwort is defined else '⚠️ Küche: ' ~ (r.fehler | default('hat nicht geklappt')) }}"
+      - event: kueche_geaendert
+      - repeat:
+          for_each: "{{ r.folge | default([]) }}"
+          sequence:
+            - if: "{{ repeat.item.art == 'einkauf' }}"
+              then:
+                - action: script.kueche_einkauf
+                  continue_on_error: true
+                  data:
+                    von: "{{ repeat.item.von | default('') }}"
+                    bis: "{{ repeat.item.bis | default('') }}"
+                  response_variable: ek
+                - action: telegram_bot.send_message
+                  continue_on_error: true
+                  data:
+                    chat_id: "{{ chat }}"
+                    message: "🛒 {{ ek.anzahl | default(0) if ek is defined and ek is mapping else 0 }} Sachen auf die Einkaufsliste gesetzt."
+              else:
+                - action: script.kueche_ki
+                  continue_on_error: true
+                  data:
+                    auftrag: >-
+                      {% set x = repeat.item %}
+                      {{ {'art': 'plan', 'von': x.von | default(''), 'tage': x.tage | default(7), 'wunsch': x.wunsch | default(''), 'chat': chat}
+                         if x.art == 'planen' else
+                         ({'art': 'tausch', 'datum': x.datum | default(''), 'wunsch': x.wunsch | default(''), 'chat': chat} if x.art == 'tag' else
+                          {'art': 'rezept', 'url': x.url | default(''), 'text': x.text | default(''), 'datum': x.datum | default(''), 'chat': chat}) }}
+                  response_variable: ki
+                - if: "{{ ki is defined and ki is mapping and not ki.ok | default(false) }}"
+                  then:
+                    - action: telegram_bot.send_message
+                      continue_on_error: true
+                      data:
+                        chat_id: "{{ chat }}"
+                        message: "⚠️ Küche: {{ ki.fehler | default('hat nicht geklappt') }}"
+
+  # Foto aus dem Kochbuch mit Text "Rezept …" → Rezept speichern (Text dazu: z. B. "Rezept für Samstag")
+  - id: kueche_telegram_foto
+    alias: "Küche: Rezept-Foto aus Telegram"
+    mode: queued
+    triggers:
+      - trigger: event
+        event_type: telegram_attachment
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ (trigger.event.data.file_mime_type | default('')).startswith('image/')
+             and (trigger.event.data.text | default('', true)) is match('^\s*rezept', ignorecase=True) }}
+    actions:
+      - variables:
+          datei: "/media/eingang/rezept_{{ now().strftime('%Y%m%d_%H%M%S') }}_{{ range(100, 999) | random }}.jpg"
+      - action: telegram_bot.download_file
+        continue_on_error: true
+        data:
+          file_id: "{{ trigger.event.data.file_id }}"
+          directory_path: /media/eingang
+          file_name: "{{ datei.split('/')[-1] }}"
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ trigger.event.data.chat_id }}"
+          message: "📖 Ich lese das Rezept – einen Moment …"
+      - action: script.kueche_ki
+        continue_on_error: true
+        data:
+          auftrag: >-
+            {{ {'art': 'rezept', 'fotos': [datei], 'text': trigger.event.data.text | default(''), 'chat': trigger.event.data.chat_id} }}

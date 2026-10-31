@@ -1,0 +1,798 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Küche</title>
+<!--
+  Küchen-Seite (im Dashboard als Vollbild-iframe, am Monitor in der Küche und im Handy-App):
+  - Woche: Essensplan Mo–So, von Claude geplant (Termine, Stundenplan, Arbeitszeiten, Vorrat, Ernte) – Tage tauschen/ändern
+  - Kochmodus: Zutaten und Schritte groß, Schritt für Schritt antippen, Timer (Ansage auf dem Küchen-HomePod)
+  - Rezepte: aus Link, Text oder Foto; Lieblinge; einplanen
+  - Vorrat & Ernte: was da ist, wird zuerst verplant
+  - Einkauf: Zutaten der Woche zusammengerechnet → Einkaufsliste
+  - Einstellungen: Personen, Kochtage, Budget, Stil, Reste, Ernährung, Allergien, Zeit, Geräte, Arbeitszeiten
+  Daten: /local/kueche_daten.json, gespeichert über script.kueche_speichern; Claude über script.kueche_ki (Hintergrund,
+  Fortschritt in /local/kueche_status.json). Der Monitor-Browser hat keine Emoji-Schrift → nur SVG-Symbole.
+-->
+<style>
+  :root {
+    --bg: #FAF7F2; --karte: #FFFFFF; --text: #2B1D18; --grau: #857970; --linie: #EDE5DA; --braun: #4E3229; --braun2: #6B4A3A;
+    --beige: #E8D9C2; --beige2: #F3EADC; --gold: #E9C46A; --gruen: #3F8F4E; --gruen2: #E3F2E5; --rot: #C0392B; --blau: #2F6FB3;
+  }
+  .dunkel {
+    --bg: #17120F; --karte: #241C18; --text: #F2E9DF; --grau: #A89A8F; --linie: #3A2E27; --braun: #E9C9A8; --braun2: #D9B693;
+    --beige: #4A3A30; --beige2: #2F2520; --gruen2: #1F3324;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "SF Pro Text", Roboto, "Helvetica Neue", system-ui, sans-serif; }
+  body { display: flex; flex-direction: column; overflow: hidden; touch-action: manipulation; }
+  button { font: inherit; border: 0; background: none; color: inherit; cursor: pointer; padding: 0; }
+  .serif { font-family: Georgia, "Times New Roman", serif; letter-spacing: -0.3px; }
+  .ic { width: 20px; height: 20px; fill: currentColor; flex: none; vertical-align: -4px; }
+  .kopf { display: flex; align-items: center; gap: 10px; padding: 10px 14px 0; flex-wrap: wrap; }
+  .kopf h1 { margin: 0; font-size: 26px; }
+  .reiter { display: flex; background: var(--beige2); border-radius: 14px; padding: 3px; gap: 2px; overflow-x: auto; max-width: 100%; }
+  .reiter button { padding: 9px 14px; border-radius: 11px; font-size: 15px; font-weight: 600; white-space: nowrap; color: var(--braun2); }
+  .reiter button.an { background: var(--karte); color: var(--braun); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .luecke { flex: 1; }
+  main { flex: 1; overflow: auto; padding: 12px 14px 90px; -webkit-overflow-scrolling: touch; }
+  .karte { background: var(--karte); border-radius: 20px; padding: 16px; box-shadow: 0 1px 3px rgba(60,40,20,.08); margin-bottom: 12px; border: 1px solid var(--linie); }
+  .karte h2 { margin: 0 0 8px; font-size: 21px; }
+  .karte h3 { margin: 14px 0 8px; font-size: 16px; }
+  .klein { font-size: 13px; color: var(--grau); line-height: 1.4; }
+  .zeile { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .knopf { padding: 12px 16px; border-radius: 14px; background: var(--beige2); font-weight: 600; font-size: 15px; display: inline-flex;
+    align-items: center; gap: 7px; color: var(--braun); }
+  .knopf.voll { background: var(--braun); color: #fff; }
+  .dunkel .knopf.voll { color: #1C1410; }
+  .knopf.gold { background: var(--gold); color: #3B2A12; }
+  .knopf.gruen { background: var(--gruen); color: #fff; }
+  .knopf.klein-k { padding: 8px 11px; font-size: 13px; border-radius: 11px; }
+  .knopf.rot { color: var(--rot); }
+  .knopf:disabled { opacity: .45; }
+  .gross { width: 100%; justify-content: center; padding: 16px; font-size: 17px; border-radius: 18px; }
+  /* Kennzahlen */
+  .zahlen { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
+  .zahlen > div { background: var(--karte); border: 1px solid var(--linie); border-radius: 18px; padding: 12px 8px; text-align: center; }
+  .zahlen b { display: block; font-size: 26px; font-family: Georgia, serif; }
+  .zahlen span { font-size: 13px; color: var(--grau); }
+  /* Woche */
+  .wochenkopf { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .wochenkopf h2 { margin: 0; font-size: 22px; flex: 1; text-align: center; }
+  .rund { width: 44px; height: 44px; border-radius: 50%; background: var(--karte); border: 1px solid var(--linie); display: inline-flex;
+    align-items: center; justify-content: center; color: var(--braun); flex: none; }
+  .tag { display: flex; background: var(--karte); border: 2px solid var(--linie); border-radius: 20px; margin-bottom: 10px; overflow: hidden; }
+  .tag.heute { border-color: var(--braun); }
+  .tag .streifen { width: 62px; flex: none; background: var(--beige2); display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 8px 0; color: var(--braun2); }
+  .tag.heute .streifen { background: var(--gold); color: #3B2A12; }
+  .tag .streifen b { font-size: 20px; font-family: Georgia, serif; }
+  .tag .streifen span { font-size: 12px; font-weight: 600; }
+  .tag .inhalt { flex: 1; padding: 12px 14px; min-width: 0; }
+  .tag .titel { font-size: 19px; font-weight: 700; font-family: Georgia, serif; margin-bottom: 3px; }
+  .tag .kurz { font-size: 14px; color: var(--grau); line-height: 1.4; }
+  .marken { display: flex; flex-wrap: wrap; gap: 5px; margin: 7px 0 2px; }
+  .marke { font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 8px; background: var(--beige2); color: var(--braun2); white-space: nowrap; }
+  .marke.gruen { background: var(--gruen2); color: var(--gruen); }
+  .marke.gold { background: #FBEFCB; color: #7A5A12; }
+  .marke.grau { background: transparent; border: 1px solid var(--linie); color: var(--grau); }
+  .tag .knoepfe { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
+  .tag.leer .titel { color: var(--grau); font-weight: 600; }
+  .gekocht .titel { text-decoration: line-through; text-decoration-thickness: 2px; color: var(--grau); }
+  .hinweis { background: #FBEFCB; color: #6B4E10; border-radius: 16px; padding: 12px 14px; font-size: 14px; line-height: 1.45; margin-bottom: 12px; }
+  .dunkel .hinweis { background: #3A2F18; color: #F1D58E; }
+  .arbeit { display: flex; align-items: center; gap: 10px; background: var(--braun); color: #fff; border-radius: 16px; padding: 14px; margin-bottom: 12px; font-weight: 600; }
+  .dunkel .arbeit { color: #1C1410; }
+  .fehler { background: #FDE8E6; color: var(--rot); border-radius: 16px; padding: 12px 14px; margin-bottom: 12px; font-size: 14px; }
+  .warten { display: inline-block; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,.45); border-top-color: #fff; border-radius: 50%;
+    animation: dreh .8s linear infinite; flex: none; }
+  .dunkel .warten { border-color: rgba(0,0,0,.3); border-top-color: #1C1410; }
+  @keyframes dreh { to { transform: rotate(360deg); } }
+  /* Rezepte */
+  .rliste { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+  .rezept { background: var(--karte); border: 1px solid var(--linie); border-radius: 18px; padding: 13px 14px; }
+  .rezept .titel { font-size: 17px; font-weight: 700; font-family: Georgia, serif; }
+  .stern { color: #D4A017; }
+  /* Auswahl-Kacheln (Einstellungen) */
+  .kacheln { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .kachel { background: var(--karte); border: 2px solid var(--linie); border-radius: 16px; padding: 12px 10px; text-align: center; font-weight: 600; font-size: 15px; }
+  .kachel small { display: block; font-weight: 400; font-size: 12px; color: var(--braun2); margin-top: 3px; }
+  .kachel.an { border-color: var(--braun); background: var(--beige2); }
+  .tage7 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .tage7 button { border: 2px solid var(--braun); border-radius: 14px; padding: 10px 0; font-weight: 700; font-size: 16px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .tage7 i { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--braun); display: inline-flex; align-items: center; justify-content: center; }
+  .tage7 .an i { background: var(--braun); color: #fff; }
+  .zaehler { display: flex; align-items: center; justify-content: center; gap: 24px; margin: 6px 0; }
+  .zaehler button { width: 58px; height: 58px; border-radius: 50%; background: var(--beige); font-size: 30px; font-weight: 600; color: var(--braun); }
+  .zaehler b { font-size: 46px; font-family: Georgia, serif; min-width: 60px; text-align: center; }
+  .zaehler.klein button { width: 40px; height: 40px; font-size: 22px; }
+  .zaehler.klein b { font-size: 24px; min-width: 34px; }
+  .kind { display: flex; align-items: center; justify-content: space-between; background: var(--beige2); border-radius: 14px; padding: 8px 12px; margin-top: 8px; }
+  input[type=range] { width: 100%; accent-color: var(--braun); height: 34px; }
+  textarea, input[type=text], input[type=url], select { width: 100%; font: inherit; font-size: 16px; padding: 11px 13px; border: 1px solid var(--linie);
+    border-radius: 14px; background: var(--bg); color: var(--text); }
+  textarea { min-height: 76px; resize: vertical; }
+  label.f { display: block; font-size: 13px; color: var(--grau); font-weight: 600; margin: 12px 0 5px; }
+  /* Vorrat */
+  .vorrat { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--linie); }
+  .vorrat:last-child { border-bottom: 0; }
+  .vorrat .mitte { flex: 1; min-width: 0; }
+  /* Einkauf */
+  .ek { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--linie); }
+  .ek .box { width: 28px; height: 28px; border-radius: 8px; border: 2px solid var(--braun); display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  .ek.an .box { background: var(--braun); color: #fff; }
+  .ek .mitte { flex: 1; min-width: 0; }
+  /* Fenster (Blatt von unten) */
+  .schleier { position: fixed; inset: 0; background: rgba(20,10,5,.35); display: none; z-index: 10; }
+  .schleier.offen { display: block; }
+  .blatt { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); width: min(680px, 100%); background: var(--karte); border-radius: 24px 24px 0 0;
+    padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px)); max-height: 90%; overflow: auto; box-shadow: 0 -6px 30px rgba(0,0,0,.2); }
+  .blatt h3 { margin: 0 0 8px; font-size: 21px; font-family: Georgia, serif; }
+  /* Kochmodus */
+  .koch { position: fixed; inset: 0; background: var(--bg); z-index: 15; display: none; flex-direction: column; }
+  .koch.offen { display: flex; }
+  .koch .oben { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--linie); flex-wrap: wrap; }
+  .koch .oben h2 { margin: 0; font-size: 22px; flex: 1; min-width: 160px; }
+  .koch .mitte { flex: 1; overflow: auto; padding: 16px 18px; }
+  .schritt-nr { font-size: 15px; font-weight: 700; color: var(--braun2); margin-bottom: 10px; letter-spacing: .5px; }
+  .schritt-text { font-size: clamp(24px, 3.4vw, 38px); line-height: 1.35; font-family: Georgia, serif; }
+  .koch .unten { display: flex; gap: 10px; padding: 12px 14px calc(12px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--linie); }
+  .koch .unten .knopf { flex: 1; justify-content: center; padding: 20px; font-size: 19px; border-radius: 18px; }
+  .fortschritt { height: 6px; background: var(--beige2); border-radius: 3px; overflow: hidden; margin: 0 14px; }
+  .fortschritt div { height: 100%; background: var(--braun); }
+  .timerleiste { display: flex; gap: 8px; flex-wrap: wrap; padding: 8px 14px 0; }
+  .timer { display: inline-flex; align-items: center; gap: 8px; background: var(--braun); color: #fff; border-radius: 14px; padding: 9px 13px; font-weight: 700; font-size: 17px; }
+  .dunkel .timer { color: #1C1410; }
+  .timer.fertig { background: var(--rot); color: #fff; animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: .55; } }
+  .zutat { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--linie); font-size: 19px; }
+  .zutat .menge { min-width: 110px; font-weight: 700; color: var(--braun2); }
+  .zutat.abgehakt { opacity: .4; text-decoration: line-through; }
+  .meldung { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); background: rgba(43,29,24,.94); color: #fff; padding: 10px 16px;
+    border-radius: 14px; font-size: 15px; display: none; z-index: 30; max-width: 92%; text-align: center; }
+  .leerbild { text-align: center; padding: 30px 10px; color: var(--grau); }
+  .leerbild b { display: block; font-size: 22px; color: var(--text); font-family: Georgia, serif; margin-bottom: 6px; }
+  @media (max-width: 560px) {
+    .tag .streifen { width: 52px; }
+    .zahlen b { font-size: 21px; }
+    .kopf h1 { font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+<div class="kopf">
+  <h1 class="serif">Küche</h1>
+  <div class="reiter" id="reiter">
+    <button data-a="reiter" data-r="woche">Woche</button>
+    <button data-a="reiter" data-r="rezepte">Rezepte</button>
+    <button data-a="reiter" data-r="vorrat">Vorrat &amp; Ernte</button>
+    <button data-a="reiter" data-r="einstellungen">Einstellungen</button>
+  </div>
+  <div class="luecke"></div>
+</div>
+<main id="inhalt"><div class="leerbild"><b>Küche wird geladen …</b></div></main>
+<div class="schleier" id="schleier"><div class="blatt" id="blatt"></div></div>
+<div class="koch" id="koch"></div>
+<div class="meldung" id="meldung"></div>
+<script>
+"use strict";
+const DATEN_URL = "/local/kueche_daten.json", STATUS_URL = "/local/kueche_status.json";
+const TAGE = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
+const BEREICHE = ["Obst & Gemüse", "Brot & Backwaren", "Kühlregal & Milch", "Fleisch & Fisch", "Tiefkühl",
+  "Nudeln, Reis & Konserven", "Gewürze, Öl & Backen", "Getränke", "Sonstiges"];
+const STILE = [["Von allem etwas", "Abwechslungsreiche Woche"], ["Schnelle Gerichte", "In 20 min fertig"], ["Kalorienarm", "Leichtere Abendessen"],
+  ["Familienlieblinge", "Kinder essen es"], ["Gesundes Wohlfühlessen", "Deftig, aber ausgewogen"], ["Wie vom Lieferdienst", "Takeaway-Gefühl, zu Hause gekocht"],
+  ["Gut für die Verdauung", "Schonend für den Magen"], ["Eiweißreich", "Eiweiß im Vordergrund"], ["Asiatisch inspiriert", "Kräftige Aromen"],
+  ["Italienisch", "Pasta und Klassiker"], ["Hausmannskost", "Wie bei Oma"], ["Aus dem Garten", "Viel eigenes Gemüse"]];
+const RESTE = [["0", "Jeden Abend frisch", "Ich koche lieber jeden Abend"], ["1", "1 freier Abend", "Ein großes Gericht, zweimal gegessen"],
+  ["2", "2 freie Abende", "Zweimal groß kochen, zweimal entspannen"], ["3", "3 freie Abende", "Wenig kochen, viel Ruhe"]];
+const ERNAEHRUNG = [["keine", "Keine", "Wir essen alles"], ["vegetarisch", "Vegetarisch", "Kein Fleisch, kein Fisch"],
+  ["vegan", "Vegan", "Rein pflanzlich"], ["pescetarisch", "Pescetarisch", "Fisch, kein Fleisch"]];
+const ALLERGIEN = ["Erdnüsse", "Nüsse", "Milchprodukte", "Eier", "Weizen / Gluten", "Soja", "Fisch", "Schalentiere", "Sellerie", "Senf", "Sesam"];
+const GERAETE = ["Herd", "Backofen", "Mikrowelle", "Heißluftfritteuse", "Slow Cooker", "Schnellkochtopf", "Thermomix / Küchenmaschine", "Mixer", "Grill", "Kamin-Ofen"];
+const ZEITEN = [15, 20, 30, 45, 60, 90];
+const LAEDEN = ["Rewe", "Edeka", "Aldi", "Lidl", "Kaufland", "Famila", "Netto", "Penny"];
+const ICON = {
+  plus: "M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z", minus: "M19,13H5V11H19V13Z",
+  x: "M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z",
+  haken: "M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z",
+  links: "M15.41,16.58L10.83,12L15.41,7.41L14,6L8,12L14,18L15.41,16.58Z", rechts: "M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z",
+  kalender: "M19,19H5V8H19M16,1V3H8V1H6V3H5C3.89,3 3,3.89 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5C21,3.89 20.1,3 19,3H18V1M17,12H12V17H17V12Z",
+  muell: "M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z",
+  ernte: "M7,3A1,1 0 0,0 6,4V8.5C6,11 8,13 10.5,13H11V21H13V13H13.5C16,13 18,11 18,8.5V4A1,1 0 0,0 17,3H7M8,5H16V8.5A2.5,2.5 0 0,1 13.5,11H10.5A2.5,2.5 0 0,1 8,8.5V5Z",
+  stift: "M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z",
+  zauber: "M7.5,5.6L5,7L6.4,4.5L5,2L7.5,3.4L10,2L8.6,4.5L10,7L7.5,5.6M19.5,15.4L22,14L20.6,16.5L22,19L19.5,17.6L17,19L18.4,16.5L17,14L19.5,15.4M22,2L20.6,4.5L22,7L19.5,5.6L17,7L18.4,4.5L17,2L19.5,3.4L22,2M13.34,12.78L15.78,10.34L13.66,8.22L11.22,10.66L13.34,12.78M14.37,7.29L16.71,9.63C17.1,10 17.1,10.65 16.71,11.04L5.04,22.71C4.65,23.1 4,23.1 3.63,22.71L1.29,20.37C0.9,20 0.9,19.35 1.29,18.96L12.96,7.29C13.35,6.9 14,6.9 14.37,7.29Z",
+  neu: "M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z",
+  foto: "M19,19H5V5H19M19,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M13.96,12.29L11.21,15.83L9.25,13.47L6.5,17H17.5L13.96,12.29Z",
+  stern: "M12,17.27L18.18,21L16.54,13.97L22,9.24L14.81,8.62L12,2L9.19,8.62L2,9.24L7.45,13.97L5.82,21L12,17.27Z",
+  play: "M8,5.14V19.14L19,12.14L8,5.14Z",
+  wagen: "M17,18A2,2 0 0,1 19,20A2,2 0 0,1 17,22C15.89,22 15,21.1 15,20C15,18.89 15.89,18 17,18M1,2H4.27L5.21,4H20A1,1 0 0,1 21,5C21,5.17 20.95,5.34 20.88,5.5L17.3,11.97C16.96,12.58 16.3,13 15.55,13H8.1L7.2,14.63L7.17,14.75A0.25,0.25 0 0,0 7.42,15H19V17H7C5.89,17 5,16.1 5,15C5,14.65 5.09,14.32 5.24,14.04L6.6,11.59L3,4H1V2M7,18A2,2 0 0,1 9,20A2,2 0 0,1 7,22C5.89,22 5,21.1 5,20C5,18.89 5.89,18 7,18Z",
+};
+const ic = (n, extra) => n === "uhr"
+  ? `<svg class="ic" viewBox="0 0 24 24" ${extra || ""}><circle cx="12" cy="13" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M11 9h2v5h-2zM9 2h6v2H9z"/></svg>`
+  : n === "buch"
+  ? `<svg class="ic" viewBox="0 0 24 24"><path d="M5 3h11a3 3 0 0 1 3 3v15H7a2 2 0 0 1-2-2zM7 17v2h10v-2z"/></svg>`
+  : `<svg class="ic" viewBox="0 0 24 24" ${extra || ""}><path d="${ICON[n] || ""}"/></svg>`;
+
+const $ = id => document.getElementById(id);
+function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
+function esc(t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+function meldung(t) { const m = $("meldung"); m.textContent = t; m.style.display = "block"; clearTimeout(meldung.t); meldung.t = setTimeout(() => m.style.display = "none", 3800); }
+const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const vonIso = s => { const [y, m, t] = s.split("-").map(Number); return new Date(y, m - 1, t); };
+const plusTage = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const montagVon = d => plusTage(new Date(d.getFullYear(), d.getMonth(), d.getDate()), -((d.getDay() + 6) % 7));
+const kurzDatum = d => `${d.getDate()}.${d.getMonth() + 1}.`;
+const zahl = v => v == null || !isFinite(v) ? "" : (Math.abs(v - Math.round(v)) < 0.01 ? String(Math.round(v)) : v.toFixed(1).replace(".", ","));
+
+const STANDARD = {
+  einstellungen: { erwachsene: 2, kinder: [{ alter: 8 }], kinder_gleich: true, tage: [0, 1, 2, 3, 4, 5, 6], budget: 75, stil: ["Familienlieblinge"],
+    reste: "1", ernaehrung: "keine", allergien: [], zeit: 30, geraete: ["Herd", "Backofen"], platz: ["Kühlschrank", "Gefrierschrank"],
+    arbeitszeiten: "", hinweise: "", laden: "Rewe", eingerichtet: false },
+  rezepte: [], plan: {}, vorrat: [], hinweis_woche: {},
+};
+let daten = null, reiter = "woche", woche = montagVon(new Date()), arbeit = null, fehlerText = "", suche = "";
+let koch = null;               // Kochmodus: {g, schritt, ansicht, faktor, abgehakt:Set}
+const timers = [];             // {name, ende, fertig}
+let einkauf = null;            // Einkaufs-Auswahl
+let entwurf = null;            // Einstellungen beim Bearbeiten
+
+// ---------- Tippen: am Monitor kommen Finger doppelt (Touch + Maus-Klick) ----------
+let letzterFingertipp = 0, start = null;
+document.addEventListener("touchstart", ev => { const t = ev.touches[0]; start = { x: t.clientX, y: t.clientY, el: ev.target.closest("[data-a]") }; }, { passive: true });
+document.addEventListener("touchmove", ev => { const t = ev.touches[0]; if (start && Math.hypot(t.clientX - start.x, t.clientY - start.y) > 12) start = null; }, { passive: true });
+document.addEventListener("touchend", ev => {
+  letzterFingertipp = Date.now();
+  const s = start; start = null;
+  if (!s || !s.el) return;
+  ev.preventDefault(); aktion(s.el, ev);
+}, { passive: false });
+document.addEventListener("click", ev => {
+  if (Date.now() - letzterFingertipp < 1000) return;
+  const el = ev.target.closest("[data-a]"); if (el) aktion(el, ev);
+  else if (ev.target === $("schleier")) schliessen();
+});
+
+// ---------- Laden / Speichern ----------
+async function laden() {
+  try {
+    const r = await fetch(DATEN_URL + "?t=" + Date.now(), { cache: "no-store" });
+    daten = r.ok ? await r.json() : JSON.parse(JSON.stringify(STANDARD));
+  } catch (e) { daten = JSON.parse(JSON.stringify(STANDARD)); }
+  for (const k of Object.keys(STANDARD)) if (daten[k] == null) daten[k] = JSON.parse(JSON.stringify(STANDARD[k]));
+  daten.einstellungen = Object.assign({}, STANDARD.einstellungen, daten.einstellungen);
+  if (!daten.einstellungen.eingerichtet && reiter === "woche" && !Object.keys(daten.plan).length) { reiter = "einstellungen"; }
+}
+async function speichern() {
+  const h = hass(); if (!h) { meldung("Home Assistant nicht erreichbar"); return false; }
+  try {
+    const r = await h.callWS({ type: "call_service", domain: "script", service: "kueche_speichern", service_data: { daten: JSON.stringify(daten) }, return_response: true });
+    const a = (r && r.response) || {};
+    if (a.ok === false) { meldung("Nicht gespeichert: " + (a.fehler || "?")); return false; }
+    return true;
+  } catch (e) { meldung("Nicht gespeichert: " + (e.message || e)); return false; }
+}
+async function ki(auftrag, text) {
+  const h = hass(); if (!h) { meldung("Home Assistant nicht erreichbar"); return; }
+  if (arbeit) { meldung("Claude arbeitet noch – bitte kurz warten"); return; }
+  arbeit = { text: text || "Claude arbeitet …" }; fehlerText = ""; zeichnen();
+  try {
+    const r = await h.callWS({ type: "call_service", domain: "script", service: "kueche_ki", service_data: { auftrag: JSON.stringify(auftrag) }, return_response: true });
+    const a = (r && r.response) || {};
+    if (a.ok === false) { arbeit = null; fehlerText = a.fehler || "Hat nicht geklappt"; zeichnen(); return; }
+    beobachten();
+  } catch (e) { arbeit = null; fehlerText = String(e.message || e); zeichnen(); }
+}
+async function beobachten() {
+  clearTimeout(beobachten.t);
+  let s = {};
+  try { const r = await fetch(STATUS_URL + "?t=" + Date.now(), { cache: "no-store" }); if (r.ok) s = await r.json(); } catch (e) { /* gleich nochmal */ }
+  if (s.laeuft) {
+    arbeit = { text: s.text || "Claude arbeitet …" }; if (reiter !== "einstellungen") zeichnen();
+    beobachten.t = setTimeout(beobachten, 3000); return;
+  }
+  if (arbeit) {
+    arbeit = null;
+    if (s.fehler) fehlerText = s.fehler; else meldung("Fertig");
+    await laden(); zeichnen();
+    const h = hass(); if (h) h.callService("script", "kueche_aktualisieren", {}).catch(() => {});
+  }
+}
+
+// ---------- Hilfen ----------
+function portionen() {
+  const e = daten.einstellungen; let p = +e.erwachsene || 0;
+  for (const k of e.kinder || []) { const a = +k.alter || 8; p += a <= 6 ? 0.5 : a <= 12 ? 0.75 : 1; }
+  return Math.max(1, Math.round(p));
+}
+function wocheTage() { return [0, 1, 2, 3, 4, 5, 6].map(i => plusTage(woche, i)); }
+function marken(g) {
+  const m = [];
+  if (g.art === "reste") m.push(`<span class="marke gold">Reste</span>`);
+  if (g.art === "frei" || g.art === "auswaerts") m.push(`<span class="marke grau">kein Kochen</span>`);
+  if (g.zeit_min) m.push(`<span class="marke">${ic("uhr")} ${g.zeit_min} min</span>`);
+  if (g.kosten_eur) m.push(`<span class="marke">ca. ${zahl(g.kosten_eur)} €</span>`);
+  for (const v of g.nutzt_vorrat || []) m.push(`<span class="marke gruen">${esc(v)}</span>`);
+  if (g.rezept_id && (daten.rezepte.find(r => r.id === g.rezept_id) || {}).favorit) m.push(`<span class="marke gold">Liebling</span>`);
+  return m.join("");
+}
+
+// ---------- Zeichnen ----------
+function zeichnen() {
+  for (const b of document.querySelectorAll("#reiter button")) b.classList.toggle("an", b.dataset.r === reiter);
+  const kopf = (arbeit ? `<div class="arbeit"><span class="warten"></span>${esc(arbeit.text)}</div>` : "")
+    + (fehlerText ? `<div class="fehler">${esc(fehlerText)} <button class="knopf klein-k" data-a="fehlerweg">OK</button></div>` : "");
+  const f = { woche: wocheSeite, rezepte: rezepteSeite, vorrat: vorratSeite, einstellungen: einstellungenSeite }[reiter];
+  const scroll = $("inhalt").scrollTop;
+  $("inhalt").innerHTML = kopf + f();
+  $("inhalt").scrollTop = scroll;
+}
+
+function wocheSeite() {
+  const tage = wocheTage(), heute = iso(new Date());
+  const plan = tage.map(d => daten.plan[iso(d)]).filter(Boolean);
+  const kochen = plan.filter(g => g.art === "kochen").length;
+  const kosten = plan.reduce((s, g) => s + (+g.kosten_eur || 0), 0);
+  const zeiten = plan.filter(g => g.art === "kochen" && g.zeit_min).map(g => g.zeit_min);
+  const schnitt = zeiten.length ? Math.round(zeiten.reduce((a, b) => a + b, 0) / zeiten.length) : daten.einstellungen.zeit;
+  const diese = iso(montagVon(new Date())) === iso(woche);
+  const naechste = iso(plusTage(montagVon(new Date()), 7)) === iso(woche);
+  const name = diese ? "Diese Woche" : naechste ? "Nächste Woche" : `Woche ab ${kurzDatum(woche)}`;
+  const hinweis = (daten.hinweis_woche || {})[iso(woche)];
+  let h = `<div class="wochenkopf"><button class="rund" data-a="woche" data-n="-7">${ic("links")}</button>
+    <h2 class="serif">${name} <span class="klein">${kurzDatum(tage[0])} – ${kurzDatum(tage[6])}</span></h2>
+    <button class="rund" data-a="woche" data-n="7">${ic("rechts")}</button></div>`;
+  h += `<div class="zahlen"><div><b>${kochen || "–"}</b><span>Abendessen</span></div>
+    <div><b>${kosten ? zahl(Math.round(kosten)) + " €" : daten.einstellungen.budget + " €"}</b><span>${kosten ? "geschätzt" : "Budget"}</span></div>
+    <div><b>${schnitt} min</b><span>Kochzeit</span></div></div>`;
+  if (hinweis) h += `<div class="hinweis">${esc(hinweis)}</div>`;
+  h += `<div class="zeile" style="margin-bottom:12px">
+    <button class="knopf voll" data-a="planen" ${arbeit ? "disabled" : ""}>${ic("zauber")} ${plan.length ? "Woche neu planen" : "Woche planen lassen"}</button>
+    <button class="knopf" data-a="einkauf" ${plan.length ? "" : "disabled"}>${ic("wagen")} Einkaufsliste</button></div>`;
+  for (const d of tage) {
+    const k = iso(d), g = daten.plan[k];
+    const kopfTag = `<div class="streifen"><span>${TAGE[d.getDay() === 0 ? 6 : d.getDay() - 1].slice(0, 2).toUpperCase()}</span><b>${d.getDate()}</b></div>`;
+    if (!g) {
+      h += `<div class="tag leer ${k === heute ? "heute" : ""}">${kopfTag}<div class="inhalt"><div class="titel">Noch nichts geplant</div>
+        <div class="knoepfe"><button class="knopf klein-k" data-a="aendern" data-k="${k}">${ic("stift")} Festlegen</button>
+        <button class="knopf klein-k" data-a="tausch" data-k="${k}" ${arbeit ? "disabled" : ""}>${ic("zauber")} Vorschlag</button></div></div></div>`;
+      continue;
+    }
+    const kochbar = g.art === "kochen" && (g.schritte || []).length;
+    h += `<div class="tag ${k === heute ? "heute" : ""} ${g.gekocht ? "gekocht" : ""}">${kopfTag}<div class="inhalt">
+      <div class="titel">${esc(g.titel || "–")}</div>
+      ${g.kurz ? `<div class="kurz">${esc(g.kurz)}</div>` : ""}
+      <div class="marken">${marken(g)}</div>
+      ${g.grund ? `<div class="klein">${esc(g.grund)}</div>` : ""}
+      <div class="knoepfe">
+        ${kochbar ? `<button class="knopf klein-k ${k === heute ? "voll" : ""}" data-a="kochen" data-k="${k}">${ic("play")} Kochen</button>` : ""}
+        <button class="knopf klein-k" data-a="tausch" data-k="${k}" ${arbeit ? "disabled" : ""}>${ic("neu")} Tauschen</button>
+        <button class="knopf klein-k" data-a="aendern" data-k="${k}">${ic("stift")} Ändern</button>
+        ${kochbar && !g.rezept_id ? `<button class="knopf klein-k" data-a="merken" data-k="${k}">${ic("stern")} Merken</button>` : ""}
+        ${g.art === "kochen" ? `<button class="knopf klein-k" data-a="gekocht" data-k="${k}">${ic("haken")} ${g.gekocht ? "Doch nicht" : "Gekocht"}</button>` : ""}
+      </div></div></div>`;
+  }
+  return h;
+}
+
+function rezepteSeite() {
+  const s = suche.toLowerCase();
+  const liste = daten.rezepte.filter(r => !s || (r.titel + " " + (r.kategorie || "") + " " + (r.zutaten || []).map(z => z.name).join(" ")).toLowerCase().includes(s))
+    .sort((a, b) => (b.favorit ? 1 : 0) - (a.favorit ? 1 : 0) || a.titel.localeCompare(b.titel, "de"));
+  let h = `<div class="zeile" style="margin-bottom:12px"><button class="knopf voll" data-a="rezeptneu" ${arbeit ? "disabled" : ""}>${ic("plus")} Rezept hinzufügen</button>
+    <div style="flex:1;min-width:200px"><input type="text" id="suche" placeholder="Suchen (Name, Zutat …)" value="${esc(suche)}"></div></div>`;
+  if (!daten.rezepte.length) return h + `<div class="leerbild"><b>Noch keine Rezepte</b>Link aus dem Internet, Text oder ein Foto aus dem Kochbuch hinzufügen –
+    oder per Telegram schicken (Foto mit dem Text „Rezept“). Gerichte aus dem Wochenplan mit „Merken“ hierher holen.</div>`;
+  h += `<div class="rliste">`;
+  for (const r of liste) {
+    h += `<div class="rezept"><div class="zeile" style="flex-wrap:nowrap;align-items:flex-start"><div style="flex:1;min-width:0">
+      <div class="titel">${r.favorit ? `<span class="stern">${ic("stern")}</span> ` : ""}${esc(r.titel)}</div>
+      <div class="klein">${esc(r.kurz || "")}</div></div></div>
+      <div class="marken">${r.zeit_min ? `<span class="marke">${ic("uhr")} ${r.zeit_min} min</span>` : ""}${r.kategorie ? `<span class="marke">${esc(r.kategorie)}</span>` : ""}
+      <span class="marke grau">${r.portionen || "?"} Portionen</span></div>
+      ${r.notiz ? `<div class="klein">${esc(r.notiz)}</div>` : ""}
+      <div class="knoepfe zeile" style="margin-top:9px">
+        <button class="knopf klein-k voll" data-a="rkochen" data-id="${r.id}">${ic("play")} Kochen</button>
+        <button class="knopf klein-k" data-a="reinplanen" data-id="${r.id}">${ic("kalender")} Einplanen</button>
+        <button class="knopf klein-k" data-a="rfavorit" data-id="${r.id}">${ic("stern")} ${r.favorit ? "Kein Liebling" : "Liebling"}</button>
+        <button class="knopf klein-k rot" data-a="rloeschen" data-id="${r.id}">${ic("muell")}</button>
+      </div></div>`;
+  }
+  return h + `</div>`;
+}
+
+function vorratSeite() {
+  let h = `<div class="karte"><h2 class="serif">Vorrat &amp; Ernte</h2>
+    <div class="klein">Was hier steht, plant Claude zuerst ein – zum Beispiel Kürbisse aus dem Garten oder Hack im Gefrierschrank.
+    Per Telegram geht es auch: „Ernte: 3 Kürbisse“ oder „Wir haben Kartoffeln geerntet“.</div>
+    <div class="zeile" style="margin-top:12px;flex-wrap:nowrap"><input type="text" id="vname" placeholder="Was? (z. B. Kürbis)" style="flex:2">
+    <input type="text" id="vmenge" placeholder="Menge" style="flex:1"></div>
+    <div class="zeile" style="margin-top:8px"><button class="knopf gruen" data-a="vneu" data-q="ernte">${ic("ernte")} Eigene Ernte</button>
+    <button class="knopf" data-a="vneu" data-q="vorrat">${ic("plus")} Vorrat</button></div></div>`;
+  if (!daten.vorrat.length) return h + `<div class="leerbild">Noch nichts eingetragen.</div>`;
+  h += `<div class="karte">`;
+  daten.vorrat.forEach((v, i) => {
+    h += `<div class="vorrat"><span class="marke ${v.quelle === "ernte" ? "gruen" : ""}">${v.quelle === "ernte" ? "Ernte" : "Vorrat"}</span>
+      <div class="mitte"><b>${esc(v.name)}</b>${v.menge ? ` <span class="klein">· ${esc(v.menge)}</span>` : ""}
+      ${v.seit ? `<div class="klein">seit ${esc(v.seit.split("-").reverse().join("."))}</div>` : ""}</div>
+      <button class="knopf klein-k" data-a="vweg" data-i="${i}">${ic("haken")} Verbraucht</button></div>`;
+  });
+  return h + `</div>`;
+}
+
+function kacheln(liste, gewaehlt, feld, mehrfach) {
+  return `<div class="kacheln">` + liste.map(x => {
+    const [wert, name, info] = Array.isArray(x) ? (x.length === 3 ? x : [x[0], x[0], x[1]]) : [x, x, ""];
+    const an = mehrfach ? (gewaehlt || []).includes(wert) : gewaehlt === wert;
+    return `<button class="kachel ${an ? "an" : ""}" data-a="ewahl" data-f="${feld}" data-w="${esc(wert)}" data-m="${mehrfach ? 1 : 0}">${esc(name)}${info ? `<small>${esc(info)}</small>` : ""}</button>`;
+  }).join("") + `</div>`;
+}
+
+function einstellungenSeite() {
+  if (!entwurf) entwurf = JSON.parse(JSON.stringify(daten.einstellungen));
+  const e = entwurf, erst = !daten.einstellungen.eingerichtet;
+  const kinder = (e.kinder || []).map((k, i) => `<div class="kind"><b>Kind ${i + 1}</b><div class="zaehler klein">
+      <button data-a="kind" data-i="${i}" data-n="-1">${ic("minus")}</button><b>${k.alter}</b><button data-a="kind" data-i="${i}" data-n="1">${ic("plus")}</button></div>
+      <span class="klein">Jahre</span><button class="rund" style="width:36px;height:36px" data-a="kindweg" data-i="${i}">${ic("x")}</button></div>`).join("");
+  return `${erst ? `<div class="hinweis"><b>Willkommen in der Küche!</b> Einmal kurz einrichten – danach plant Claude jede Woche eure Abendessen passend zu
+      euren Terminen, Mathildas Stundenplan, Arbeitszeiten, Vorrat und Ernte. Einmal pro Woche entscheiden, nicht jeden Abend.</div>` : ""}
+    <div class="karte"><h2 class="serif">Für wen kochst du?</h2><div class="klein">Das legt die Portionsgrößen fest.</div>
+      <div class="zaehler"><button data-a="erw" data-n="-1">${ic("minus")}</button><b>${e.erwachsene}</b><button data-a="erw" data-n="1">${ic("plus")}</button></div>
+      <div class="klein" style="text-align:center">Erwachsene</div>${kinder}
+      <div class="zeile" style="margin-top:10px"><button class="knopf" data-a="kindneu">${ic("plus")} Kind hinzufügen</button>
+      <button class="knopf ${e.kinder_gleich ? "voll" : ""}" data-a="ebool" data-f="kinder_gleich">${ic("haken")} Kinder essen dasselbe</button></div>
+      <div class="hinweis" style="margin:12px 0 0">Jede Mahlzeit ergibt ${portionenVon(e)} Portionen</div></div>
+    <div class="karte"><h2 class="serif">An welchen Tagen kocht ihr normalerweise?</h2><div class="klein">Reste oder Auswärtsessen werden darum herum geplant.</div>
+      <div class="tage7" style="margin-top:10px">${TAGE.map((t, i) => `<button class="${(e.tage || []).includes(i) ? "an" : ""}" data-a="etag" data-i="${i}">${t.slice(0, 2)}<i>${(e.tage || []).includes(i) ? ic("haken") : ""}</i></button>`).join("")}</div></div>
+    <div class="karte"><h2 class="serif">Wochenbudget</h2><div class="klein">Wie viel ihr pro Woche fürs Abendessen ausgeben möchtet (für ${portionenVon(e)} Personen).</div>
+      <div class="zaehler"><b id="budgetzahl">${e.budget} €</b></div>
+      <input type="range" id="budget" min="25" max="200" step="5" value="${e.budget}">
+      <label class="f">Wo kauft ihr meistens ein?</label>${kacheln(LAEDEN, e.laden, "laden", false)}</div>
+    <div class="karte"><h2 class="serif">Was ist euer Stil?</h2><div class="klein">Wähle bis zu 3 aus.</div>${kacheln(STILE, e.stil, "stil", true)}</div>
+    <div class="karte"><h2 class="serif">Mögt ihr Reste?</h2><div class="klein">Einmal kochen, zweimal essen – nur mit Gerichten, die aufgewärmt gut schmecken.</div>${kacheln(RESTE, e.reste, "reste", false)}</div>
+    <div class="karte"><h2 class="serif">Ernährung</h2><div class="klein">Diese wird nie gebrochen.</div>${kacheln(ERNAEHRUNG, e.ernaehrung, "ernaehrung", false)}
+      <h3>Allergien</h3><div class="klein">Diese Zutaten kommen nie in Rezepte und Einkaufsliste.</div>${kacheln(ALLERGIEN, e.allergien, "allergien", true)}</div>
+    <div class="karte"><h2 class="serif">Wie viel Zeit habt ihr zum Kochen?</h2><div class="klein">An einem normalen Wochenabend, vom Nachhausekommen bis zum Essen.</div>
+      ${kacheln(ZEITEN.map(z => [z, z + " Minuten", ""]), e.zeit, "zeit", false)}</div>
+    <div class="karte"><h2 class="serif">Was habt ihr in der Küche?</h2>${kacheln(GERAETE, e.geraete, "geraete", true)}
+      <h3>Platz für Reste</h3>${kacheln(["Kühlschrank", "Gefrierschrank"], e.platz, "platz", true)}</div>
+    <div class="karte"><h2 class="serif">Arbeitszeiten &amp; Wünsche</h2>
+      <div class="klein">Termine aus dem Familienkalender und Mathildas Stundenplan kennt Claude schon. Hier, was sonst wichtig ist.</div>
+      <label class="f">Wann seid ihr abends zu Hause? (Arbeitszeiten)</label>
+      <textarea id="arbeitszeiten" placeholder="z. B. Marco Mo–Fr bis 17 Uhr, Mirka Di und Do bis 18:30 Uhr, Essen meist um 18:30">${esc(e.arbeitszeiten)}</textarea>
+      <label class="f">Sonst noch etwas? (Vorlieben, mag nicht …)</label>
+      <textarea id="hinweise" placeholder="z. B. Mathilda mag keine Pilze, freitags gern Fisch, sonntags darf es aufwendiger sein">${esc(e.hinweise)}</textarea></div>
+    <button class="knopf voll gross" data-a="esichern">${ic("haken")} ${erst ? "Meinen Plan erstellen" : "Einstellungen speichern"}</button>`;
+}
+function portionenVon(e) { const alt = daten.einstellungen; daten.einstellungen = e; const p = portionen(); daten.einstellungen = alt; return p; }
+
+// ---------- Blätter (Fenster von unten) ----------
+function oeffnen(html) { $("blatt").innerHTML = html; $("schleier").classList.add("offen"); }
+function schliessen() { $("schleier").classList.remove("offen"); einkauf = null; }
+
+function aendernBlatt(k) {
+  const d = vonIso(k), g = daten.plan[k];
+  const rez = daten.rezepte.slice().sort((a, b) => (b.favorit ? 1 : 0) - (a.favorit ? 1 : 0) || a.titel.localeCompare(b.titel, "de"));
+  oeffnen(`<h3>${TAGE[(d.getDay() + 6) % 7]}, ${kurzDatum(d)}</h3>
+    <label class="f">Wunsch an Claude (z. B. „Lasagne“, „etwas mit Kürbis“, „schnell, nur 15 Minuten“)</label>
+    <input type="text" id="wunsch" placeholder="Was soll es geben?">
+    <div class="zeile" style="margin-top:8px"><button class="knopf voll" data-a="wunsch" data-k="${k}" ${arbeit ? "disabled" : ""}>${ic("zauber")} Rezept dazu erstellen</button></div>
+    <h3 style="margin-top:16px">Oder:</h3>
+    <div class="zeile"><button class="knopf" data-a="setzart" data-k="${k}" data-art="reste">Reste-Abend</button>
+      <button class="knopf" data-a="setzart" data-k="${k}" data-art="auswaerts">Auswärts essen</button>
+      <button class="knopf" data-a="setzart" data-k="${k}" data-art="frei">Brotzeit / nicht kochen</button>
+      ${g ? `<button class="knopf rot" data-a="setzart" data-k="${k}" data-art="weg">${ic("muell")} Leeren</button>` : ""}</div>
+    ${rez.length ? `<h3 style="margin-top:16px">Gespeichertes Rezept nehmen</h3>` + rez.map(r =>
+      `<button class="knopf" style="margin:0 6px 6px 0" data-a="setzrezept" data-k="${k}" data-id="${r.id}">${r.favorit ? ic("stern") + " " : ""}${esc(r.titel)}</button>`).join("") : ""}
+    <div style="margin-top:14px"><button class="knopf" data-a="zu">Schließen</button></div>`);
+}
+function einplanenBlatt(id) {
+  const r = daten.rezepte.find(x => x.id === id); if (!r) return;
+  const tage = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map(i => plusTage(new Date(), i));
+  oeffnen(`<h3>${esc(r.titel)} einplanen</h3><div class="kacheln">` + tage.map(d => {
+    const g = daten.plan[iso(d)];
+    return `<button class="kachel" data-a="setzrezept" data-k="${iso(d)}" data-id="${id}">${TAGE[(d.getDay() + 6) % 7].slice(0, 2)} ${kurzDatum(d)}<small>${esc(g ? g.titel : "frei")}</small></button>`;
+  }).join("") + `</div><div style="margin-top:14px"><button class="knopf" data-a="zu">Schließen</button></div>`);
+}
+function rezeptNeuBlatt() {
+  oeffnen(`<h3>Rezept hinzufügen</h3><div class="klein">Claude macht daraus ein sauberes Rezept für ${portionen()} Portionen – ohne Werbung, mit Schritten zum Abtippen.</div>
+    <label class="f">Link (Chefkoch, Blog …)</label><input type="url" id="rurl" placeholder="https://…">
+    <label class="f">Oder Rezepttext einfügen</label><textarea id="rtext" placeholder="Zutaten und Zubereitung …"></textarea>
+    <label class="f">Oder Foto (Kochbuch, Zettel)</label><input type="file" id="rfoto" accept="image/*" capture="environment">
+    <div class="zeile" style="margin-top:14px"><button class="knopf voll" data-a="rimport">${ic("zauber")} Rezept erstellen</button>
+    <button class="knopf" data-a="zu">Abbrechen</button></div>
+    <div class="klein" style="margin-top:10px">Tipp: Per Telegram geht es auch – Link schicken oder Foto mit dem Text „Rezept“.</div>`);
+}
+
+// Einkauf: Zutaten der Woche (ab heute) zusammenrechnen; Basis-Zutaten und Vorrat erst einmal nicht angehakt
+function einkaufBerechnen(von, bis) {
+  const vorrat = daten.vorrat.map(v => String(v.name || "").toLowerCase()).filter(Boolean);
+  const summe = new Map();
+  for (const [k, g] of Object.entries(daten.plan).sort()) {
+    if (k < von || k > bis || g.art !== "kochen") continue;
+    const tag = TAGE[(vonIso(k).getDay() + 6) % 7].slice(0, 2);
+    for (const z of g.zutaten || []) {
+      const key = z.name.toLowerCase() + "|" + (z.einheit || "");
+      if (!summe.has(key)) summe.set(key, { name: z.name, einheit: z.einheit || "", menge: 0, bereich: BEREICHE.includes(z.bereich) ? z.bereich : "Sonstiges",
+        basis: !!z.basis, vorrat: vorrat.some(v => v.includes(z.name.toLowerCase()) || z.name.toLowerCase().includes(v)), fuer: [] });
+      const s = summe.get(key);
+      if (z.menge != null) s.menge += +z.menge;
+      if (!s.fuer.includes(tag + " " + g.titel)) s.fuer.push(tag + " " + g.titel);
+    }
+  }
+  return [...summe.values()].map(s => {
+    let menge = s.menge, einheit = s.einheit;
+    if (einheit === "g" && menge >= 1000) { menge /= 1000; einheit = "kg"; }
+    if (einheit === "ml" && menge >= 1000) { menge /= 1000; einheit = "l"; }
+    return { text: [menge ? zahl(menge) : "", einheit, s.name].filter(Boolean).join(" "), notiz: "für " + s.fuer.join(", "),
+      bereich: s.bereich, an: !s.basis && !s.vorrat, basis: s.basis, vorrat: s.vorrat };
+  }).sort((a, b) => BEREICHE.indexOf(a.bereich) - BEREICHE.indexOf(b.bereich) || a.text.localeCompare(b.text, "de"));
+}
+function einkaufBlatt() {
+  const heute = iso(new Date()), von = iso(woche) > heute ? iso(woche) : heute, bis = iso(plusTage(woche, 6));
+  if (!einkauf) einkauf = { von, bis, liste: einkaufBerechnen(von, bis) };
+  const l = einkauf.liste;
+  let h = `<h3>Einkaufsliste</h3><div class="klein">Alles für ${kurzDatum(vonIso(einkauf.von))} bis ${kurzDatum(vonIso(einkauf.bis))}, zusammengerechnet.
+    Was ihr schon habt, einfach abwählen.</div>`;
+  if (!l.length) h += `<div class="leerbild">Für diese Tage braucht ihr nichts.</div>`;
+  let bereich = "";
+  l.forEach((z, i) => {
+    if (z.bereich !== bereich) { bereich = z.bereich; h += `<h3>${esc(bereich)}</h3>`; }
+    h += `<div class="ek ${z.an ? "an" : ""}" data-a="ekwahl" data-i="${i}"><span class="box">${z.an ? ic("haken") : ""}</span>
+      <div class="mitte"><b>${esc(z.text)}</b><div class="klein">${esc(z.notiz)}${z.basis ? " · habt ihr meist da" : ""}${z.vorrat ? " · im Vorrat" : ""}</div></div></div>`;
+  });
+  h += `<div class="zeile" style="margin-top:14px"><button class="knopf voll" data-a="ekok">${ic("wagen")} ${l.filter(z => z.an).length} Sachen auf die Einkaufsliste</button>
+    <button class="knopf" data-a="zu">Abbrechen</button></div>`;
+  oeffnen(h);
+}
+
+// ---------- Kochmodus ----------
+function kochenOeffnen(g) {
+  const f = portionen() / (g.portionen || portionen());
+  koch = { g, schritt: -1, faktor: isFinite(f) && f > 0 ? f : 1, abgehakt: new Set(), basis: g.portionen || portionen() };
+  kochZeichnen(); $("koch").classList.add("offen");
+}
+function kochZeichnen() {
+  if (!koch) return;
+  const g = koch.g, schritte = g.schritte || [], n = schritte.length;
+  const p = Math.round(koch.basis * koch.faktor);
+  let mitte;
+  if (koch.schritt < 0) {
+    mitte = `<div class="schritt-nr">ZUTATEN FÜR ${p} PORTIONEN</div>
+      <div class="zaehler klein" style="justify-content:flex-start;gap:12px;margin-bottom:8px"><button data-a="kfaktor" data-n="-1">${ic("minus")}</button><b>${p}</b>
+      <button data-a="kfaktor" data-n="1">${ic("plus")}</button><span class="klein">Portionen</span></div>` +
+      (g.zutaten || []).map((z, i) => `<div class="zutat ${koch.abgehakt.has(i) ? "abgehakt" : ""}" data-a="khaken" data-i="${i}">
+        <span class="menge">${z.menge != null ? zahl(z.menge * koch.faktor) : ""} ${esc(z.einheit || "")}</span><span>${esc(z.name)}</span></div>`).join("");
+  } else {
+    const s = schritte[koch.schritt] || { text: "" };
+    mitte = `<div class="schritt-nr">SCHRITT ${koch.schritt + 1} VON ${n}</div><div class="schritt-text">${esc(s.text)}</div>
+      ${s.timer_min ? `<div style="margin-top:22px"><button class="knopf gold gross" style="width:auto" data-a="ktimer" data-n="${s.timer_min}">${ic("uhr")} Timer ${s.timer_min} Minuten starten</button></div>` : ""}`;
+  }
+  const anteil = n ? Math.max(0, (koch.schritt + 1) / n) : 0;
+  $("koch").innerHTML = `<div class="oben"><h2 class="serif">${esc(g.titel)}</h2>
+      <button class="knopf klein-k" data-a="kansicht" data-n="-1">Zutaten</button>
+      <button class="knopf klein-k" data-a="kzu">${ic("x")} Schließen</button></div>
+    <div class="timerleiste" id="timerleiste"></div>
+    <div class="fortschritt"><div style="width:${anteil * 100}%"></div></div>
+    <div class="mitte">${mitte}</div>
+    <div class="unten"><button class="knopf" data-a="kschritt" data-n="-1" ${koch.schritt < 0 ? "disabled" : ""}>${ic("links")} Zurück</button>
+      ${koch.schritt >= n - 1 ? `<button class="knopf gruen" data-a="kfertig">${ic("haken")} Fertig – guten Appetit</button>`
+        : `<button class="knopf voll" data-a="kschritt" data-n="1">${koch.schritt < 0 ? "Los geht's" : "Weiter"} ${ic("rechts")}</button>`}</div>`;
+  timerZeichnen();
+}
+function timerZeichnen() {
+  const el = $("timerleiste"); if (!el) return;
+  const jetzt = Date.now();
+  el.innerHTML = timers.map((t, i) => {
+    const rest = Math.max(0, Math.round((t.ende - jetzt) / 1000));
+    return `<button class="timer ${t.fertig ? "fertig" : ""}" data-a="ktimerweg" data-i="${i}">${ic("uhr")} ${esc(t.name)} ${t.fertig ? "FERTIG" : `${Math.floor(rest / 60)}:${String(rest % 60).padStart(2, "0")}`} ${ic("x")}</button>`;
+  }).join("");
+}
+let ton = null;
+function piep() {
+  try {
+    ton = ton || new (window.AudioContext || window.webkitAudioContext)();
+    for (let i = 0; i < 3; i++) {
+      const o = ton.createOscillator(), g = ton.createGain();
+      o.frequency.value = 880; o.connect(g); g.connect(ton.destination);
+      g.gain.setValueAtTime(0.3, ton.currentTime + i * 0.5); g.gain.setValueAtTime(0, ton.currentTime + i * 0.5 + 0.3);
+      o.start(ton.currentTime + i * 0.5); o.stop(ton.currentTime + i * 0.5 + 0.32);
+    }
+  } catch (e) { /* ohne Ton */ }
+}
+setInterval(() => {
+  const jetzt = Date.now();
+  for (const t of timers) {
+    if (!t.fertig && jetzt >= t.ende) {
+      t.fertig = true; piep(); meldung("Timer fertig: " + t.name);
+      const h = hass();
+      if (h) h.callService("script", "jarvis_durchsage", { text: `Der Timer ${t.name} ist fertig.`, raeume: "Küche" }).catch(() => {});
+    }
+  }
+  if (timers.length) timerZeichnen();
+}, 1000);
+
+// ---------- Aktionen ----------
+async function aktion(el) {
+  if (el.disabled) return;
+  const a = el.dataset.a, k = el.dataset.k;
+  if (a === "reiter") { if (reiter === "einstellungen" && el.dataset.r !== "einstellungen") entwurfLesen(); reiter = el.dataset.r; zeichnen(); $("inhalt").scrollTop = 0; return; }
+  if (a === "fehlerweg") { fehlerText = ""; zeichnen(); return; }
+  if (a === "woche") { woche = plusTage(woche, +el.dataset.n); zeichnen(); return; }
+  if (a === "zu") { schliessen(); return; }
+  if (a === "planen") {
+    // laufende Woche: nur ab heute planen (Vergangenes bleibt stehen)
+    const heute = iso(new Date()), ziel = iso(woche) < heute ? heute : iso(woche);
+    const tage = Math.round((plusTage(woche, 7) - vonIso(ziel)) / 86400000);
+    if (tage <= 0) { meldung("Diese Woche ist schon vorbei"); return; }
+    const vorhanden = wocheTage().some(d => iso(d) >= ziel && daten.plan[iso(d)] && !daten.plan[iso(d)].fest);
+    if (vorhanden && !confirm("Neu planen? Was Claude geplant hat, wird ersetzt – selbst Festgelegtes bleibt.")) return;
+    ki({ art: "plan", von: ziel, tage }, "Claude plant die Woche – das dauert etwa eine Minute …"); return;
+  }
+  if (a === "tausch") { ki({ art: "tausch", datum: k }, "Claude sucht etwas anderes …"); return; }
+  if (a === "aendern") { aendernBlatt(k); return; }
+  if (a === "wunsch") {
+    const w = ($("wunsch").value || "").trim(); if (!w) { meldung("Bitte erst einen Wunsch eintippen"); return; }
+    schliessen(); ki({ art: "tausch", datum: k, wunsch: w }, `Claude erstellt „${w}“ …`); return;
+  }
+  if (a === "setzart") {
+    const art = el.dataset.art;
+    if (art === "weg") delete daten.plan[k];
+    else {
+      const vorher = daten.plan[iso(plusTage(vonIso(k), -1))];
+      daten.plan[k] = { art, titel: art === "reste" ? "Reste" + (vorher && vorher.titel ? ": " + vorher.titel : "") : art === "auswaerts" ? "Auswärts essen" : "Brotzeit",
+        grund: "selbst festgelegt", fest: true };
+    }
+    schliessen(); zeichnen(); speichern(); return;
+  }
+  if (a === "setzrezept") {
+    const r = daten.rezepte.find(x => x.id === el.dataset.id); if (!r) return;
+    daten.plan[k] = { art: "kochen", titel: r.titel, kurz: r.kurz || "", zeit_min: r.zeit_min || 0, portionen: r.portionen || portionen(), zutaten: r.zutaten || [],
+      schritte: r.schritte || [], rezept_id: r.id, grund: "selbst ausgesucht", fest: true };
+    schliessen(); meldung(`${r.titel} am ${kurzDatum(vonIso(k))} eingeplant`); zeichnen(); speichern(); return;
+  }
+  if (a === "merken") {
+    const g = daten.plan[k]; if (!g) return;
+    const id = Math.random().toString(16).slice(2, 10);
+    daten.rezepte.push({ id, titel: g.titel, kurz: g.kurz || "", portionen: g.portionen || portionen(), zeit_min: g.zeit_min || 0, zutaten: g.zutaten || [],
+      schritte: g.schritte || [], quelle: "Wochenplan", favorit: true, erstellt: iso(new Date()), notiz: "" });
+    g.rezept_id = id; meldung("Als Lieblingsrezept gespeichert"); zeichnen(); speichern(); return;
+  }
+  if (a === "gekocht") { const g = daten.plan[k]; if (g) { g.gekocht = !g.gekocht; zeichnen(); speichern(); } return; }
+  if (a === "kochen") { const g = daten.plan[k]; if (g) kochenOeffnen(g); return; }
+  if (a === "einkauf") { einkauf = null; einkaufBlatt(); return; }
+  if (a === "ekwahl") { const z = einkauf.liste[+el.dataset.i]; z.an = !z.an; einkaufBlatt(); return; }
+  if (a === "ekok") {
+    const liste = einkauf.liste.filter(z => z.an).map(z => ({ text: z.text, notiz: z.notiz }));
+    if (!liste.length) { meldung("Nichts ausgewählt"); return; }
+    const h = hass(); if (!h) return;
+    el.disabled = true;
+    try {
+      const r = await h.callWS({ type: "call_service", domain: "script", service: "kueche_einkauf", service_data: { liste }, return_response: true });
+      const n = (r && r.response && r.response.anzahl) || 0;
+      schliessen(); meldung(n ? `${n} Sachen auf die Einkaufsliste gesetzt` : "Stand schon alles auf der Einkaufsliste");
+    } catch (e) { meldung("Hat nicht geklappt: " + (e.message || e)); el.disabled = false; }
+    return;
+  }
+  // Rezepte
+  if (a === "rezeptneu") { rezeptNeuBlatt(); return; }
+  if (a === "rimport") {
+    const url = ($("rurl").value || "").trim(), text = ($("rtext").value || "").trim(), datei = $("rfoto").files[0];
+    if (!url && !text && !datei) { meldung("Link, Text oder Foto angeben"); return; }
+    const auftrag = { art: "rezept", url, text };
+    if (datei) { try { auftrag.bilder = [await bildVerkleinern(datei)]; } catch (e) { meldung("Foto ließ sich nicht lesen"); return; } }
+    schliessen(); ki(auftrag, "Claude liest das Rezept …"); return;
+  }
+  if (a === "rkochen") { const r = daten.rezepte.find(x => x.id === el.dataset.id); if (r) kochenOeffnen(r); return; }
+  if (a === "reinplanen") { einplanenBlatt(el.dataset.id); return; }
+  if (a === "rfavorit") { const r = daten.rezepte.find(x => x.id === el.dataset.id); if (r) { r.favorit = !r.favorit; zeichnen(); speichern(); } return; }
+  if (a === "rloeschen") {
+    const r = daten.rezepte.find(x => x.id === el.dataset.id);
+    if (r && confirm(`„${r.titel}“ wirklich löschen?`)) { daten.rezepte = daten.rezepte.filter(x => x !== r); zeichnen(); speichern(); }
+    return;
+  }
+  // Vorrat
+  if (a === "vneu") {
+    const name = ($("vname").value || "").trim(); if (!name) { meldung("Was ist im Vorrat?"); return; }
+    daten.vorrat = daten.vorrat.filter(v => String(v.name).toLowerCase() !== name.toLowerCase());
+    daten.vorrat.push({ name, menge: ($("vmenge").value || "").trim(), quelle: el.dataset.q, seit: iso(new Date()) });
+    zeichnen(); speichern(); return;
+  }
+  if (a === "vweg") { daten.vorrat.splice(+el.dataset.i, 1); zeichnen(); speichern(); return; }
+  // Einstellungen
+  if (a === "erw") { entwurfLesen(); entwurf.erwachsene = Math.max(0, Math.min(8, entwurf.erwachsene + +el.dataset.n)); zeichnen(); return; }
+  if (a === "kindneu") { entwurfLesen(); entwurf.kinder.push({ alter: 6 }); zeichnen(); return; }
+  if (a === "kind") { entwurfLesen(); const kd = entwurf.kinder[+el.dataset.i]; kd.alter = Math.max(1, Math.min(17, kd.alter + +el.dataset.n)); zeichnen(); return; }
+  if (a === "kindweg") { entwurfLesen(); entwurf.kinder.splice(+el.dataset.i, 1); zeichnen(); return; }
+  if (a === "ebool") { entwurfLesen(); entwurf[el.dataset.f] = !entwurf[el.dataset.f]; zeichnen(); return; }
+  if (a === "etag") { entwurfLesen(); const i = +el.dataset.i, t = new Set(entwurf.tage); t.has(i) ? t.delete(i) : t.add(i); entwurf.tage = [...t].sort(); zeichnen(); return; }
+  if (a === "ewahl") {
+    entwurfLesen();
+    const f = el.dataset.f; let w = el.dataset.w; if (f === "zeit") w = +w;
+    if (el.dataset.m === "1") {
+      const l = new Set(entwurf[f] || []);
+      if (l.has(w)) l.delete(w); else { if (f === "stil" && l.size >= 3) { meldung("Höchstens 3 auswählen"); return; } l.add(w); }
+      entwurf[f] = [...l];
+    } else entwurf[f] = w;
+    zeichnen(); return;
+  }
+  if (a === "esichern") {
+    entwurfLesen(); const erst = !daten.einstellungen.eingerichtet;
+    daten.einstellungen = Object.assign({}, entwurf, { eingerichtet: true }); entwurf = null;
+    if (await speichern()) {
+      meldung("Gespeichert"); reiter = "woche";
+      if (erst && !wocheTage().some(d => daten.plan[iso(d)])) {
+        // ab heute bis Sonntag – ist die Woche fast vorbei, gleich die nächste mit dazu
+        let tage = 7 - ((new Date().getDay() + 6) % 7); if (tage < 3) tage += 7;
+        zeichnen(); ki({ art: "plan", von: iso(new Date()), tage }, "Claude plant eure ersten Abendessen – das dauert etwa eine Minute …"); return;
+      }
+      zeichnen();
+    }
+    return;
+  }
+  // Kochmodus
+  if (a === "kzu") { $("koch").classList.remove("offen"); koch = null; return; }
+  if (a === "kschritt") { koch.schritt = Math.max(-1, Math.min((koch.g.schritte || []).length - 1, koch.schritt + +el.dataset.n)); kochZeichnen(); return; }
+  if (a === "kansicht") { koch.schritt = -1; kochZeichnen(); return; }
+  if (a === "khaken") { const i = +el.dataset.i; koch.abgehakt.has(i) ? koch.abgehakt.delete(i) : koch.abgehakt.add(i); kochZeichnen(); return; }
+  if (a === "kfaktor") { const p = Math.max(1, Math.round(koch.basis * koch.faktor) + +el.dataset.n); koch.faktor = p / koch.basis; kochZeichnen(); return; }
+  if (a === "ktimer") {
+    const min = +el.dataset.n, s = (koch.g.schritte || [])[koch.schritt] || {};
+    const name = (s.text.match(/^[^,.;:]{3,28}/) || [koch.g.titel])[0];
+    timers.push({ name, ende: Date.now() + min * 60000, fertig: false }); try { ton = ton || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { /* egal */ }
+    timerZeichnen(); meldung(`Timer ${min} Minuten läuft`); return;
+  }
+  if (a === "ktimerweg") { timers.splice(+el.dataset.i, 1); timerZeichnen(); return; }
+  if (a === "kfertig") {
+    const k2 = Object.keys(daten.plan).find(x => daten.plan[x] === koch.g);
+    if (k2) { daten.plan[k2].gekocht = true; speichern(); }
+    $("koch").classList.remove("offen"); koch = null; meldung("Guten Appetit!"); zeichnen(); return;
+  }
+}
+function entwurfLesen() {
+  if (!entwurf) return;
+  const z = id => $(id) ? $(id).value : null;
+  if (z("arbeitszeiten") != null) entwurf.arbeitszeiten = z("arbeitszeiten");
+  if (z("hinweise") != null) entwurf.hinweise = z("hinweise");
+  if (z("budget") != null) entwurf.budget = +z("budget");
+}
+document.addEventListener("input", ev => {
+  if (ev.target.id === "budget") { entwurf.budget = +ev.target.value; $("budgetzahl").textContent = ev.target.value + " €"; }
+  if (ev.target.id === "suche") { suche = ev.target.value; const pos = ev.target.selectionStart; zeichnen(); const s = $("suche"); s.focus(); s.setSelectionRange(pos, pos); }
+});
+function bildVerkleinern(datei) {
+  return new Promise((ok, fehler) => {
+    const img = new Image(), url = URL.createObjectURL(datei);
+    img.onload = () => {
+      const m = 1400, f = Math.min(1, m / Math.max(img.width, img.height));
+      const c = document.createElement("canvas"); c.width = Math.round(img.width * f); c.height = Math.round(img.height * f);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+      ok(c.toDataURL("image/jpeg", 0.8).split(",")[1]);
+    };
+    img.onerror = fehler; img.src = url;
+  });
+}
+
+// ---------- Start ----------
+function design() { const h = hass(); document.documentElement.classList.toggle("dunkel", !!(h && h.themes && h.themes.darkMode)); }
+let versuche = 0;
+async function anfang() {
+  if (!hass()) {
+    if (++versuche === 15) $("inhalt").innerHTML = `<div class="leerbild"><b>Home Assistant nicht gefunden</b>Die Seite funktioniert nur im Dashboard (Reiter „Küche“).</div>`;
+    setTimeout(anfang, 400); return;
+  }
+  design(); setInterval(design, 30000);
+  await laden(); zeichnen(); beobachten();
+  // Plan von anderen Geräten (Handy, Telegram) alle 2 Minuten nachladen, wenn hier gerade nichts bearbeitet wird
+  setInterval(async () => {
+    if (arbeit || koch || reiter === "einstellungen" || $("schleier").classList.contains("offen") || document.activeElement.tagName === "INPUT") return;
+    await laden(); zeichnen();
+  }, 120000);
+}
+anfang();
+</script>
+</body>
+</html>

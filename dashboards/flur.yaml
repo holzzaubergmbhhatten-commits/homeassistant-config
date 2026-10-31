@@ -101,6 +101,23 @@ views:
         {%- set sd = as_datetime(e.start) %}{{ '<br>' if not loop.first }}<font color="#8E8E93">●</font> <b>{{ e.titel }}</b> · {{ tage[sd.weekday()] }} {{ sd.strftime('%d.%m.') }}{{ ' · ' ~ sd.strftime('%H:%M') ~ ' Uhr' if 'T' in (e.start | string) else '' }}
         {%- endfor %}
         {%- endif %}
+    # Essen heute aus dem Essensplan der Küche (sensor.kueche_heute, packages/kueche.yaml) – Tippen öffnet die Küche
+    - type: heading
+      heading: Essen heute
+      heading_style: title
+      icon: mdi:silverware-fork-knife
+      tap_action:
+        action: navigate
+        navigation_path: /flur-display/kueche
+    - type: markdown
+      grid_options:
+        columns: full
+      content: |-
+        {% set g = state_attr('sensor.kueche_heute', 'gericht') %}
+        {% if g %}<font size="5"><b>{{ g }}</b></font>{{ ' <font color="#8E8E93">· ' ~ state_attr('sensor.kueche_heute', 'hinweis') ~ '</font>' if state_attr('sensor.kueche_heute', 'hinweis') }}
+        {%- if state_attr('sensor.kueche_heute', 'grund') %}<br><font color="#8E8E93">{{ state_attr('sensor.kueche_heute', 'grund') }}</font>{% endif %}
+        {%- else %}<font color="#8E8E93">Noch nichts geplant – in der Küche „Woche planen lassen“ antippen</font>{% endif %}
+        {%- if state_attr('sensor.kueche_heute', 'morgen') %}<br><font color="#8E8E93">Morgen: {{ state_attr('sensor.kueche_heute', 'morgen') }}</font>{% endif %}
     # Garten-To-dos aus Pflanzplan + Wetter (sensor.garten_aufgaben, packages/garten.yaml) – Tippen öffnet den Garten
     - type: heading
       heading: Garten heute
@@ -308,6 +325,17 @@ views:
       tap_action:
         action: navigate
         navigation_path: /flur-display/grundriss
+      grid_options:
+        columns: 4
+        rows: 2
+    - type: button
+      name: Küche
+      icon: mdi:silverware-fork-knife
+      show_state: false
+      icon_height: 34px
+      tap_action:
+        action: navigate
+        navigation_path: /flur-display/kueche
       grid_options:
         columns: 4
         rows: 2
@@ -1545,6 +1573,15 @@ views:
       tap_action:
         action: navigate
         navigation_path: /flur-display/kameras
+- title: Küche
+  path: kueche
+  icon: mdi:silverware-fork-knife
+  type: panel
+  # Essensplan der Woche (Claude), Rezepte mit Kochmodus, Vorrat & Ernte, Einkauf – packages/kueche.yaml
+  cards:
+  - type: iframe
+    url: /local/kueche.html?v=1
+    aspect_ratio: 53.3%
 - title: Klima & Energie
   path: energie
   icon: mdi:home-thermometer
