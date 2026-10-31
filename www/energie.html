@@ -68,6 +68,39 @@
   .lueften { border-radius: 12px; padding: 9px 12px; font-size: 13.5px; line-height: 1.45; margin-bottom: 8px; background: var(--bg); }
   .lueften.gut { background: rgba(52,199,89,.14); }
   .leer { text-align: center; padding: 30px 10px; color: var(--grau); }
+  /* Geräte an Shelly-Steckdosen */
+  .geraete { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+  .gkarte { background: var(--karte); border-radius: 18px; padding: 14px 16px; box-shadow: 0 1px 3px rgba(0,0,0,.06); display: grid; gap: 8px; }
+  .gkopf { display: grid; grid-template-columns: 86px 1fr; gap: 12px; align-items: center; }
+  .gkopf svg { width: 86px; height: 86px; }
+  .gname { font-weight: 700; font-size: 16px; }
+  .gwatt { font-size: 28px; font-weight: 700; line-height: 1.1; }
+  .gwatt small { font-size: 14px; color: var(--grau); font-weight: 600; }
+  .gstatus { font-size: 13px; font-weight: 600; }
+  .gstatus.ok { color: var(--gruen); } .gstatus.warn { color: var(--orange); } .gstatus.aus { color: var(--rot); } .gstatus.ruhe { color: var(--grau); }
+  .gskala { height: 8px; border-radius: 4px; background: var(--linie); overflow: hidden; }
+  .gskala i { display: block; height: 100%; background: var(--gruen); border-radius: 4px; transition: width 1s; }
+  .gwoche { display: flex; align-items: flex-end; gap: 4px; height: 54px; }
+  .gwoche div { flex: 1; background: var(--haus); border-radius: 3px 3px 0 0; min-height: 2px; opacity: .75; position: relative; }
+  .gwoche div.heute { opacity: 1; background: var(--pv); }
+  .gtage { display: flex; gap: 4px; font-size: 10.5px; color: var(--grau); } .gtage span { flex: 1; text-align: center; }
+  .gwarn { background: rgba(255,59,48,.1); color: var(--text); border-radius: 12px; padding: 8px 10px; font-size: 13px; }
+  /* Animationen: laufen nur mit Klasse .lauf */
+  .g-eis { transform-origin: 43px 46px; transform-box: view-box; }
+  .lauf .g-eis { animation: g-dreh 6s linear infinite; }
+  .g-kalt { opacity: 0; } .lauf .g-kalt { animation: g-kalt 2.4s ease-in infinite; }
+  .lauf .g-kalt.b { animation-delay: .8s; } .lauf .g-kalt.c { animation-delay: 1.6s; }
+  .g-arm { transform-origin: 43px 50px; transform-box: view-box; } .lauf .g-arm { animation: g-dreh 1.2s linear infinite; }
+  .g-tropfen { opacity: 0; } .lauf .g-tropfen { animation: g-tropfen 1s ease-in infinite; } .lauf .g-tropfen.b { animation-delay: .35s; } .lauf .g-tropfen.c { animation-delay: .7s; }
+  .g-glut { fill: #c96f4a; opacity: .25; } .lauf .g-glut { animation: g-glut 1.6s ease-in-out infinite alternate; }
+  .g-welle { opacity: 0; } .lauf .g-welle { animation: g-welle 2s ease-out infinite; } .lauf .g-welle.b { animation-delay: 1s; }
+  @keyframes g-dreh { to { transform: rotate(360deg); } }
+  @keyframes g-kalt { 0% { opacity: 0; transform: translateY(0); } 30% { opacity: .9; } 100% { opacity: 0; transform: translateY(14px); } }
+  @keyframes g-tropfen { 0% { opacity: 0; transform: translateY(-4px); } 40% { opacity: 1; } 100% { opacity: 0; transform: translateY(12px); } }
+  @keyframes g-glut { from { opacity: .35; } to { opacity: 1; } }
+  @keyframes g-welle { 0% { opacity: .8; transform: scale(.6); } 100% { opacity: 0; transform: scale(1.4); } }
+  .g-welle { transform-origin: 43px 43px; transform-box: view-box; }
+  @media (prefers-reduced-motion: reduce) { .lauf * { animation: none !important; } }
 </style>
 <link rel="stylesheet" href="apple-glas.css?v=1">
 <link rel="stylesheet" href="/local/hausstil.css?v=2">
@@ -120,6 +153,8 @@ const EW = {};           // Wasser: Schlüssel → entity_id
 const E = {};            // Schlüssel → entity_id
 let REG = [], REG_W = [], GERAETE = {}, NETZ_VZ = 1, AKKU_VZ = 1, ERSTER = null, ERSTER_W = null;
 let reiter = "raeume", art = "tag", ref = new Date(), STAT = null, AUSWAHL = null;
+let GER = [], GSTAT = {}, GSTAT_ZEIT = 0;
+let PREIS = 0.32; try { PREIS = parseFloat(localStorage.getItem("strompreis")) || 0.32; } catch (e) { /* egal */ }
 
 const svgBreite = () => (window.innerWidth < 600 ? 380 : 640);   // schmal: weniger Breite = größere Schrift im Diagramm
 function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
@@ -162,6 +197,19 @@ async function finden() {
       if (t) { E[k] = t.entity_id; break; }
     }
   }
+  // Geräte an Shelly-Steckdosen: je Gerät Leistung (W), Zähler (kWh) und Schalter
+  const proGeraet = {};
+  for (const e of alle.filter(x => x.platform === "shelly" && !x.disabled_by && x.device_id)) {
+    const s = st(e.entity_id); if (!s) continue;
+    const dc = s.attributes.device_class || e.device_class || e.original_device_class || "", g = (proGeraet[e.device_id] = proGeraet[e.device_id] || { device: e.device_id });
+    if (e.entity_id.startsWith("sensor.") && dc === "power" && !/returned|zurueck/i.test(e.entity_id)) g.leistung = g.leistung || e.entity_id;
+    else if (e.entity_id.startsWith("sensor.") && dc === "energy" && !/returned|zurueck/i.test(e.entity_id)) g.zaehler = g.zaehler || e.entity_id;
+    else if (e.entity_id.startsWith("switch.")) g.schalter = g.schalter || e.entity_id;
+  }
+  GER = Object.values(proGeraet).filter(g => g.leistung).map(g => {
+    const name = (GERAETE[g.device] || st(g.leistung).attributes.friendly_name || "Gerät").replace(/\s*(steckdose|plug|shelly)\s*/ig, " ").trim();
+    return Object.assign(g, { name, typ: typenschild(name) });
+  }).sort((a, b) => a.name.localeCompare(b.name, "de"));
   // Warmwasser: es gibt mehrere Speicherfühler (oben/unten) – den wärmsten nehmen, so zeigt es auch die ViCare-App
   const ww = REG.filter(e => /dhw_storage|hotwater_out|dhw.*temperature/.test((e.translation_key || "") + " " + (e.unique_id || ""))
     && !/target|soll|hysteresis|min|max/i.test((e.translation_key || "") + (e.unique_id || "")) && zahl(e.entity_id) != null);
@@ -769,21 +817,111 @@ function alleWerte() {
       .map(([n, id]) => `<tr><td>${esc(n)}</td><td>${esc(st_text(id))}</td></tr>`).join("")}</table></div>`).join("");
 }
 
+/* ---------- Geräte an Shelly-Steckdosen ---------- */
+// Typenschild-Daten aus dem Haus-Handbuch (Seite „Geräte“). nenn = Nennleistung in W.
+const TYPEN = [
+  [/k(ü|ue)hl/i, { art: "kuehl", modell: "Bosch KIR51AFF0 (Einbau-Kühlschrank)", nenn: 90, sicherung: "F31", info: "Kompressor läuft immer wieder ein paar Minuten, dann Pause – das ist normal." }],
+  [/gefrier/i, { art: "kuehl", modell: "Siemens GI31NACE0 (Einbau, No-Frost)", nenn: 120, sicherung: "F30", info: "No-Frost: Ab und zu kurz mehr Leistung zum Abtauen – das ist normal." }],
+  [/geschirr|sp(ü|ue)l/i, { art: "spuel", modell: "Bosch SGV4HVX31E (vollintegriert)", nenn: 2400, sicherung: "F27", info: "Viel Strom nur beim Wasser-Aufheizen, dazwischen spülen/pumpen mit wenig Strom." }],
+  [/backofen|\bofen\b|herd/i, { art: "ofen", modell: "Bosch HBA534EB0", nenn: 3400, sicherung: "F23", info: "Heizt in Intervallen – die Leistung springt zwischen 0 und voll." }],
+  [/wasch/i, { art: "spuel", modell: "", nenn: 2200, sicherung: "", info: "" }],
+  [/trockner/i, { art: "spuel", modell: "", nenn: 2500, sicherung: "", info: "" }]
+];
+const STECKDOSE_MAX = 2500;   // Shelly Plug S: höchstens ca. 2.300–2.500 W Dauerlast (je nach Modell)
+function typenschild(name) { const t = TYPEN.find(([re]) => re.test(name)); return t ? t[1] : { art: "allg", modell: "", nenn: 0, sicherung: "", info: "" }; }
+function zustand(g) {
+  const w = zahl(g.leistung), aus = g.schalter && st(g.schalter) && st(g.schalter).state === "off", a = g.typ.art;
+  if (w == null) return { text: "keine Verbindung", klasse: "warn", lauf: false };
+  if (aus) return { text: a === "kuehl" ? "Steckdose ist AUS – bitte einschalten!" : "Steckdose ausgeschaltet", klasse: a === "kuehl" ? "aus" : "ruhe", lauf: false };
+  if (a === "kuehl") {
+    if (g.typ.nenn && w > g.typ.nenn * 1.6) return { text: "läuft mit viel Leistung (Abtauen?)", klasse: "warn", lauf: true };
+    return w > 15 ? { text: "kühlt gerade", klasse: "ok", lauf: true } : { text: "Pause – Temperatur erreicht", klasse: "ruhe", lauf: false };
+  }
+  if (a === "spuel") return w > 1000 ? { text: "heizt Wasser auf", klasse: "ok", lauf: true } : w > 8 ? { text: "läuft", klasse: "ok", lauf: true } : { text: "aus / fertig", klasse: "ruhe", lauf: false };
+  if (a === "ofen") return w > 500 ? { text: "heizt", klasse: "ok", lauf: true } : w > 5 ? { text: "an (Licht/Lüfter)", klasse: "ok", lauf: true } : { text: "aus", klasse: "ruhe", lauf: false };
+  return w > 3 ? { text: "in Betrieb", klasse: "ok", lauf: true } : { text: "aus", klasse: "ruhe", lauf: false };
+}
+function geraetBild(art) {
+  if (art === "kuehl") return `<svg viewBox="0 0 86 86"><rect x="20" y="6" width="46" height="74" rx="7" fill="#e9eef2" stroke="#9aa7b1" stroke-width="2"/>
+    <line x1="20" y1="30" x2="66" y2="30" stroke="#9aa7b1" stroke-width="2"/><rect x="58" y="12" width="3" height="12" rx="1.5" fill="#9aa7b1"/><rect x="58" y="36" width="3" height="16" rx="1.5" fill="#9aa7b1"/>
+    <g class="g-eis" stroke="#4a90c2" stroke-width="2.6" stroke-linecap="round"><line x1="43" y1="36" x2="43" y2="56"/><line x1="34.3" y1="41" x2="51.7" y2="51"/><line x1="34.3" y1="51" x2="51.7" y2="41"/></g>
+    <circle class="g-kalt" cx="32" cy="60" r="2" fill="#7fb8de"/><circle class="g-kalt b" cx="43" cy="62" r="2" fill="#7fb8de"/><circle class="g-kalt c" cx="54" cy="60" r="2" fill="#7fb8de"/></svg>`;
+  if (art === "spuel") return `<svg viewBox="0 0 86 86"><rect x="12" y="10" width="62" height="68" rx="7" fill="#eef0ec" stroke="#9aa39a" stroke-width="2"/>
+    <rect x="12" y="10" width="62" height="12" rx="6" fill="#d8ddd5"/><circle cx="62" cy="16" r="2.5" fill="#536b45"/>
+    <g class="g-arm"><rect x="27" y="48.5" width="32" height="3" rx="1.5" fill="#6b7a86"/><circle cx="43" cy="50" r="3.5" fill="#6b7a86"/></g>
+    <path class="g-tropfen" d="M30 30 q2 4 0 6 q-2 -2 0 -6z" fill="#4a90c2"/><path class="g-tropfen b" d="M43 28 q2 4 0 6 q-2 -2 0 -6z" fill="#4a90c2"/><path class="g-tropfen c" d="M56 30 q2 4 0 6 q-2 -2 0 -6z" fill="#4a90c2"/>
+    <rect x="20" y="62" width="46" height="8" rx="2" fill="#c9cfc6"/></svg>`;
+  if (art === "ofen") return `<svg viewBox="0 0 86 86"><rect x="8" y="10" width="70" height="66" rx="7" fill="#efece7" stroke="#a59d92" stroke-width="2"/>
+    <rect x="8" y="10" width="70" height="12" rx="6" fill="#ddd6cc"/><circle cx="20" cy="16" r="3" fill="#765c3d"/><circle cx="66" cy="16" r="3" fill="#765c3d"/>
+    <rect x="16" y="28" width="54" height="40" rx="5" fill="#3a3530"/><path class="g-glut" d="M22 36 h42 M22 60 h42" stroke="#e8743b" stroke-width="3" stroke-linecap="round"/>
+    <rect x="26" y="50" width="34" height="4" rx="2" fill="#7a6f63"/></svg>`;
+  return `<svg viewBox="0 0 86 86"><circle class="g-welle" cx="43" cy="43" r="30" fill="none" stroke="#536b45" stroke-width="2"/><circle class="g-welle b" cx="43" cy="43" r="30" fill="none" stroke="#536b45" stroke-width="2"/>
+    <rect x="25" y="25" width="36" height="36" rx="9" fill="#e9ece6" stroke="#8f9a88" stroke-width="2"/><circle cx="37" cy="43" r="3" fill="#536b45"/><circle cx="49" cy="43" r="3" fill="#536b45"/></svg>`;
+}
+async function ladeGeraete() {
+  const ids = GER.map(g => g.zaehler).filter(Boolean); if (!ids.length) return;
+  const heute = new Date(); heute.setHours(0, 0, 0, 0); const von = new Date(heute); von.setDate(von.getDate() - 6);
+  try { GSTAT = await stats(von, new Date(), "day", ids, ["change"]); GSTAT_ZEIT = Date.now(); } catch (e) { GSTAT = {}; }
+  if (reiter === "geraete") zeichnen();
+}
+function tageWerte(g) {
+  const heute = new Date(); heute.setHours(0, 0, 0, 0);
+  const liste = (GSTAT[g.zaehler] || []).map(x => ({ t: new Date(zeit(x.start)), v: Math.max(0, x.change || 0) }));
+  return [...Array(7)].map((_, i) => { const d = new Date(heute); d.setDate(d.getDate() - 6 + i); const f = liste.find(x => x.t.toDateString() === d.toDateString()); return { d, v: f ? f.v : 0 }; });
+}
+function geraetKarte(g, i) {
+  const w = zahl(g.leistung), z = zustand(g), t = g.typ, tage = tageWerte(g), heute = tage[6].v, max = Math.max(0.05, ...tage.map(x => x.v));
+  const daten = (GSTAT[g.zaehler] || []).length > 1, tagMittel = daten ? tage.slice(0, 6).reduce((s, x) => s + x.v, 0) / 6 : heute;
+  const anteil = t.nenn ? Math.min(100, (w || 0) / t.nenn * 100) : Math.min(100, (w || 0) / 30);
+  const zuViel = t.nenn > STECKDOSE_MAX - 100;
+  return `<div class="gkarte"><div class="gkopf"><div id="gbild${i}" class="${z.lauf ? "lauf" : ""}">${geraetBild(t.art)}</div>
+      <div><div class="gname">${esc(g.name)}</div><div class="gwatt" id="gwatt${i}">${w == null ? "–" : fmt(w, w < 10 ? 1 : 0)} <small>W</small></div>
+        <div class="gstatus ${z.klasse}" id="gstat${i}">${esc(z.text)}</div></div></div>
+    <div><div class="gskala"><i id="gskala${i}" style="width:${anteil}%"></i></div>
+      <div class="klein" style="margin-top:3px">${t.nenn ? `Typenschild ${t.nenn >= 1000 ? fmt(t.nenn / 1000, 1) + " kW" : t.nenn + " W"}${t.modell ? " · " + esc(t.modell) : ""}${t.sicherung ? " · Sicherung " + t.sicherung : ""}` : "kein Typenschild hinterlegt"}</div></div>
+    ${zuViel ? `<div class="gwarn"><b>Achtung:</b> Das Gerät hat laut Typenschild ${fmt(t.nenn / 1000, 1)} kW – mehr, als die Shelly-Steckdose dauerhaft verträgt (ca. ${fmt(STECKDOSE_MAX / 1000, 1)} kW). Bitte nicht über die Shelly-Steckdose betreiben.</div>` : ""}
+    ${g.zaehler ? `<div class="gwoche">${tage.map((x, j) => `<div class="${j === 6 ? "heute" : ""}" style="height:${Math.max(3, x.v / max * 100)}%" title="${fmt(x.v, 2)} kWh"></div>`).join("")}</div>
+      <div class="gtage">${tage.map(x => `<span>${TAGE[(x.d.getDay() + 6) % 7]}</span>`).join("")}</div>
+      <div class="klein">Heute <b>${fmt(heute, 2)} kWh</b> (≈ ${fmt(heute * PREIS, 2)} €) · Ø ${fmt(tagMittel, 2)} kWh/Tag · aufs Jahr ca. <b>${fmt(tagMittel * 365, 0)} kWh ≈ ${fmt(tagMittel * 365 * PREIS, 0)} €</b></div>`
+      : `<div class="klein">Kein Verbrauchszähler gefunden.</div>`}
+    ${t.info ? `<div class="klein">${esc(t.info)}</div>` : ""}</div>`;
+}
+function geraeteSeite() {
+  if (!GER.length) return `<div class="karte"><h2>Geräte</h2><div class="klein">Noch keine Shelly-Steckdosen in Home Assistant gefunden. Sie erscheinen hier, sobald die Shelly-Integration sie eingebunden hat (Einstellungen → Geräte &amp; Dienste → Shelly).</div></div>`;
+  if (Date.now() - GSTAT_ZEIT > 5 * 60e3) setTimeout(ladeGeraete, 10);
+  const gesamt = GER.reduce((s, g) => s + (zahl(g.leistung) || 0), 0);
+  return `<div class="karte"><h2>Geräte an Steckdosen</h2><div class="klein">Live-Verbrauch der Shelly-Steckdosen, Typenschild aus dem Haus-Handbuch und die letzten 7 Tage.
+      Zusammen gerade <b id="ggesamt">${fmt(gesamt, 0)} W</b>. Strompreis
+      <input id="preis" type="number" step="0.01" value="${PREIS}" style="width:70px;padding:3px 6px;border-radius:8px;border:1px solid var(--linie);background:var(--bg);color:var(--text)"> €/kWh</div></div>
+    <div class="geraete" id="geraete">${GER.map(geraetKarte).join("")}</div>`;
+}
+function geraeteLive() {
+  GER.forEach((g, i) => { const w = zahl(g.leistung), z = zustand(g), t = g.typ;
+    if (!$("gwatt" + i)) return;
+    $("gwatt" + i).innerHTML = `${w == null ? "–" : fmt(w, w < 10 ? 1 : 0)} <small>W</small>`;
+    $("gstat" + i).className = "gstatus " + z.klasse; $("gstat" + i).textContent = z.text;
+    $("gbild" + i).classList.toggle("lauf", z.lauf);
+    $("gskala" + i).style.width = (t.nenn ? Math.min(100, (w || 0) / t.nenn * 100) : Math.min(100, (w || 0) / 30)) + "%"; });
+  if ($("ggesamt")) $("ggesamt").textContent = fmt(GER.reduce((s, g) => s + (zahl(g.leistung) || 0), 0), 0) + " W";
+}
+document.addEventListener("change", ev => { if (ev.target.id === "preis") { PREIS = parseFloat(ev.target.value) || 0.32; try { localStorage.setItem("strompreis", PREIS); } catch (e) { /* egal */ } zeichnen(); } });
+
 function zeichnen() {
   const csvAlt = ($("csvtext") || {}).value;
   zeichnenInnen();
   if (csvAlt && $("csvtext")) $("csvtext").value = csvAlt;
 }
 function zeichnenInnen() {
-  const inhalt = { raeume: raeumeSeite, uebersicht, waermepumpe, wasser, alle: alleWerte }[reiter]();
+  const inhalt = { raeume: raeumeSeite, uebersicht, geraete: geraeteSeite, waermepumpe, wasser, alle: alleWerte }[reiter]();
   $("inhalt").innerHTML = `<div class="kopf"><h1>Klima &amp; Energie</h1>
-    <div class="reiter">${[["raeume", "Räume"], ["uebersicht", "Energie"], ["waermepumpe", "Wärmepumpe"], ["wasser", "Wasser"], ["alle", "Alle Werte"]].map(([k, n]) =>
+    <div class="reiter">${[["raeume", "Räume"], ["uebersicht", "Energie"], ["geraete", "Geräte"], ["waermepumpe", "Wärmepumpe"], ["wasser", "Wasser"], ["alle", "Alle Werte"]].map(([k, n]) =>
       `<button data-reiter="${k}" class="${reiter === k ? "an" : ""}">${n}</button>`).join("")}</div></div>
     ${Object.keys(E).length || REG.length ? "" : `<div class="hinweis">Keine Viessmann-Werte gefunden. Ist die Viessmann-Integration eingerichtet?</div>`}
     ${inhalt}`;
 }
 function live() {     // nur die Live-Teile neu, damit Antippen und Blättern nicht flackern
   if (reiter === "uebersicht" && $("fluss")) { $("fluss").innerHTML = fluss(); }
+  else if (reiter === "geraete" && $("geraete")) geraeteLive();
   else if (reiter !== "uebersicht") zeichnen();
 }
 document.addEventListener("click", ev => {

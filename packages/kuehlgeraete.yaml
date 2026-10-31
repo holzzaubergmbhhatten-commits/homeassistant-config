@@ -1,0 +1,80 @@
+# Schutz für Kühlschrank und Gefrierschrank an Shelly-Steckdosen (erkannt am Namen „Kühl…“ / „Gefrier…“):
+# - Steckdose aus (aus Versehen in der App/am Knopf) → nach 10 Minuten Telegram an alle, nach 30 Minuten nochmal.
+# - Steckdose an, aber über 4 Stunden kein Strom → Kompressor läuft nicht (Gerät aus, Stecker raus, Defekt?) → Telegram.
+# Es wird nichts automatisch eingeschaltet (vielleicht ist das Gerät absichtlich zum Abtauen/Reinigen aus).
+template:
+  - binary_sensor:
+      - name: Kühlgeräte ohne Strom
+        unique_id: kuehlgeraete_ohne_strom
+        icon: mdi:fridge-alert
+        state: >-
+          {{ states.sensor | selectattr('attributes.device_class', 'defined') | selectattr('attributes.device_class', 'eq', 'power')
+             | selectattr('name', 'search', '(?i)k(ü|ue)hl|gefrier') | rejectattr('state', 'in', ['unknown', 'unavailable'])
+             | map(attribute='state') | map('float', 0) | select('lt', 2) | list | count > 0 }}
+        delay_on: "04:00:00"
+        attributes:
+          geraete: >-
+            {% set ns = namespace(l=[]) %}
+            {% for x in states.sensor | selectattr('attributes.device_class', 'defined') | selectattr('attributes.device_class', 'eq', 'power')
+                 | selectattr('name', 'search', '(?i)k(ü|ue)hl|gefrier') | rejectattr('state', 'in', ['unknown', 'unavailable'])
+                 if x.state | float(0) < 2 %}{% set ns.l = ns.l + [x.name | replace(' Steckdose', '') | replace(' Leistung', '') | replace(' Power', '')] %}{% endfor %}
+            {{ ns.l }}
+
+automation:
+  - id: kuehlgeraet_steckdose_aus
+    alias: "Kühlgeräte: Steckdose ausgeschaltet"
+    mode: parallel
+    triggers:
+      - trigger: event
+        event_type: state_changed
+    conditions:
+      - condition: template
+        value_template: >-
+          {% set e = trigger.event.data %}
+          {{ e.entity_id is match('switch\.') and e.new_state is not none and e.old_state is not none
+             and e.old_state.state == 'on' and e.new_state.state == 'off'
+             and (e.new_state.attributes.friendly_name | default('')) is search('(?i)k(ü|ue)hl|gefrier') }}
+    actions:
+      - variables:
+          schalter: "{{ trigger.event.data.entity_id }}"
+          name: "{{ state_attr(schalter, 'friendly_name') | replace(' Steckdose', '') | replace(' Switch', '') }}"
+          chats: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+      - repeat:
+          for_each: [10, 20]
+          sequence:
+            - delay:
+                minutes: "{{ repeat.item }}"
+            - condition: template
+              value_template: "{{ is_state(schalter, 'off') }}"
+            - variables:
+                minuten: "{{ 10 if repeat.item == 10 else 30 }}"
+            - repeat:
+                for_each: "{{ chats }}"
+                sequence:
+                  - action: telegram_bot.send_message
+                    continue_on_error: true
+                    data:
+                      chat_id: "{{ repeat.item | int }}"
+                      message: >-
+                        🧊 Die Steckdose vom {{ name }} ist seit {{ minuten }} Minuten AUS.
+                        Absicht (Abtauen/Reinigen)? Sonst bitte in der Shelly-App oder am Knopf wieder einschalten.
+
+  - id: kuehlgeraet_ohne_strom
+    alias: "Kühlgeräte: seit 4 Stunden kein Strom"
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.kuehlgeraete_ohne_strom
+        to: "on"
+    actions:
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                chat_id: "{{ repeat.item | int }}"
+                message: >-
+                  🧊 {{ state_attr('binary_sensor.kuehlgeraete_ohne_strom', 'geraete') | join(', ') }}: seit 4 Stunden fast kein Strom –
+                  der Kompressor läuft nicht. Ist das Gerät an, der Stecker drin und die Tür zu? Bitte kurz nachsehen.
