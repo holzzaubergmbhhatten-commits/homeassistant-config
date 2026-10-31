@@ -38,6 +38,15 @@ komoot.com/de-de/smarttour/…), Outdooractive, im ADFC-Tourenportal und auf den
 gib den echten Link in "touren" an (nur Links, die du in der Suche gesehen hast – nichts erfinden), mit Länge und
 Höhenmetern im Namen, z. B. "Komoot: Deichrunde Brake – 32 km". Auch für Auto/Bahn: schöne Touren vor Ort (Spaziergang,
 Radverleih) gern verlinken.
+Für Wellness, Spa, Therme, Sauna: schau auf Wellness-Plattformen und Bewertungsseiten (z. B. Wellness-Heaven,
+Spa-Vergleiche, Thermen-Übersichten, Google-Bewertungen, Tripadvisor) – auch nach Tageskarten/Day-Spa, Familienzeiten
+(ab welchem Alter dürfen Kinder in Sauna/Therme?), Angeboten und Gutscheinen.
+GEHEIMTIPPS: suche gezielt nach weniger bekannten Zielen – Reise- und Heimatblogs, regionale Tourismusseiten
+(Wesermarsch, Butjadingen, Ammerland, Nordsee), Lokalzeitungen (NWZ, Kreiszeitung Wesermarsch), Hofcafés, Hofläden,
+kleine Museen, versteckte Badestellen, Events/Märkte an diesem Tag. Mindestens eine Idee soll ein echter Geheimtipp
+sein (in "warum" kurz sagen, woher der Tipp stammt). Ist "Geheimtipp" gewählt, möglichst nur solche Ziele.
+Gefundene gute Quellen (Blogartikel, Wellness-Plattform, Veranstaltungsseite) gehören ebenfalls in "touren"
+(z. B. "Blog: Die schönsten Hofcafés der Wesermarsch", "Wellness-Heaven: Bewertung …").
 Antworte am Ende NUR mit JSON:
 {"ideen": [{"name": "…", "kategorie": "Natur|Tiere|Spielplatz|Wellness|Baden|Museum|Stadt|Essen|Abenteuer|Strand|Drinnen",
   "kurz": "1 Satz", "beschreibung": "2–3 Sätze, was euch erwartet", "warum": "warum es heute passt",
@@ -111,7 +120,7 @@ def ideen_machen(auftrag):
              + (f"Waren schon da (nicht wieder vorschlagen): {', '.join(auftrag['erlebt'])}\n" if auftrag.get("erlebt") else ""))
     status(True, "Claude sucht Ausflugsziele und prüft Öffnungszeiten …")
     a = kueche.claude(SYSTEM, frage, max_tokens=12000, effort="medium", timeout=300,
-                      werkzeuge=[{"type": "web_search_20260209", "name": "web_search", "max_uses": 14,
+                      werkzeuge=[{"type": "web_search_20260209", "name": "web_search", "max_uses": 18,
                                   "user_location": {"type": "approximate", "city": "Ovelgönne", "region": "Niedersachsen",
                                                     "country": "DE", "timezone": "Europe/Berlin"}}])
     ideen = [idee_sauber(x) for x in a.get("ideen") or [] if isinstance(x, dict) and x.get("name")][:6]

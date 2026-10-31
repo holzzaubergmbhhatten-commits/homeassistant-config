@@ -256,12 +256,12 @@ function ideeKarte(i, idx, quelle) {
         ${(i.ablauf || []).length ? `<ul class="ablauf">${i.ablauf.map(x => `<li><b>${esc(x.zeit)}</b><span>${esc(x.was)}</span></li>`).join("")}</ul>` : ""}
         ${(i.mitnehmen || []).length ? `<div class="klein"><b>Mitnehmen:</b> ${esc(i.mitnehmen.join(", "))}</div>` : ""}
         ${i.einkehr ? `<div class="klein"><b>Einkehren:</b> ${esc(i.einkehr)}</div>` : ""}
-        ${(i.touren || []).length ? `<div class="klein"><b>Fertige Touren:</b> ${i.touren.map(t => `<a href="${esc(t.url)}" target="_blank" rel="noopener">${esc(t.name)}</a>`).join(" · ")}</div>` : ""}
+        ${(i.touren || []).length ? `<div class="klein"><b>Touren & Tipps aus dem Netz:</b> ${i.touren.map(t => `<a href="${esc(t.url)}" target="_blank" rel="noopener">${esc(t.name)}</a>`).join(" · ")}</div>` : ""}
         ${(i.tipps || []).length ? `<div class="klein"><b>Tipps:</b> ${esc(i.tipps.join(" · "))}</div>` : ""}` : ""}
       <div class="zeile" style="margin-top:auto;padding-top:6px">
         <button class="knopf klein-k" data-a="auf" data-k="${quelle + idx}">${auf ? "Weniger" : "Ablauf & Tipps"}</button>
         <a class="knopf klein-k" href="${esc(mapsLink(i, a.wie))}" target="_blank" rel="noopener">${ic("karte")} Route</a>
-        ${(i.touren || []).length ? `<a class="knopf klein-k" href="${esc(i.touren[0].url)}" target="_blank" rel="noopener">${/komoot/i.test(i.touren[0].url) ? "Komoot" : "Tour"}</a>` : ""}
+        ${(i.touren || []).length ? `<a class="knopf klein-k" href="${esc(i.touren[0].url)}" target="_blank" rel="noopener">${/komoot/i.test(i.touren[0].url) ? "Komoot" : /outdooractive|adfc|radweg/i.test(i.touren[0].url) ? "Tour" : "Mehr dazu"}</a>` : ""}
         <button class="knopf klein-k voll" data-a="senden" data-q="${quelle}" data-i="${idx}">${ic("senden")} Aufs Handy</button>
         <button class="knopf klein-k" data-a="kalender" data-q="${quelle}" data-i="${idx}">${ic("kalender")} Kalender</button>
         ${quelle !== "gemerkt" ? `<button class="knopf klein-k" data-a="merken" data-q="${quelle}" data-i="${idx}">${ic("stern")} Merken</button>` : ""}
