@@ -235,7 +235,7 @@ const zahl = v => v == null || !isFinite(v) ? "" : (Math.abs(v - Math.round(v)) 
 const STANDARD = {
   einstellungen: { erwachsene: 2, kinder: [{ alter: 8 }], kinder_gleich: true, tage: [0, 1, 2, 3, 4, 5, 6], budget: 75, stil: ["Familienlieblinge"],
     reste: "1", ernaehrung: "keine", allergien: [], zeit: 30, geraete: ["Herd", "Backofen"], platz: ["Kühlschrank", "Gefrierschrank"],
-    arbeitszeiten: "", hinweise: "", laden: "Rewe", angebote: true, eingerichtet: false },
+    arbeitszeiten: "", hinweise: "", laden: "Rewe", angebote: true, auswaerts_tage: [], eingerichtet: false },
   rezepte: [], plan: {}, vorrat: [], hinweis_woche: {},
 };
 let daten = null, reiter = "woche", woche = montagVon(new Date()), arbeit = null, fehlerText = "", suche = "";
@@ -317,7 +317,8 @@ function wocheTage() { return [0, 1, 2, 3, 4, 5, 6].map(i => plusTage(woche, i))
 function marken(g) {
   const m = [];
   if (g.art === "reste") m.push(`<span class="marke gold">Reste</span>`);
-  if (g.art === "frei" || g.art === "auswaerts") m.push(`<span class="marke grau">kein Kochen</span>`);
+  if (g.art === "auswaerts") m.push(`<span class="marke gold">Essen gehen</span>`);
+  if (g.art === "frei") m.push(`<span class="marke grau">kein Kochen</span>`);
   if (g.zeit_min) m.push(`<span class="marke">${ic("uhr")} ${g.zeit_min} min</span>`);
   if (g.kosten_eur) m.push(`<span class="marke">ca. ${zahl(g.kosten_eur)} €</span>`);
   for (const v of g.nutzt_vorrat || []) m.push(`<span class="marke gruen">${esc(v)}</span>`);
@@ -465,6 +466,9 @@ function einstellungenSeite() {
       <div class="hinweis" style="margin:12px 0 0">Jede Mahlzeit ergibt ${portionenVon(e)} Portionen</div></div>
     <div class="karte"><h2 class="serif">An welchen Tagen kocht ihr normalerweise?</h2><div class="klein">Reste oder Auswärtsessen werden darum herum geplant.</div>
       <div class="tage7" style="margin-top:10px">${TAGE.map((t, i) => `<button class="${(e.tage || []).includes(i) ? "an" : ""}" data-a="etag" data-i="${i}">${t.slice(0, 2)}<i>${(e.tage || []).includes(i) ? ic("haken") : ""}</i></button>`).join("")}</div></div>
+    <div class="karte"><h2 class="serif">Wann geht ihr regelmäßig essen?</h2><div class="klein">Diese Tage plant Claude jede Woche als „Essen gehen“ ein.
+      Einzelne Tage (z. B. Geburtstag im Restaurant) im Wochenplan bei „Ändern“ → „Auswärts essen“ – oder per Telegram: „Samstag gehen wir essen“.</div>
+      <div class="tage7" style="margin-top:10px">${TAGE.map((t, i) => `<button class="${(e.auswaerts_tage || []).includes(i) ? "an" : ""}" data-a="eaus" data-i="${i}">${t.slice(0, 2)}<i>${(e.auswaerts_tage || []).includes(i) ? ic("haken") : ""}</i></button>`).join("")}</div></div>
     <div class="karte"><h2 class="serif">Wochenbudget</h2><div class="klein">Wie viel ihr pro Woche fürs Abendessen ausgeben möchtet (für ${portionenVon(e)} Personen).</div>
       <div class="zaehler"><b id="budgetzahl">${e.budget} €</b></div>
       <input type="range" id="budget" min="25" max="200" step="5" value="${e.budget}">
@@ -504,7 +508,7 @@ function aendernBlatt(k) {
     <div class="zeile" style="margin-top:8px"><button class="knopf voll" data-a="wunsch" data-k="${k}" ${arbeit ? "disabled" : ""}>${ic("zauber")} Rezept dazu erstellen</button></div>
     <h3 style="margin-top:16px">Oder:</h3>
     <div class="zeile"><button class="knopf" data-a="setzart" data-k="${k}" data-art="reste">Reste-Abend</button>
-      <button class="knopf" data-a="setzart" data-k="${k}" data-art="auswaerts">Auswärts essen</button>
+      <button class="knopf" data-a="setzart" data-k="${k}" data-art="auswaerts">Essen gehen</button>
       <button class="knopf" data-a="setzart" data-k="${k}" data-art="frei">Brotzeit / nicht kochen</button>
       ${g ? `<button class="knopf rot" data-a="setzart" data-k="${k}" data-art="weg">${ic("muell")} Leeren</button>` : ""}</div>
     ${rez.length ? `<h3 style="margin-top:16px">Gespeichertes Rezept nehmen</h3>` + rez.map(r =>
@@ -687,7 +691,7 @@ async function aktion(el) {
     if (art === "weg") delete daten.plan[k];
     else {
       const vorher = daten.plan[iso(plusTage(vonIso(k), -1))];
-      daten.plan[k] = { art, titel: art === "reste" ? "Reste" + (vorher && vorher.titel ? ": " + vorher.titel : "") : art === "auswaerts" ? "Auswärts essen" : "Brotzeit",
+      daten.plan[k] = { art, titel: art === "reste" ? "Reste" + (vorher && vorher.titel ? ": " + vorher.titel : "") : art === "auswaerts" ? "Essen gehen" : "Brotzeit",
         grund: "selbst festgelegt", fest: true };
     }
     schliessen(); zeichnen(); speichern(); return;
@@ -762,6 +766,7 @@ async function aktion(el) {
   if (a === "kind") { entwurfLesen(); const kd = entwurf.kinder[+el.dataset.i]; kd.alter = Math.max(1, Math.min(17, kd.alter + +el.dataset.n)); zeichnen(); return; }
   if (a === "kindweg") { entwurfLesen(); entwurf.kinder.splice(+el.dataset.i, 1); zeichnen(); return; }
   if (a === "ebool") { entwurfLesen(); entwurf[el.dataset.f] = !entwurf[el.dataset.f]; zeichnen(); return; }
+  if (a === "eaus") { entwurfLesen(); const i = +el.dataset.i, t = new Set(entwurf.auswaerts_tage || []); t.has(i) ? t.delete(i) : t.add(i); entwurf.auswaerts_tage = [...t].sort(); zeichnen(); return; }
   if (a === "etag") { entwurfLesen(); const i = +el.dataset.i, t = new Set(entwurf.tage); t.has(i) ? t.delete(i) : t.add(i); entwurf.tage = [...t].sort(); zeichnen(); return; }
   if (a === "ewahl") {
     entwurfLesen();

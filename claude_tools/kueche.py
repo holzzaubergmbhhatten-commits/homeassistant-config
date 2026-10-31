@@ -49,7 +49,8 @@ STANDARD = {
     "einstellungen": {"erwachsene": 2, "kinder": [{"alter": 8}], "kinder_gleich": True, "tage": [0, 1, 2, 3, 4, 5, 6],
                       "budget": 75, "stil": ["Familienlieblinge"], "reste": "1", "ernaehrung": "keine", "allergien": [],
                       "zeit": 30, "geraete": ["Herd", "Backofen"], "platz": ["Kühlschrank", "Gefrierschrank"],
-                      "arbeitszeiten": "", "hinweise": "", "laden": "Rewe", "angebote": True, "eingerichtet": False},
+                      "arbeitszeiten": "", "hinweise": "", "laden": "Rewe", "angebote": True, "auswaerts_tage": [],
+                      "eingerichtet": False},
     "rezepte": [], "plan": {}, "vorrat": [], "hinweis_woche": {},
 }
 
@@ -203,6 +204,8 @@ def einstellungen_text(e):
     teile = [f"Für {e.get('erwachsene', 2)} Erwachsene" + (" und Kinder im Alter von " + ", ".join(str(x.get('alter')) for x in k) if k else "")
              + f" → {portionen(e)} Portionen pro Mahlzeit.",
              f"Wir kochen normalerweise an: {', '.join(TAGE[t] for t in sorted(e.get('tage') or []))}.",
+             (f"Regelmäßig essen wir auswärts an: {', '.join(TAGE[t] for t in sorted(e.get('auswaerts_tage') or []))} "
+              "(an dem Tag nicht kochen; am Vortag keine Reste dafür einplanen)." if e.get("auswaerts_tage") else ""),
              f"Wochenbudget fürs Abendessen: ca. {e.get('budget', 75)} € (Laden: {e.get('laden') or 'Supermarkt'}).",
              f"Wir kaufen bei {e.get('laden') or 'einem normalen Supermarkt'} ein: nur Zutaten planen, die es dort im normalen "
              "Sortiment gibt (bei Discountern wie Aldi, Lidl, Netto, Penny keine Spezialzutaten; Saisonware beachten), damit wir im "
@@ -392,6 +395,12 @@ def plan_machen(auftrag):
         raise LeiseFertig()
     if auftrag.get("nur_wenn_leer") and not d["einstellungen"].get("eingerichtet"):
         raise LeiseFertig()
+    # regelmäßige Essen-gehen-Tage aus den Einstellungen fest eintragen (selbst Festgelegtes bleibt)
+    aus_tage = set(d["einstellungen"].get("auswaerts_tage") or [])
+    for i in range(tage):
+        t = start + timedelta(days=i)
+        if t.weekday() in aus_tage and not (d["plan"].get(t.isoformat()) or {}).get("fest"):
+            d["plan"][t.isoformat()] = {"art": "auswaerts", "titel": "Essen gehen", "grund": "regelmäßig laut Einstellungen", "fest": True}
     feste = {k: v for k, v in (d.get("plan") or {}).items() if start.isoformat() <= k <= bis.isoformat() and v.get("fest")}
     liste = [start + timedelta(days=i) for i in range(tage)]
     angebote_holen(d, start)
@@ -409,6 +418,8 @@ def plan_machen(auftrag):
     a = claude(GRUND, frage, max_tokens=16000, effort="medium", timeout=300)
     with Sperre():
         d = daten_laden()
+        for k, v in feste.items():
+            d["plan"][k] = v
         for g in a.get("tage") or []:
             k = str(g.get("datum", ""))
             if k in feste or not re.match(r"^\d{4}-\d\d-\d\d$", k) or not (start.isoformat() <= k <= bis.isoformat()):
@@ -699,7 +710,8 @@ Antworte NUR mit JSON:
    {"art": "planen", "von": "JJJJ-MM-TT", "tage": 7, "wunsch": ""}            – ganze Woche/mehrere Tage neu planen lassen
    {"art": "tag", "datum": "JJJJ-MM-TT", "wunsch": "Lasagne"}                 – an einem Tag ein bestimmtes Gericht (Rezept wird erstellt)
    {"art": "tag_rezept", "datum": "JJJJ-MM-TT", "rezept_id": "…"}             – gespeichertes Rezept an einem Tag einplanen
-   {"art": "frei", "datum": "JJJJ-MM-TT", "titel": "Auswärts essen"}          – an dem Tag wird nicht gekocht
+   {"art": "auswaerts", "datum": "JJJJ-MM-TT", "titel": "Essen gehen"}        – wir gehen essen (Restaurant, Einladung)
+   {"art": "frei", "datum": "JJJJ-MM-TT", "titel": "Brotzeit"}               – an dem Tag wird nicht gekocht
    {"art": "gekocht", "datum": "JJJJ-MM-TT"}
    {"art": "vorrat", "name": "Kürbis", "menge": "3 Stück", "quelle": "ernte"|"vorrat"}   – Ernte/Vorrat eintragen
    {"art": "vorrat_weg", "name": "Kürbis"}                                    – verbraucht/aufgebraucht
@@ -746,8 +758,9 @@ def telegram(auftrag):
                                     "quelle": "ernte" if x.get("quelle") == "ernte" else "vorrat", "seit": heute.isoformat()})
             elif art == "vorrat_weg" and x.get("name"):
                 d["vorrat"] = [v for v in d["vorrat"] if str(x["name"]).lower() not in str(v.get("name", "")).lower()]
-            elif art == "frei" and gueltig:
-                d["plan"][dat] = {"art": "frei", "titel": str(x.get("titel") or "Nicht kochen")[:60], "grund": "per Telegram"}
+            elif art in ("frei", "auswaerts") and gueltig:
+                d["plan"][dat] = {"art": art, "titel": str(x.get("titel") or ("Essen gehen" if art == "auswaerts" else "Nicht kochen"))[:60],
+                                  "grund": "per Telegram", "fest": True}
             elif art == "gekocht" and gueltig and dat in d["plan"]:
                 d["plan"][dat]["gekocht"] = True
             elif art == "tag_rezept" and gueltig:
