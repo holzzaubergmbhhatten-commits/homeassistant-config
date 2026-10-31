@@ -558,12 +558,21 @@ Für jeden Artikel: "ok" (gibt es dort praktisch immer), "unsicher" (nicht immer
 "fehlt" (führt dieser Laden normalerweise nicht). Bei "unsicher"/"fehlt" eine Alternative nennen, die es dort sicher gibt und
 im Rezept funktioniert. "produkt": wenn sinnvoll, ein typisches Produkt mit Packungsgröße bei diesem Laden (z. B. "Ja! Sahne 200 g").
 Antworte am Ende NUR mit JSON: {"artikel": [{"text": "<genau wie in der Liste>", "status": "ok"|"unsicher"|"fehlt",
-"hinweis": "kurz", "alternative": "", "produkt": ""}]}"""
+"hinweis": "kurz", "alternative": "", "produkt": "", "preis_eur": 1.29}]}
+"preis_eur" = was die benötigte Menge dort ungefähr kostet (übliche Packung, Angebotspreis wenn im Angebot)."""
+
+
+def zahl_oder_0(v):
+    try:
+        return round(float(str(v).replace(",", ".")), 2)
+    except (TypeError, ValueError):
+        return 0
 
 
 def pruefen_machen(auftrag):
     d = daten_laden()
-    laden = d["einstellungen"].get("laden") or "Rewe"
+    # spontan woanders einkaufen: Laden aus dem Auftrag, sonst der aus den Einstellungen
+    laden = str(auftrag.get("laden") or d["einstellungen"].get("laden") or "Rewe")[:60]
     liste = einkauf(auftrag)["liste"]
     if not liste:
         raise ValueError("Für diese Tage steht nichts auf der Einkaufsliste")
@@ -576,11 +585,16 @@ def pruefen_machen(auftrag):
                                              "country": "DE", "timezone": "Europe/Berlin"}}])
     artikel = [{"text": str(x.get("text", ""))[:80], "status": x.get("status") if x.get("status") in ("ok", "unsicher", "fehlt") else "unsicher",
                 "hinweis": str(x.get("hinweis") or "")[:120], "alternative": str(x.get("alternative") or "")[:60],
-                "produkt": str(x.get("produkt") or "")[:60]} for x in a.get("artikel") or [] if isinstance(x, dict) and x.get("text")]
+                "produkt": str(x.get("produkt") or "")[:60], "preis_eur": zahl_oder_0(x.get("preis_eur"))}
+               for x in a.get("artikel") or [] if isinstance(x, dict) and x.get("text")]
     with Sperre():
         d = daten_laden()
         d["pruefung"] = {"laden": laden, "von": auftrag.get("von"), "bis": auftrag.get("bis"), "stand": datetime.now().isoformat(timespec="minutes"),
                          "artikel": artikel}
+        # je Laden merken (zum Umschalten in der Einkaufsliste), höchstens 6 Läden
+        pr = dict(list((d.get("pruefungen") or {}).items())[-5:])
+        pr[laden] = d["pruefung"]
+        d["pruefungen"] = pr
         json_schreiben(DATEN, d)
     probleme = [x for x in artikel if x["status"] != "ok"]
     return (f"Sortiment bei {laden} geprüft: {len(artikel) - len(probleme)} Artikel gibt es sicher"

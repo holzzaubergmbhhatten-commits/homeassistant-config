@@ -567,19 +567,25 @@ function einkaufBlatt(von0, bis0) {
   const heute = iso(new Date()), von = von0 || (iso(woche) > heute ? iso(woche) : heute), bis = bis0 || iso(plusTage(woche, 6));
   if (!einkauf) einkauf = { von, bis, liste: einkaufBerechnen(von, bis) };
   const l = einkauf.liste;
-  const mitPreis = l.some(z => z.preis > 0);
-  const gewaehlt = mitPreis ? l.filter(z => z.an).reduce((a, z) => a + z.preis, 0) : kostenVon(einkauf.von, einkauf.bis);
+  // Laden für diesen Einkauf (spontan umschaltbar, die Einstellungen bleiben)
+  const laden = einkauf.laden || daten.einstellungen.laden || "Rewe";
+  const pr = (daten.pruefungen || {})[laden] || ((daten.pruefung || {}).laden === laden ? daten.pruefung : {});
+  const prAktuell = !!pr.artikel;
+  const prFinden = z => prAktuell ? pr.artikel.find(x => x.text.toLowerCase() === z.text.toLowerCase())
+    || pr.artikel.find(x => x.text.toLowerCase().includes(z.text.toLowerCase().split(" ").pop())) : null;
+  const preis = z => { const p = prFinden(z); return p && p.preis_eur > 0 ? p.preis_eur : z.preis; };
+  const mitPreis = l.some(z => preis(z) > 0);
+  const gewaehlt = mitPreis ? l.filter(z => z.an).reduce((a, z) => a + preis(z), 0) : kostenVon(einkauf.von, einkauf.bis);
   const budget = +daten.einstellungen.budget || 0, eintag = einkauf.von === einkauf.bis;
   let h = `<h3>Einkaufsliste</h3><div class="klein">${eintag ? "Alles für " + kurzDatum(vonIso(einkauf.von)) : `Alles für ${kurzDatum(vonIso(einkauf.von))} bis ${kurzDatum(vonIso(einkauf.bis))}, zusammengerechnet`}.
     Was ihr schon habt, einfach abwählen.</div>
     ${gewaehlt ? `<div class="hinweis" style="margin:10px 0 0">Geschätzt <b>ca. ${zahl(Math.round(gewaehlt))} €</b>${!eintag && budget && einkauf.von === iso(woche) ? ` von ${budget} € Budget`
-      + (gewaehlt > budget ? " – etwas drüber, „Tauschen“ bei einem teuren Gericht hilft" : "") : ""}${daten.einstellungen.laden ? " bei " + esc(daten.einstellungen.laden) : ""} (ohne Gewähr)</div>` : ""}`;
+      + (gewaehlt > budget ? " – etwas drüber, „Tauschen“ bei einem teuren Gericht hilft" : "") : ""} bei ${esc(laden)} (ohne Gewähr)</div>` : ""}`;
+  const laeden = [...new Set([daten.einstellungen.laden, ...LAEDEN].filter(Boolean))];
+  h += `<label class="f">Wo kauft ihr diesmal ein?</label><div class="zeile">` + laeden.map(x =>
+    `<button class="knopf klein-k ${x === laden ? "voll" : ""}" data-a="ekladen" data-w="${esc(x)}">${esc(x)}</button>`).join("") + `</div>`;
   if (!l.length) h += `<div class="leerbild">Für diese Tage braucht ihr nichts.</div>`;
-  const pr = daten.pruefung || {};
-  const prAktuell = pr.artikel && pr.laden === daten.einstellungen.laden;
-  const prFinden = z => prAktuell ? pr.artikel.find(x => x.text.toLowerCase() === z.text.toLowerCase())
-    || pr.artikel.find(x => x.text.toLowerCase().includes(z.text.toLowerCase().split(" ").pop())) : null;
-  h += `<div class="zeile" style="margin-top:10px"><button class="knopf klein-k" data-a="pruefen" ${arbeit ? "disabled" : ""}>${ic("haken")} Gibt es alles bei ${esc(daten.einstellungen.laden || "eurem Laden")}? Prüfen</button>
+  h += `<div class="zeile" style="margin-top:10px"><button class="knopf klein-k" data-a="pruefen" ${arbeit ? "disabled" : ""}>${ic("haken")} Gibt es alles bei ${esc(laden)}? ${prAktuell ? "Nochmal prüfen" : "Prüfen"}</button>
     ${prAktuell ? `<span class="klein">geprüft ${esc(pr.stand.slice(8, 10) + "." + pr.stand.slice(5, 7) + ". " + pr.stand.slice(11, 16))}</span>` : ""}</div>`;
   if (arbeit) h += `<div class="arbeit" style="margin-top:10px"><span class="warten"></span>${esc(arbeit.text)}</div>`;
   let bereich = "";
@@ -590,7 +596,7 @@ function einkaufBlatt(von0, bis0) {
       ${(p => !p ? "" : `<div class="marken">${p.status === "ok" ? `<span class="marke gruen">gibt es dort${p.produkt ? ": " + esc(p.produkt) : ""}</span>`
         : `<span class="marke ${p.status === "fehlt" ? "rot" : "gold"}">${p.status === "fehlt" ? "gibt es dort meist nicht" : "nicht immer da"}${p.hinweis ? " – " + esc(p.hinweis) : ""}</span>`
           + (p.alternative ? `<button class="knopf klein-k" data-a="alternative" data-i="${i}" data-t="${esc(p.alternative)}">Stattdessen: ${esc(p.alternative)}</button>` : "")}</div>`)(prFinden(z))}</div>
-      ${z.preis > 0 ? `<span class="klein">ca. ${zahl(Math.round(z.preis * 10) / 10)} €</span>` : ""}</div>`;
+      ${preis(z) > 0 ? `<span class="klein">ca. ${zahl(Math.round(preis(z) * 10) / 10)} €</span>` : ""}</div>`;
   });
   h += `<div class="zeile" style="margin-top:14px"><button class="knopf voll" data-a="ekok">${ic("wagen")} ${l.filter(z => z.an).length} Sachen auf die Einkaufsliste</button>
     <button class="knopf" data-a="zu">Abbrechen</button></div>`;
@@ -721,7 +727,17 @@ async function aktion(el) {
   }
   if (a === "ekwahl") { const z = einkauf.liste[+el.dataset.i]; z.an = !z.an; einkaufBlatt(einkauf.von, einkauf.bis); return; }
   if (a === "ektag") { einkauf = null; einkaufBlatt(k, k); return; }
-  if (a === "pruefen") { ki({ art: "pruefen", von: einkauf.von, bis: einkauf.bis }, `Claude prüft das Sortiment bei ${daten.einstellungen.laden || "eurem Laden"} …`); einkaufBlatt(einkauf.von, einkauf.bis); return; }
+  if (a === "pruefen" || a === "ekladen") {
+    if (a === "ekladen") {
+      einkauf.laden = el.dataset.w;
+      // schon geprüft? Dann nur umschalten, sonst gleich prüfen lassen
+      const schon = (daten.pruefungen || {})[einkauf.laden] || ((daten.pruefung || {}).laden === einkauf.laden ? daten.pruefung : null);
+      if (schon || arbeit) { einkaufBlatt(einkauf.von, einkauf.bis); return; }
+    }
+    const laden = einkauf.laden || daten.einstellungen.laden || "Rewe";
+    ki({ art: "pruefen", von: einkauf.von, bis: einkauf.bis, laden }, `Claude prüft Sortiment und Preise bei ${laden} …`);
+    einkaufBlatt(einkauf.von, einkauf.bis); return;
+  }
   if (a === "alternative") { const z = einkauf.liste[+el.dataset.i]; z.notiz = z.notiz + " · statt " + z.text; z.text = el.dataset.t; z.an = true; einkaufBlatt(einkauf.von, einkauf.bis); return; }
   if (a === "ekok") {
     const liste = einkauf.liste.filter(z => z.an).map(z => ({ text: z.text, notiz: z.notiz }));
