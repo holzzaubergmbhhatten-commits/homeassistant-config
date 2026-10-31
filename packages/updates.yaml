@@ -3,7 +3,7 @@
 # - Home Assistant Core: nie die erste Fassung eines Monats (x.y.0), sondern ab x.y.1 – oder wenn es seit 14 Tagen wartet.
 #   Vorher wird automatisch eine Sicherung gemacht. Core startet Home Assistant neu, deshalb kommt er als Letztes.
 # - Betriebssystem (OS): wenn es seit 7 Tagen da ist und in derselben Nacht kein Core-Update lief (es startet den Rechner neu).
-# - Geräte-Firmware (Zigbee, Shelly, …) wird nicht automatisch gemacht – das bleibt Handarbeit.
+# - Geräte-Firmware (Zigbee, Shelly, Omada …) wird nicht automatisch gemacht – Omada fragt per Telegram (packages/netzwerk.yaml).
 # - Nicht im Urlaub (wenn etwas schiefgeht, ist keiner da) und nicht, wenn "Updates pausieren" an ist.
 input_boolean:
   updates_pause:
@@ -33,6 +33,7 @@ automation:
       kleine: >-
         {{ states.update | selectattr('state', 'eq', 'on')
            | rejectattr('entity_id', 'in', grund)
+           | rejectattr('entity_id', 'in', integration_entities('tplink_omada'))
            | rejectattr('attributes.device_class', 'defined')
            | selectattr('attributes.in_progress', 'ne', true)
            | selectattr('last_changed', 'lt', now() - timedelta(days=2))

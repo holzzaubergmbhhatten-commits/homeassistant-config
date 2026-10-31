@@ -54,6 +54,7 @@
   .blatt label { display: grid; gap: 4px; font-size: 13px; color: var(--grau); margin-top: 10px; }
   .blatt input { font: inherit; font-size: 16px; padding: 10px 12px; border-radius: 11px; border: 1px solid var(--linie); background: var(--bg); color: var(--text); }
   .meldung { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--dunkel); color: #fff; padding: 11px 18px; border-radius: 99px; display: none; z-index: 20; }
+  .name-knopf { text-align: left; } .name-knopf .stift { font-size: 15px; opacity: .55; }
   .leer { text-align: center; padding: 40px 20px; }
 </style>
 <link rel="stylesheet" href="/local/hausstil.css?v=2">
@@ -71,6 +72,7 @@ const st = id => { const h = hass(); return id && h && h.states[id]; };
 function meldung(t) { const m = $("meldung"); m.textContent = t; m.style.display = "block"; clearTimeout(meldung.t); meldung.t = setTimeout(() => m.style.display = "none", 4000); }
 const DATEN_URL = "/local/netzwerk_daten.json";
 
+const fwLaeuft = {};
 let GERAETE = [], daten = { ports: {}, geraete: {} }, wahl = null, letzterFinger = 0;
 
 // ---------- Geräte finden ----------
@@ -124,12 +126,13 @@ function portKachel(g, p) {
 function geraetKarte(g) {
   const on = online(g), ort = (daten.geraete[g.id] || {}).ort || "";
   const art = { router: "Router", switch: "Switch", ap: "Access Point", sonst: "Gerät" }[g.art];
-  const upd = g.update && st(g.update) && st(g.update).state === "on";
-  return `<div class="karte"><div class="zeile" style="justify-content:space-between"><div><h2>${esc(g.name)}</h2>
+  const u = g.update && st(g.update), upd = u && u.state === "on", laeuft = u && (u.attributes.in_progress === true || typeof u.attributes.in_progress === "number" || fwLaeuft[g.update]);
+  return `<div class="karte"><div class="zeile" style="justify-content:space-between"><div><button class="name-knopf" data-umbenennen="${esc(g.id)}"><h2>${esc(g.name)} <span class="stift">✏️</span></h2></button>
       <div class="klein">${esc(art)}${g.modell ? " · " + esc(g.modell) : ""}${ort ? " · " + esc(ort) : ""}</div></div>
       <div class="zeile"><span class="punkt ${on ? "" : "aus"}"></span><b style="color:${on ? "var(--ok)" : "var(--rot)"}">${on ? "online" : "offline"}</b></div></div>
     ${g.werte.length ? `<div class="werte">${g.werte.slice(0, 8).map(id => `<div class="wert">${esc(wertName(id, g))}<b>${esc(wertText(id))}</b></div>`).join("")}</div>` : ""}
-    ${upd ? `<div class="update">Firmware-Update verfügbar (${esc(st(g.update).attributes.latest_version || "")}) – am besten im Omada-Controller einspielen.</div>` : ""}
+    ${upd ? `<div class="update zeile" style="justify-content:space-between"><span>${laeuft ? "⏳ Firmware wird eingespielt … (ca. 5 Minuten, Gerät ist kurz weg)" : `Neue Firmware: ${esc(u.attributes.latest_version || "")} <span class="klein">(jetzt ${esc(u.attributes.installed_version || "?")})</span>`}</span>
+      ${laeuft ? "" : `<button class="knopf voll" style="padding:7px 12px;font-size:13px" data-fw="${esc(g.update)}">Jetzt einspielen</button>`}</div>` : ""}
     ${g.ports.length ? `<div class="front">${g.ports.map(p => portKachel(g, p)).join("")}</div>
       <div class="klein" style="margin-top:6px">Gelbe Lampe = PoE an (Strom übers Kabel). Port antippen zum Beschriften oder Neustarten.</div>` : ""}
     <div style="margin-top:10px"><button class="knopf" data-ort="${esc(g.id)}" style="padding:7px 12px;font-size:13px">Standort eintragen</button></div></div>`;
@@ -158,7 +161,11 @@ function zeichnen() {
   }
   const weg = GERAETE.filter(g => !online(g));
   $("stand").textContent = `${GERAETE.length} Geräte · ${weg.length ? weg.length + " offline" : "alle online"}`;
-  $("inhalt").innerHTML = (weg.length ? `<div class="karte" style="border-color:var(--terra)"><b style="color:var(--rot)">Nicht erreichbar:</b> ${weg.map(g => esc(g.name)).join(", ")}</div>` : "")
+  const fw = GERAETE.filter(g => g.update && st(g.update) && st(g.update).state === "on");
+  const fwText = fw.length ? `<div class="karte zeile" style="justify-content:space-between;border-color:var(--gelb)"><div><b>📡 Neue Firmware für ${fw.length} ${fw.length === 1 ? "Gerät" : "Geräte"}</b>
+      <div class="klein">Nacheinander: erst Access Points, dann Switch, Router zuletzt. Pro Gerät ca. 5 Minuten, das jeweilige Gerät ist kurz weg.${st("input_boolean.netzwerk_update_nachts") && st("input_boolean.netzwerk_update_nachts").state === "on" ? " <b>Geplant für heute Nacht 2:30 Uhr.</b>" : ""}</div></div>
+      <div class="zeile"><button class="knopf voll" data-fwalle="1">Alle einspielen</button><button class="knopf" data-fwnacht="1">Heute Nacht</button></div></div>` : "";
+  $("inhalt").innerHTML = fwText + (weg.length ? `<div class="karte" style="border-color:var(--terra)"><b style="color:var(--rot)">Nicht erreichbar:</b> ${weg.map(g => esc(g.name)).join(", ")}</div>` : "")
     + `<div class="geraete">${GERAETE.map(geraetKarte).join("")}</div>` + blatt();
 }
 
@@ -173,6 +180,29 @@ async function aktion(t) {
         : `Nichts gefunden${a.fehler ? " (" + esc(a.fehler) + ")" : ""}. Ist die OC200 eingeschaltet und im selben Netz wie Home Assistant?`;
     } catch (e) { $("suchergebnis").textContent = "Fehler: " + (e.message || e); }
     return;
+  }
+  if (t.dataset.umbenennen) {
+    const g = GERAETE.find(x => x.id === t.dataset.umbenennen);
+    const neu = prompt(`Neuer Name für „${g.name}“ (z. B. „Access Point Flur“):`, g.name); if (neu == null || !neu.trim() || neu.trim() === g.name) return;
+    try { await h.callWS({ type: "config/device_registry/update", device_id: g.id, name_by_user: neu.trim() }); g.name = neu.trim(); meldung("Umbenannt"); zeichnen(); finden().then(zeichnen).catch(() => {}); }
+    catch (e) { meldung("Nicht umbenannt: " + (e.message || e)); }
+    return;
+  }
+  if (t.dataset.fw) {
+    const g = GERAETE.find(x => x.update === t.dataset.fw);
+    if (!confirm(`Firmware für „${g.name}“ jetzt einspielen?\n\nDas Gerät startet dabei neu und ist ca. 5 Minuten weg${g.art === "router" ? " (Internet weg!)" : g.art === "ap" ? " (WLAN an diesem Access Point)" : g.art === "switch" ? " (alles, was am Switch hängt)" : ""}.`)) return;
+    fwLaeuft[t.dataset.fw] = true; zeichnen();
+    try { await h.callWS({ type: "call_service", domain: "script", service: "turn_on", target: { entity_id: "script.netzwerk_firmware" }, service_data: { variables: { geraete: [t.dataset.fw] } } }); meldung("Wird eingespielt – Telegram meldet, wenn fertig"); }
+    catch (e) { fwLaeuft[t.dataset.fw] = false; meldung("Fehler: " + (e.message || e)); zeichnen(); }
+    return;
+  }
+  if (t.dataset.fwalle) {
+    if (!confirm("Alle Firmware-Updates jetzt einspielen?\n\nEins nach dem anderen, dauert etwa 5 Minuten pro Gerät. Zwischendurch sind WLAN, Switch und zuletzt das Internet kurz weg.")) return;
+    GERAETE.forEach(g => { if (g.update && st(g.update) && st(g.update).state === "on") fwLaeuft[g.update] = true; }); zeichnen();
+    await h.callService("script", "turn_on", { entity_id: "script.netzwerk_firmware" }); meldung("Läuft – Telegram meldet, wenn alles fertig ist"); return;
+  }
+  if (t.dataset.fwnacht) {
+    await h.callService("input_boolean", "turn_on", { entity_id: "input_boolean.netzwerk_update_nachts" }); meldung("Wird heute Nacht um 2:30 Uhr eingespielt"); zeichnen(); return;
   }
   if (t.dataset.port) { wahl = wahl === t.dataset.port ? null : t.dataset.port; zeichnen(); return; }
   if (t.dataset.zu) { wahl = null; zeichnen(); return; }

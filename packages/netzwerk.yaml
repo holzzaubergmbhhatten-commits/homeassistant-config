@@ -2,6 +2,9 @@
 # - Seite www/netzwerk.html (Reiter „Netzwerk“): Switches mit allen Ports (PoE an/aus, eigene Beschriftung „was hängt dran“),
 #   Access Points und Router, online/offline. PoE-Neustart eines Ports mit Rückfrage.
 # - Telegram, wenn ein Omada-Gerät länger als 5 Minuten nicht erreichbar ist – und wenn es wieder da ist.
+# - Firmware-Updates der Omada-Geräte: Knopf auf der Seite oder Telegram-Frage (jetzt / heute Nacht / später).
+#   Reihenfolge: erst Access Points, dann Switch, Router zuletzt – immer eins nach dem anderen.
+# - Geräte umbenennen direkt auf der Seite (Name in Home Assistant).
 # Beschriftungen lokal in /config/www/netzwerk_daten.json (nicht im Repository). Keine IP-/MAC-Adressen.
 shell_command:
   netzwerk: python3 /config/claude_tools/netzwerk.py {{ aktion }} {{ wert | default('') }}
@@ -78,6 +81,63 @@ script:
         target:
           entity_id: "{{ schalter }}"
 
+  # Firmware einspielen – nacheinander: Access Points, dann Switch, Router zuletzt (sonst ist das Netz zu lange weg)
+  netzwerk_firmware:
+    alias: "Netzwerk: Firmware einspielen"
+    icon: mdi:update
+    mode: single
+    fields:
+      geraete:
+        description: Update-Entitäten (leer = alle Omada-Geräte mit Update)
+    sequence:
+      - variables:
+          alle: "{{ integration_entities('tplink_omada') | select('match', 'update\\.') | select('is_state', 'on') | list }}"
+          liste: >-
+            {% set w = geraete if (geraete is defined and geraete) else alle %}
+            {% set w = [w] if w is string else w %}
+            {% set ns = namespace(a=[], s=[], r=[]) %}
+            {% for e in w if e in alle %}
+              {% set m = (device_attr(device_id(e), 'model') or '') | upper %}
+              {% if m.startswith('ER') %}{% set ns.r = ns.r + [e] %}{% elif m.startswith('EAP') %}{% set ns.a = ns.a + [e] %}{% else %}{% set ns.s = ns.s + [e] %}{% endif %}
+            {% endfor %}
+            {{ ns.a + ns.s + ns.r }}
+          marco: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\\d+$') | first | default('') }}"
+      - condition: template
+        value_template: "{{ liste | count > 0 }}"
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.netzwerk_update_nachts
+      - repeat:
+          for_each: "{{ liste }}"
+          sequence:
+            - action: update.install
+              continue_on_error: true
+              target:
+                entity_id: "{{ repeat.item }}"
+            - wait_template: "{{ not is_state(repeat.item, 'on') }}"
+              timeout: "00:15:00"
+            - delay: "00:01:00"
+      - variables:
+          offen_namen: >-
+            {% set ns = namespace(l=[]) %}
+            {% for e in liste if is_state(e, 'on') %}{% set d = device_id(e) %}{% set ns.l = ns.l + [device_attr(d, 'name_by_user') or device_attr(d, 'name') or e] %}{% endfor %}
+            {{ ns.l }}
+      - if: "{{ marco != '' }}"
+        then:
+          - action: telegram_bot.send_message
+            continue_on_error: true
+            data:
+              chat_id: "{{ marco | int }}"
+              message: >-
+                {% if offen_namen %}⚠️ Netzwerk-Firmware: {{ liste | count - offen_namen | count }} von {{ liste | count }} fertig.
+                Nicht geklappt: {{ offen_namen | join(', ') }} – bitte im Omada-Controller nachsehen.
+                {%- else %}✅ Netzwerk-Firmware: alle {{ liste | count }} Geräte sind aktuell.{% endif %}
+
+input_boolean:
+  netzwerk_update_nachts:
+    name: Netzwerk-Firmware heute Nacht einspielen
+    icon: mdi:weather-night
+
 template:
   - sensor:
       # Omada-Geräte, bei denen gerade ALLE Werte „nicht verfügbar“ sind (= Gerät offline)
@@ -132,3 +192,92 @@ automation:
                   {% if neu_weg %}📡 Netzwerk: {{ neu_weg | join(', ') }} ist seit 5 Minuten nicht erreichbar
                   (Strom/PoE, Kabel oder Absturz?). Neu starten geht am Monitor unter „Netzwerk“.{% endif %}
                   {% if wieder_da %}✅ Netzwerk: {{ wieder_da | join(', ') }} ist wieder erreichbar.{% endif %}
+
+  # Neue Firmware für Omada-Geräte → Marco fragen (gesammelt, eine Nachricht)
+  - id: netzwerk_firmware_fragen
+    alias: "Netzwerk: neue Firmware – per Telegram fragen"
+    mode: single
+    max_exceeded: silent
+    triggers:
+      - trigger: event
+        event_type: state_changed
+    conditions:
+      - condition: template
+        value_template: >-
+          {% set e = trigger.event.data %}
+          {{ e.entity_id is match('update\\.') and e.new_state is not none and e.new_state.state == 'on'
+             and e.old_state is not none and e.old_state.state == 'off'
+             and e.entity_id in integration_entities('tplink_omada') }}
+    actions:
+      - delay: "00:03:00"
+      - variables:
+          liste: >-
+            {% set ns = namespace(l=[]) %}
+            {% for e in integration_entities('tplink_omada') | select('match', 'update\\.') | select('is_state', 'on') %}
+              {% set d = device_id(e) %}{% set ns.l = ns.l + [(device_attr(d, 'name_by_user') or device_attr(d, 'name') or e) ~ ' (' ~ state_attr(e, 'latest_version') ~ ')'] %}
+            {% endfor %}
+            {{ ns.l }}
+          marco: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\\d+$') | first | default('') }}"
+      - condition: template
+        value_template: "{{ liste | count > 0 and marco != '' }}"
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ marco | int }}"
+          message: >-
+            📡 Neue Firmware fürs Netzwerk: {{ liste | join(', ') }}.
+            Einspielen dauert pro Gerät etwa 5 Minuten, dabei ist das jeweilige Gerät kurz weg (WLAN an dem Access Point, beim Router das Internet).
+          inline_keyboard:
+            - "Jetzt einspielen:/omada_jetzt, Heute Nacht:/omada_nachts"
+            - "Später (selbst am Monitor):/omada_spaeter"
+
+  - id: netzwerk_firmware_knopf
+    alias: "Netzwerk: Firmware-Knopf in Telegram"
+    mode: queued
+    triggers:
+      - trigger: event
+        event_type: telegram_callback
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.event.data.data in ['/omada_jetzt', '/omada_nachts', '/omada_spaeter'] }}"
+    actions:
+      - variables:
+          wahl: "{{ trigger.event.data.data }}"
+      - action: telegram_bot.answer_callback_query
+        continue_on_error: true
+        data:
+          callback_query_id: "{{ trigger.event.data.id }}"
+          message: "OK"
+      - action: telegram_bot.edit_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ trigger.event.data.chat_id }}"
+          message_id: "{{ trigger.event.data.message.message_id }}"
+          message: >-
+            {% if wahl == '/omada_jetzt' %}🔄 Firmware wird jetzt eingespielt – erst die Access Points, dann Switch, Router zuletzt. Ich melde mich, wenn alles fertig ist.
+            {%- elif wahl == '/omada_nachts' %}🌙 Wird heute Nacht um 2:30 Uhr eingespielt.
+            {%- else %}👍 Später – geht jederzeit am Monitor unter „Netzwerk“.{% endif %}
+      - if: "{{ wahl == '/omada_nachts' }}"
+        then:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.netzwerk_update_nachts
+      - if: "{{ wahl == '/omada_jetzt' }}"
+        then:
+          - action: script.turn_on
+            target:
+              entity_id: script.netzwerk_firmware
+
+  - id: netzwerk_firmware_nachts
+    alias: "Netzwerk: Firmware nachts einspielen"
+    triggers:
+      - trigger: time
+        at: "02:30:00"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.netzwerk_update_nachts
+        state: "on"
+    actions:
+      - action: script.turn_on
+        target:
+          entity_id: script.netzwerk_firmware
