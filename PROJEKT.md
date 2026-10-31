@@ -129,3 +129,8 @@ Skripte müssen in Sprachassistenten → Entitäten freigeben für Assist freige
   Websuche, Route als Google-Maps-Link ab Zone „Zuhause“, Telegram „Ausflug …“.
 - **Hausstil** (`www/hausstil.css`, `themes/apple.yaml`): Farben/Schrift wie das Handbuch „Zuhause“.
 - Einkaufsliste (`todo.einkaufsliste`) ist die Einkaufsliste-Integration: **kein** Beschreibungsfeld bei `todo.add_item`.
+
+## Automatische Updates (31.10.2026)
+- `packages/updates.yaml`: nachts 03:40 Add-ons/HACS (Update seit ≥ 2 Tagen da), Core ab x.y.1 (oder nach 14 Tagen) mit
+  Sicherung, OS nach 7 Tagen (nicht in derselben Nacht wie Core). Keine Geräte-Firmware. Nicht im Urlaubsmodus.
+  Pause: `input_boolean.updates_pause`. Telegram an Marco vorher und nach dem Core-Neustart.

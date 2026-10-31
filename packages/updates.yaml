@@ -1,0 +1,120 @@
+# Updates automatisch nachts einspielen (Wunsch Marco: nicht mehr selbst antippen müssen).
+# - Add-ons und HACS-Erweiterungen: wenn das Update seit mindestens 2 Tagen da ist (dann sind schnelle Fehlerkorrekturen raus).
+# - Home Assistant Core: nie die erste Fassung eines Monats (x.y.0), sondern ab x.y.1 – oder wenn es seit 14 Tagen wartet.
+#   Vorher wird automatisch eine Sicherung gemacht. Core startet Home Assistant neu, deshalb kommt er als Letztes.
+# - Betriebssystem (OS): wenn es seit 7 Tagen da ist und in derselben Nacht kein Core-Update lief (es startet den Rechner neu).
+# - Geräte-Firmware (Zigbee, Shelly, …) wird nicht automatisch gemacht – das bleibt Handarbeit.
+# - Nicht im Urlaub (wenn etwas schiefgeht, ist keiner da) und nicht, wenn "Updates pausieren" an ist.
+input_boolean:
+  updates_pause:
+    name: Automatische Updates pausieren
+    icon: mdi:update
+  # merkt sich über den Neustart hinweg, dass gerade ein Core-Update lief
+  updates_core_lief:
+    name: Core-Update lief gerade
+    icon: mdi:update
+
+automation:
+  - id: updates_nachts
+    alias: "Updates: nachts automatisch einspielen"
+    mode: single
+    triggers:
+      - trigger: time
+        at: "03:40:00"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.updates_pause
+        state: "off"
+      - condition: state
+        entity_id: input_boolean.urlaubsmodus
+        state: "off"
+    variables:
+      grund: ['update.home_assistant_core_update', 'update.home_assistant_operating_system_update', 'update.home_assistant_supervisor_update']
+      kleine: >-
+        {{ states.update | selectattr('state', 'eq', 'on')
+           | rejectattr('entity_id', 'in', grund)
+           | rejectattr('attributes.device_class', 'defined')
+           | selectattr('attributes.in_progress', 'ne', true)
+           | selectattr('last_changed', 'lt', now() - timedelta(days=2))
+           | map(attribute='entity_id') | list }}
+      core: >-
+        {% set e = 'update.home_assistant_core_update' %}
+        {% set neu = state_attr(e, 'latest_version') | string %}
+        {% set patch = (neu.split('.')[2] if neu.split('.') | count > 2 else '0') | regex_replace('[^0-9].*$', '') | int(0) %}
+        {{ is_state(e, 'on') and 'b' not in neu
+           and (patch >= 1 or states[e].last_changed < now() - timedelta(days=14)) }}
+      os: >-
+        {% set e = 'update.home_assistant_operating_system_update' %}
+        {{ is_state(e, 'on') and states[e].last_changed < now() - timedelta(days=7) }}
+      namen: >-
+        {{ kleine | map('state_attr', 'friendly_name') | list
+           + (['Home Assistant ' ~ state_attr('update.home_assistant_core_update', 'latest_version')] if core else [])
+           + (['Betriebssystem ' ~ state_attr('update.home_assistant_operating_system_update', 'latest_version')] if (os and not core) else []) }}
+    actions:
+      - if: "{{ namen | count == 0 }}"
+        then:
+          - stop: nichts zu tun
+      - variables:
+          marco: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\\d+$') | first | default('') }}"
+      - if: "{{ marco != '' }}"
+        then:
+          - action: telegram_bot.send_message
+            continue_on_error: true
+            data:
+              chat_id: "{{ marco | int }}"
+              message: "🔄 Nachts-Updates: {{ namen | join(', ') }}"
+      # Add-ons und HACS einzeln, ein Fehler hält den Rest nicht auf
+      - repeat:
+          for_each: "{{ kleine }}"
+          sequence:
+            - action: update.install
+              continue_on_error: true
+              target:
+                entity_id: "{{ repeat.item }}"
+            - delay: "00:00:20"
+      # Betriebssystem nur, wenn kein Core-Update kommt (beides startet neu)
+      - if: "{{ os and not core }}"
+        then:
+          - action: update.install
+            continue_on_error: true
+            target:
+              entity_id: update.home_assistant_operating_system_update
+      # Core zuletzt, mit Sicherung vorher
+      - if: "{{ core }}"
+        then:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.updates_core_lief
+          - action: update.install
+            continue_on_error: true
+            target:
+              entity_id: update.home_assistant_core_update
+            data:
+              backup: true
+
+  # Nach dem Core-Update: kurze Rückmeldung, dass Home Assistant wieder läuft
+  - id: updates_core_zurueck
+    alias: "Updates: Home Assistant läuft wieder"
+    triggers:
+      - trigger: homeassistant
+        event: start
+    conditions:
+      - condition: state
+        entity_id: input_boolean.updates_core_lief
+        state: "on"
+    actions:
+      - delay: "00:02:00"
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.updates_core_lief
+      - variables:
+          marco: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\\d+$') | first | default('') }}"
+      - if: "{{ marco != '' }}"
+        then:
+          - action: telegram_bot.send_message
+            continue_on_error: true
+            data:
+              chat_id: "{{ marco | int }}"
+              message: >-
+                ✅ Home Assistant läuft wieder – Version {{ state_attr('update.home_assistant_core_update', 'installed_version') }}.
+                {{ 'Noch nicht alles drauf, ich versuche es morgen Nacht nochmal.' if is_state('update.home_assistant_core_update', 'on') else '' }}
