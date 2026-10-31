@@ -170,6 +170,8 @@ def gericht_sauber(g):
         aus["schritte"] = schritte_sauber(g.get("schritte"))
     if g.get("rezept_id"):
         aus["rezept_id"] = str(g["rezept_id"])[:40]
+    if str(g.get("bild") or "").startswith("https://"):
+        aus["bild"] = str(g["bild"])[:500]
     return aus
 
 
@@ -378,6 +380,8 @@ def rezept_einsetzen(d, g):
     """Gespeichertes Rezept übernehmen, wenn Claude eins ausgesucht hat und keine eigenen Zutaten mitliefert."""
     rid = g.get("rezept_id")
     r = next((x for x in d.get("rezepte") or [] if x.get("id") == rid), None) if rid else None
+    if r and r.get("bild") and not g.get("bild"):
+        g["bild"] = r["bild"]
     if r and not g.get("zutaten"):
         g["zutaten"], g["schritte"] = r.get("zutaten", []), r.get("schritte", [])
         g.setdefault("zeit_min", r.get("zeit_min", 0))
@@ -432,10 +436,62 @@ def plan_machen(auftrag):
         grenze = (date.today() - timedelta(days=56)).isoformat()
         d["plan"] = {k: v for k, v in d["plan"].items() if k >= grenze}
         json_schreiben(DATEN, d)
+    bilder_suchen([(start + timedelta(days=i)).isoformat() for i in range(tage)])
     text = "Essensplan " + de(start) + " – " + de(bis) + ":\n" + "\n".join(
         f"• {TAGE[date.fromisoformat(k).weekday()][:2]}: {v.get('titel')}" for k, v in sorted(d["plan"].items())
         if start.isoformat() <= k <= bis.isoformat())
     return text + ("\n" + d["hinweis_woche"].get(montag(start).isoformat(), "") if d["hinweis_woche"].get(montag(start).isoformat()) else "")
+
+
+BILDER = """Du suchst zu Gerichten passende Rezeptseiten mit Foto, damit eine Familie am Küchenmonitor sieht, wie das fertige
+Essen aussieht. Nimm große deutsche Rezeptseiten (chefkoch.de, lecker.de, essen-und-trinken.de, eatsmarter.de, kitchenstories.com,
+einfachbacken.de, gutekueche.de, springlane.de) und ein Rezept, das dem Gericht möglichst genau entspricht.
+Antworte am Ende NUR mit JSON: {"seiten": [{"key": "<key aus der Liste>", "url": "https://…"}]}"""
+
+
+def og_bild(url):
+    """Vorschaubild (og:image) einer Rezeptseite."""
+    import urllib.request
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (HomeAssistant Küche)", "Accept-Language": "de"})
+    with urllib.request.urlopen(req, timeout=15) as r:
+        roh = r.read(800_000).decode("utf-8", "replace")
+    m = re.search(r'<meta[^>]+(?:property|name)=["\']og:image["\'][^>]+content=["\']([^"\']+)', roh, re.I) or \
+        re.search(r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+(?:property|name)=["\']og:image', roh, re.I)
+    bild = html_mod.unescape(m.group(1)) if m else ""
+    return bild if bild.startswith("https://") else ""
+
+
+def bilder_suchen(keys):
+    """Fotos der fertigen Gerichte für die Tage keys (Websuche nach einer Rezeptseite, dann deren Vorschaubild). Fehler → ohne Bilder."""
+    d = daten_laden()
+    offen = {k: d["plan"][k]["titel"] for k in keys if k in d["plan"] and d["plan"][k].get("art") == "kochen"
+             and d["plan"][k].get("titel") and not d["plan"][k].get("bild")}
+    if not offen:
+        return
+    status(True, "Claude sucht Fotos der Gerichte …", art="plan")
+    try:
+        a = claude(BILDER, "Gerichte (key: Name):\n" + "\n".join(f"{k}: {t}" for k, t in offen.items()),
+                   max_tokens=3000, effort="low", timeout=180,
+                   werkzeuge=[{"type": "web_search_20260209", "name": "web_search", "max_uses": 6}])
+    except Exception:  # noqa: BLE001
+        return
+    from concurrent.futures import ThreadPoolExecutor
+    seiten = [(str(x.get("key")), str(x.get("url") or "")) for x in a.get("seiten") or [] if isinstance(x, dict)]
+    seiten = [(k, u) for k, u in seiten if k in offen and u.startswith("https://")]
+
+    def eins(paar):
+        try:
+            return paar[0], og_bild(paar[1])
+        except Exception:  # noqa: BLE001
+            return paar[0], ""
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        bilder = dict(pool.map(eins, seiten))
+    with Sperre():
+        d = daten_laden()
+        for k, b in bilder.items():
+            if b and k in d["plan"] and d["plan"][k].get("titel") == offen[k]:
+                d["plan"][k]["bild"] = b
+        json_schreiben(DATEN, d)
 
 
 class LeiseFertig(Exception):
@@ -457,6 +513,7 @@ def tausch_machen(auftrag):
         d = daten_laden()
         d["plan"][tag.isoformat()] = gericht_sauber(rezept_einsetzen(d, g))
         json_schreiben(DATEN, d)
+    bilder_suchen([tag.isoformat()])
     return f"{de(tag)}: {g.get('titel')} – {g.get('kurz', '')}"
 
 
@@ -539,6 +596,11 @@ def rezept_machen(auftrag):
               "zutaten": zutaten_sauber(r.get("zutaten")), "schritte": schritte_sauber(r.get("schritte")),
               "notiz": str(r.get("notiz") or "")[:300], "kategorie": str(r.get("kategorie") or "")[:30],
               "quelle": quelle[:300], "favorit": False, "erstellt": date.today().isoformat()}
+    if auftrag.get("url"):
+        try:
+            rezept["bild"] = og_bild(auftrag["url"])
+        except Exception:  # noqa: BLE001
+            pass
     with Sperre():
         d = daten_laden()
         d["rezepte"].append(rezept)

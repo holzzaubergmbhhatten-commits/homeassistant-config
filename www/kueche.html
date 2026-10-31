@@ -141,6 +141,39 @@
   .koch .oben h2 { margin: 0; font-size: 22px; flex: 1; min-width: 160px; }
   .koch .mitte { flex: 1; overflow: auto; padding: 16px 18px; }
   .schritt-nr { font-size: 15px; font-weight: 700; color: var(--braun2); margin-bottom: 10px; letter-spacing: .5px; }
+  /* gezeichnete Szenen im Kochmodus (Comic-Stil, einfache CSS-Bewegungen – flüssig auch ohne Grafikbeschleunigung) */
+  .szene { display: block; width: min(330px, 70vw); height: auto; margin: 4px auto 14px; overflow: visible; }
+  .szene .b { transform-box: fill-box; }
+  .rund-um { animation: rundum 2.4s linear infinite; }
+  .dampf { animation: dampf 2.4s ease-out infinite; opacity: 0; }
+  .d2 { animation-delay: .8s; } .d3 { animation-delay: 1.6s; }
+  .hacken { transform-origin: 90% 90%; animation: hacken .55s ease-in-out infinite; }
+  .kneten { transform-origin: 50% 100%; animation: kneten 1.1s ease-in-out infinite; }
+  .druecken { animation: druecken 1.1s ease-in-out infinite; }
+  .huepfen { animation: huepfen .9s ease-in-out infinite; }
+  .wackeln { transform-origin: 50% 100%; animation: wackeln .5s ease-in-out infinite; }
+  .langsam { animation-duration: 1.6s; }
+  .gluehen { animation: gluehen 1.6s ease-in-out infinite; }
+  .streuen { animation: streuen 1s linear infinite; }
+  .kippen { transform-origin: 85% 30%; animation: kippen 2.4s ease-in-out infinite; }
+  .funkeln { transform-origin: center; animation: funkeln 1.6s ease-in-out infinite; }
+  .zeiger { transform-origin: 50% 100%; animation: rundum 4s linear infinite; }
+  @keyframes rundum { to { transform: rotate(360deg); } }
+  @keyframes dampf { 0% { opacity: 0; transform: translateY(6px); } 30% { opacity: .85; } 100% { opacity: 0; transform: translateY(-34px); } }
+  @keyframes hacken { 0%, 100% { transform: translateY(-6px) rotate(-8deg); } 50% { transform: translateY(14px) rotate(4deg); } }
+  @keyframes kneten { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.16, .84); } }
+  @keyframes druecken { 0%, 100% { transform: translateY(-4px); } 50% { transform: translateY(12px); } }
+  @keyframes huepfen { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
+  @keyframes wackeln { 0%, 100% { transform: rotate(-9deg); } 50% { transform: rotate(9deg); } }
+  @keyframes gluehen { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+  @keyframes streuen { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(42px); } }
+  @keyframes kippen { 0%, 20%, 100% { transform: rotate(0); } 50%, 70% { transform: rotate(-38deg); } }
+  @keyframes funkeln { 0%, 100% { opacity: 0; transform: scale(.4); } 50% { opacity: 1; transform: scale(1.1); } }
+  .gericht-bild { width: 100%; max-height: 34vh; object-fit: cover; border-radius: 18px; margin-bottom: 12px; display: block; }
+  .tag .foto { width: 92px; height: 92px; object-fit: cover; border-radius: 14px; float: right; margin: 0 0 6px 10px; }
+  @media (max-width: 560px) { .tag .foto { width: 70px; height: 70px; } }
+  .fertig-feier { position: fixed; inset: 0; z-index: 25; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+  .fertig-feier h2 { font-family: "Cormorant Garamond", Georgia, serif; font-size: clamp(34px, 5vw, 56px); margin: 6px 0; color: var(--braun); }
   .schritt-text { font-size: clamp(24px, 3.4vw, 38px); line-height: 1.35; font-family: "Cormorant Garamond", Georgia, serif; }
   .koch .unten { display: flex; gap: 10px; padding: 12px 14px calc(12px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--linie); }
   .koch .unten .knopf { flex: 1; justify-content: center; padding: 20px; font-size: 19px; border-radius: 18px; }
@@ -381,6 +414,7 @@ function wocheSeite() {
     }
     const kochbar = g.art === "kochen" && (g.schritte || []).length;
     h += `<div class="tag ${k === heute ? "heute" : ""} ${g.gekocht ? "gekocht" : ""}">${kopfTag}<div class="inhalt">
+      ${g.bild ? `<img class="foto" src="${esc(g.bild)}" alt="" loading="lazy" onerror="this.remove()">` : ""}
       <div class="titel">${esc(g.titel || "–")}</div>
       ${g.kurz ? `<div class="kurz">${esc(g.kurz)}</div>` : ""}
       <div class="marken">${marken(g)}</div>
@@ -603,6 +637,60 @@ function einkaufBlatt(von0, bis0) {
   oeffnen(h);
 }
 
+// ---------- Gezeichnete Szenen (Comic) ----------
+const GESICHT = (x, y) => `<circle cx="${x - 9}" cy="${y}" r="3.2" fill="#2d3329"/><circle cx="${x + 9}" cy="${y}" r="3.2" fill="#2d3329"/>
+  <path d="M${x - 7} ${y + 8} Q${x} ${y + 14} ${x + 7} ${y + 8}" stroke="#2d3329" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+  <circle cx="${x - 15}" cy="${y + 7}" r="3.5" fill="#e8a38a" opacity=".7"/><circle cx="${x + 15}" cy="${y + 7}" r="3.5" fill="#e8a38a" opacity=".7"/>`;
+const DAMPF = (x, y) => [0, 1, 2].map(i => `<path class="b dampf ${["", "d2", "d3"][i]}" d="M${x + (i - 1) * 22} ${y} q-6 -10 0 -20 q6 -10 0 -20"
+  stroke="#b9b2a2" stroke-width="4" fill="none" stroke-linecap="round"/>`).join("");
+const SZENEN = {
+  kochen: `${DAMPF(120, 52)}<g class="rund-um" style="transform-origin:120px 74px"><rect x="116" y="28" width="7" height="58" rx="3" fill="#765c3d" transform="rotate(25 120 74)"/></g>
+    <rect x="58" y="70" width="124" height="66" rx="18" fill="#c96f4a"/><rect x="50" y="64" width="140" height="14" rx="7" fill="#a85a3b"/>
+    <rect x="36" y="86" width="22" height="10" rx="5" fill="#a85a3b"/><rect x="182" y="86" width="22" height="10" rx="5" fill="#a85a3b"/>${GESICHT(120, 100)}`,
+  schneiden: `<rect x="30" y="104" width="180" height="26" rx="10" fill="#d8c7a3"/><rect x="40" y="96" width="34" height="14" rx="5" fill="#e98b3a"/>
+    <rect x="80" y="98" width="16" height="12" rx="4" fill="#e98b3a"/><rect x="100" y="98" width="16" height="12" rx="4" fill="#e98b3a"/>
+    <path d="M30 103 q-14 -4 -18 -14" stroke="#5e8c3a" stroke-width="6" fill="none" stroke-linecap="round"/>
+    <g class="b hacken"><polygon points="118,40 196,62 196,84 118,72" fill="#cfd4d6" stroke="#9aa2a6" stroke-width="2"/>
+    <rect x="196" y="60" width="34" height="18" rx="7" fill="#33442b"/></g>`,
+  kneten: `<rect x="30" y="116" width="180" height="16" rx="8" fill="#d8c7a3"/>
+    <g class="b kneten"><ellipse cx="120" cy="96" rx="58" ry="26" fill="#f3dfb8" stroke="#d9bf8c" stroke-width="3"/>${GESICHT(120, 92)}</g>
+    <g class="b druecken"><rect x="70" y="28" width="38" height="44" rx="16" fill="#f1c4a2"/><rect x="132" y="28" width="38" height="44" rx="16" fill="#f1c4a2"/>
+    <rect x="70" y="16" width="38" height="18" rx="6" fill="#536b45"/><rect x="132" y="16" width="38" height="18" rx="6" fill="#536b45"/></g>`,
+  braten: `<g class="b wackeln langsam"><ellipse cx="112" cy="104" rx="76" ry="22" fill="#2d3329"/><ellipse cx="112" cy="98" rx="66" ry="16" fill="#4a524a"/>
+    <rect x="182" y="96" width="50" height="10" rx="5" fill="#2d3329"/><ellipse cx="104" cy="96" rx="26" ry="11" fill="#fff"/><circle cx="104" cy="94" r="8" fill="#f2b632"/></g>
+    ${[60, 92, 132, 156].map((x, i) => `<circle class="b huepfen" style="animation-delay:${i * .2}s" cx="${x}" cy="72" r="4" fill="#f2b632"/>`).join("")}`,
+  backen: `${DAMPF(120, 24)}<rect x="44" y="34" width="152" height="112" rx="14" fill="#33442b"/><rect x="58" y="62" width="124" height="70" rx="10" fill="#1f2a1a"/>
+    <rect class="b gluehen" x="64" y="68" width="112" height="58" rx="8" fill="#e98b3a"/><circle cx="72" cy="48" r="6" fill="#d8c7a3"/>
+    <circle cx="92" cy="48" r="6" fill="#d8c7a3"/><rect x="120" y="44" width="56" height="8" rx="4" fill="#d8c7a3"/>
+    <ellipse cx="120" cy="104" rx="34" ry="10" fill="#9b5a2c"/><ellipse cx="120" cy="99" rx="28" ry="9" fill="#c98b4a"/>`,
+  mixen: `<path d="M50 84 h140 q-6 52 -70 52 q-64 0 -70 -52z" fill="#d8c7a3" stroke="#b8a37c" stroke-width="3"/>${GESICHT(120, 104)}
+    <g class="wackeln" style="transform-origin:120px 90px"><rect x="116" y="14" width="8" height="46" rx="4" fill="#765c3d"/>
+    <path d="M120 60 q-22 22 0 40 q22 -18 0 -40 M120 60 q-12 22 0 40 q12 -18 0 -40" stroke="#9aa2a6" stroke-width="3" fill="none"/></g>`,
+  abgiessen: `<rect x="70" y="112" width="100" height="26" rx="12" fill="#9aa2a6"/><path d="M74 112 q46 30 92 0" fill="#7d868a"/>
+    <g class="b kippen"><rect x="96" y="28" width="96" height="56" rx="14" fill="#c96f4a"/><rect x="90" y="24" width="108" height="12" rx="6" fill="#a85a3b"/>${GESICHT(144, 54)}</g>
+    ${[100, 112, 124].map((x, i) => `<circle class="b streuen" style="animation-delay:${i * .3}s" cx="${x}" cy="70" r="4" fill="#7fb3d5"/>`).join("")}`,
+  wuerzen: `<ellipse cx="120" cy="128" rx="66" ry="12" fill="#d8c7a3"/><g class="b wackeln"><rect x="100" y="22" width="40" height="58" rx="12" fill="#f4efe3" stroke="#b8a37c" stroke-width="3"/>
+    <rect x="100" y="16" width="40" height="14" rx="6" fill="#536b45"/>${GESICHT(120, 50)}</g>
+    ${[108, 118, 128, 136].map((x, i) => `<circle class="b streuen" style="animation-delay:${i * .25}s" cx="${x}" cy="86" r="2.5" fill="#2d3329"/>`).join("")}`,
+  anrichten: `<ellipse cx="120" cy="112" rx="92" ry="26" fill="#fff" stroke="#d8c7a3" stroke-width="4"/><ellipse cx="120" cy="104" rx="56" ry="18" fill="#c96f4a"/>
+    <circle cx="104" cy="98" r="7" fill="#5e8c3a"/><circle cx="132" cy="100" r="6" fill="#f2b632"/>${DAMPF(120, 82)}
+    ${[[40, 50], [196, 46], [176, 20], [62, 22]].map(([x, y], i) => `<path class="b funkeln" style="animation-delay:${i * .4}s" d="M${x} ${y - 10} l3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3z" fill="#e2b44b"/>`).join("")}`,
+  warten: `<circle cx="120" cy="84" r="54" fill="#fff" stroke="#536b45" stroke-width="8"/><rect x="110" y="18" width="20" height="14" rx="4" fill="#536b45"/>
+    <g class="zeiger" style="transform-origin:120px 84px"><rect x="117" y="44" width="6" height="42" rx="3" fill="#c96f4a"/></g><circle cx="120" cy="84" r="6" fill="#2d3329"/>`,
+  koch: `<g class="b huepfen"><path d="M80 70 q-26 -6 -18 -30 q10 -22 34 -12 q10 -22 32 -10 q22 -14 34 8 q24 -4 22 22 q-4 20 -26 22z" fill="#fff" stroke="#d8c7a3" stroke-width="3"/>
+    <rect x="80" y="66" width="80" height="22" rx="4" fill="#fff" stroke="#d8c7a3" stroke-width="3"/><ellipse cx="120" cy="116" rx="40" ry="30" fill="#f1c4a2"/>${GESICHT(120, 112)}</g>`,
+};
+function szene(text) {
+  const t = String(text || "").toLowerCase();
+  const art = /abgie|abtropf|sieb/.test(t) ? "abgiessen" : /würz|wuerz|salz|pfeffer|abschmeck/.test(t) ? "wuerzen"
+    : /schneid|würfel|wuerfel|hack|schäl|schael|halbier|reib|hobel|zerkleiner/.test(t) ? "schneiden"
+    : /knet|teig|form/.test(t) ? "kneten" : /brat|pfanne|röst|roest|anschwitz|brutzel/.test(t) ? "braten"
+    : /ofen|back|überback|ueberback|grill|vorheiz/.test(t) ? "backen" : /püri|pueri|mix|schlag|verquirl|schneebesen/.test(t) ? "mixen"
+    : /servier|anricht|garnier|guten appetit|genie/.test(t) ? "anrichten" : /wart|ruhen|ziehen lassen|abkühl|abkuehl|quell|marinier/.test(t) ? "warten"
+    : /koch|rühr|ruehr|köchel|koechel|simmer|topf|brühe|bruehe|aufgie/.test(t) ? "kochen" : "koch";
+  return `<svg class="szene" viewBox="0 0 240 150" aria-hidden="true">${SZENEN[art]}</svg>`;
+}
+
 // ---------- Kochmodus ----------
 function kochenOeffnen(g) {
   const f = portionen() / (g.portionen || portionen());
@@ -615,14 +703,15 @@ function kochZeichnen() {
   const p = Math.round(koch.basis * koch.faktor);
   let mitte;
   if (koch.schritt < 0) {
-    mitte = `<div class="schritt-nr">ZUTATEN FÜR ${p} PORTIONEN</div>
+    mitte = (g.bild ? `<img class="gericht-bild" src="${esc(g.bild)}" alt="" onerror="this.outerHTML=szene('anrichten')">` : szene("anrichten"))
+      + `<div class="schritt-nr">ZUTATEN FÜR ${p} PORTIONEN</div>
       <div class="zaehler klein" style="justify-content:flex-start;gap:12px;margin-bottom:8px"><button data-a="kfaktor" data-n="-1">${ic("minus")}</button><b>${p}</b>
       <button data-a="kfaktor" data-n="1">${ic("plus")}</button><span class="klein">Portionen</span></div>` +
       (g.zutaten || []).map((z, i) => `<div class="zutat ${koch.abgehakt.has(i) ? "abgehakt" : ""}" data-a="khaken" data-i="${i}">
         <span class="menge">${z.menge != null ? zahl(z.menge * koch.faktor) : ""} ${esc(z.einheit || "")}</span><span>${esc(z.name)}</span></div>`).join("");
   } else {
     const s = schritte[koch.schritt] || { text: "" };
-    mitte = `<div class="schritt-nr">SCHRITT ${koch.schritt + 1} VON ${n}</div><div class="schritt-text">${esc(s.text)}</div>
+    mitte = `${szene(s.text)}<div class="schritt-nr">SCHRITT ${koch.schritt + 1} VON ${n}</div><div class="schritt-text">${esc(s.text)}</div>
       ${s.timer_min ? `<div style="margin-top:22px"><button class="knopf gold gross" style="width:auto" data-a="ktimer" data-n="${s.timer_min}">${ic("uhr")} Timer ${s.timer_min} Minuten starten</button></div>` : ""}`;
   }
   const anteil = n ? Math.max(0, (koch.schritt + 1) / n) : 0;
@@ -705,14 +794,14 @@ async function aktion(el) {
   if (a === "setzrezept") {
     const r = daten.rezepte.find(x => x.id === el.dataset.id); if (!r) return;
     daten.plan[k] = { art: "kochen", titel: r.titel, kurz: r.kurz || "", zeit_min: r.zeit_min || 0, portionen: r.portionen || portionen(), zutaten: r.zutaten || [],
-      schritte: r.schritte || [], rezept_id: r.id, grund: "selbst ausgesucht", fest: true };
+      schritte: r.schritte || [], rezept_id: r.id, grund: "selbst ausgesucht", fest: true, bild: r.bild || "" };
     schliessen(); meldung(`${r.titel} am ${kurzDatum(vonIso(k))} eingeplant`); zeichnen(); speichern(); return;
   }
   if (a === "merken") {
     const g = daten.plan[k]; if (!g) return;
     const id = Math.random().toString(16).slice(2, 10);
     daten.rezepte.push({ id, titel: g.titel, kurz: g.kurz || "", portionen: g.portionen || portionen(), zeit_min: g.zeit_min || 0, zutaten: g.zutaten || [],
-      schritte: g.schritte || [], quelle: "Wochenplan", favorit: true, erstellt: iso(new Date()), notiz: "" });
+      schritte: g.schritte || [], quelle: "Wochenplan", favorit: true, erstellt: iso(new Date()), notiz: "", bild: g.bild || "" });
     g.rezept_id = id; meldung("Als Lieblingsrezept gespeichert"); zeichnen(); speichern(); return;
   }
   if (a === "gekocht") { const g = daten.plan[k]; if (g) { g.gekocht = !g.gekocht; zeichnen(); speichern(); } return; }
@@ -826,7 +915,12 @@ async function aktion(el) {
   if (a === "kfertig") {
     const k2 = Object.keys(daten.plan).find(x => daten.plan[x] === koch.g);
     if (k2) { daten.plan[k2].gekocht = true; speichern(); }
-    $("koch").classList.remove("offen"); koch = null; meldung("Guten Appetit!"); zeichnen(); return;
+    const feier = document.createElement("div");
+    feier.className = "fertig-feier";
+    feier.innerHTML = szene("anrichten") + `<h2>Guten Appetit!</h2><div class="klein">${esc(koch.g.titel)}</div>`;
+    document.body.appendChild(feier);
+    setTimeout(() => feier.remove(), 3500);
+    $("koch").classList.remove("offen"); koch = null; zeichnen(); return;
   }
 }
 function entwurfLesen() {
