@@ -75,12 +75,13 @@ const DATEN_URL = "/local/netzwerk_daten.json";
 const fwLaeuft = {};
 // Port-Belegung, wie Marco sie angesagt hat (31.10.2026). Wird einmal übernommen, wo noch nichts eingetragen ist,
 // danach gilt nur noch die eigene Beschriftung (am Port antippen und ändern).
+const VORBELEGT = 2;   // hochzählen, wenn die Vorbelegung korrigiert wird (überschreibt nur unveränderte Einträge)
 const VORBELEGUNG = [
   { modell: /SG2428P/i, ports: {
     1: { name: "Zuleitung draußen", notiz: "Access Points draußen" },
     2: { name: "IKEA Dirigera Hub" },
-    3: { name: "PV-Anlage", dose: "Dachboden" },
-    4: { name: "Access Point HWR", dose: "HWR-Raum" },
+    3: { name: "Access Point HWR", dose: "HWR-Raum" },
+    4: { name: "PV-Anlage", dose: "Dachboden" },
     5: { name: "Access Point Hoftor", dose: "Hoftor vorne" },
     6: { name: "Viessmann Gridbox" },
     7: { name: "Home Assistant", dose: "Küche, normale Dose" },
@@ -94,15 +95,21 @@ const VORBELEGUNG = [
     3: { name: "Switch SG2428P", notiz: "geht in Port 24 vom Switch" } } }
 ];
 async function vorbelegen() {
-  let neu = false;
+  if ((daten.vorbelegt || 0) >= VORBELEGT) return;
+  const alteNamen = new Set(VORBELEGUNG.flatMap(v => Object.values(v.ports).map(b => b.name)));
+  let gefunden = false;
   for (const g of GERAETE) {
-    const v = VORBELEGUNG.find(x => x.modell.test(g.modell + " " + g.name)); if (!v) continue;
+    const v = VORBELEGUNG.find(x => x.modell.test(g.modell + " " + g.name)); if (!v || !g.ports.length) continue;
+    gefunden = true;
     for (const [nr, b] of Object.entries(v.ports)) {
-      const k = g.id + "|" + nr; if (daten.ports[k]) continue;
-      daten.ports[k] = Object.assign({ name: "", dose: "", notiz: "" }, b); neu = true;
+      const k = g.id + "|" + nr, alt = daten.ports[k];
+      if (alt && !alteNamen.has(alt.name)) continue;   // selbst geändert → bleibt
+      daten.ports[k] = Object.assign({ name: "", dose: "", notiz: "" }, b);
     }
   }
-  if (neu) await speichern();
+  if (!gefunden) return;   // Switch noch nicht da → später nochmal
+  daten.vorbelegt = VORBELEGT;
+  await speichern();
 }
 let GERAETE = [], daten = { ports: {}, geraete: {} }, wahl = null, letzterFinger = 0;
 

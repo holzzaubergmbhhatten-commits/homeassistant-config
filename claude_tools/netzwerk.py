@@ -20,7 +20,8 @@ def main():
         raise ValueError("unerwartetes Format")
     tmp = DATEN + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump({"ports": neu.get("ports") or {}, "geraete": neu.get("geraete") or {}}, f, ensure_ascii=False)
+        json.dump({"ports": neu.get("ports") or {}, "geraete": neu.get("geraete") or {},
+                   "vorbelegt": int(neu.get("vorbelegt") or 0)}, f, ensure_ascii=False)
     os.replace(tmp, DATEN)
     print(json.dumps({"ok": True}))
 
