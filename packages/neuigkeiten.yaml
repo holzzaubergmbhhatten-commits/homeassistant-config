@@ -1,0 +1,36 @@
+# Einmalig: Übersicht der Neuerungen (31.10.2026) per Telegram an Mirka (claude_tools/neuigkeiten.py, Markierungsdatei
+# /config/.neuigkeiten_2026_10_31 verhindert Wiederholungen). Klappt es nicht, bekommt Marco nach dem Start einen Hinweis.
+shell_command:
+  neuigkeiten: python3 /config/claude_tools/neuigkeiten.py {{ wert }}
+
+automation:
+  - id: neuigkeiten_an_mirka
+    alias: "Neuigkeiten 31.10.: Übersicht an Mirka"
+    mode: single
+    triggers:
+      - trigger: homeassistant
+        event: start
+        id: start
+      - trigger: time_pattern
+        hours: "/2"
+        minutes: 17
+    actions:
+      - delay: "00:03:00"
+      - action: shell_command.neuigkeiten
+        continue_on_error: true
+        data:
+          wert: >-
+            {{ {'chats': (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list}
+               | to_json | base64_encode }}
+        response_variable: roh
+      - variables:
+          r: >-
+            {% set a = roh.stdout | default('') if roh is defined and roh is mapping else '' %}
+            {{ a | from_json if (a | string).startswith('{') else {'ok': false, 'fehler': 'keine Antwort'} }}
+      - if: "{{ trigger.id == 'start' and not r.ok | default(false) }}"
+        then:
+          - action: telegram_bot.send_message
+            continue_on_error: true
+            data:
+              chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
+              message: "⚠️ Die Übersicht an Mirka ging noch nicht raus: {{ r.fehler | default('?') }}. Mirka muss dem Bot einmal etwas schreiben."
