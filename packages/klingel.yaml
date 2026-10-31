@@ -1,7 +1,9 @@
-# Ring-Klingel am Hoftor:
+# Klingeln (Ring am Hoftor und jede weitere Klingel, z. B. die neue an der Haustür):
 # Klingelt es, zeigt der Touchmonitor sofort das Kamerabild mit Knopf "Hoftor öffnen"
 # und nach 3 Minuten wieder das Dashboard. Zusätzlich Telegram-Nachricht mit Foto.
-# Die Klingel-Entität wird am Namen erkannt (event.hoftor_klingel_ding / _klingeln),
+# Erkannt wird jede Ereignis-Entität mit Geräteklasse "doorbell" (oder Name mit klingel/doorbell/ding) – neue Klingeln
+# funktionieren dadurch ohne Umbau. Foto: Kamera derselben Klingel, am Hoftor zuerst die Tapo Hof-Tor.
+# Nachricht geht ausdrücklich an alle Chats aus input_text.telegram_empfaenger (ohne chat_id kam nach Updates nichts mehr an).
 # Auf dem Monitor: Ring "Letzte Aufnahme" (camera.hoftor_letzte_aufnahme) + Tapo Hof-Tor.
 #
 # Foto: Vorher wird das alte Foto gelöscht und danach geprüft, ob ein NEUES Foto da ist – sonst wurde früher
@@ -14,7 +16,7 @@ shell_command:
 
 automation:
   - id: ring_klingel_hoftor
-    alias: "Klingel: Hoftor – Kamera auf dem Monitor zeigen"
+    alias: "Klingel: Kamera auf dem Monitor und Foto per Telegram"
     mode: single
     max_exceeded: silent
     triggers:
@@ -23,18 +25,33 @@ automation:
     conditions:
       - condition: template
         value_template: >-
-          {{ trigger.event.data.entity_id is match('event\.hoftor_klingel_(ding|klingeln|klingel)$')
-             and trigger.event.data.old_state is not none
-             and trigger.event.data.new_state is not none
-             and trigger.event.data.old_state.state not in ['unavailable', 'unknown']
-             and trigger.event.data.new_state.state not in ['unavailable', 'unknown'] }}
+          {% set e = trigger.event.data %}
+          {% set bs = e.entity_id is match('binary_sensor\.') and e.entity_id is search('klingel|doorbell|visitor|besucher|_ding')
+             and e.old_state is not none and e.new_state is not none and e.old_state.state == 'off' and e.new_state.state == 'on' %}
+          {{ bs or e.entity_id is match('event\.')
+             and e.old_state is not none and e.new_state is not none
+             and e.old_state.state not in ['unavailable', 'unknown']
+             and e.new_state.state not in ['unavailable', 'unknown']
+             and (e.new_state.attributes.device_class | default('')) not in ['motion']
+             and ((e.new_state.attributes.device_class | default('')) == 'doorbell'
+                  or e.entity_id is search('(klingel|doorbell)(_(ding|klingeln|klingel|gedrueckt|pressed))?$|_ding$')) }}
     actions:
       - variables:
-          # Foto von der Tapo-Kamera am Hof-Tor (Dauerstrom, sofort aktuell), sonst Ring
+          eid: "{{ trigger.event.data.entity_id }}"
+          hoftor: "{{ 'hoftor' in eid }}"
+          geraet: "{{ device_attr(eid, 'name_by_user') or device_attr(eid, 'name') or 'Klingel' }}"
+          ort: "{{ 'am Hoftor' if hoftor else ('an der Haustür' if geraet is search('(?i)haus|tür|tuer|front|door') else '– ' ~ geraet) }}"
+          eigene: >-
+            {% set d = device_id(eid) %}
+            {{ (device_entities(d) | select('match', 'camera\.') | reject('is_state', ['unknown', 'unavailable']) | list) if d else [] }}
           kameras: >-
-            {% set tapo = ['camera.draussen_hot_tor_kamera'] if states('camera.draussen_hot_tor_kamera') not in ['unknown', 'unavailable'] else [] %}
-            {{ tapo + (states.camera | rejectattr('state', 'in', ['unknown', 'unavailable'])
-                       | map(attribute='entity_id') | select('search', 'hoftor') | list) }}
+            {% set tapo = ['camera.draussen_hot_tor_kamera'] if hoftor and states('camera.draussen_hot_tor_kamera') not in ['unknown', 'unavailable'] else [] %}
+            {% set hof = (states.camera | rejectattr('state', 'in', ['unknown', 'unavailable']) | map(attribute='entity_id') | select('search', 'hoftor') | list) if hoftor else [] %}
+            {{ (tapo + eigene + hof) | unique | list }}
+          streams: >-
+            {{ (['draussen_hot_tor_kamera', 'hoftor_klingel'] if hoftor else []) + (eigene | map('replace', 'camera.', '') | list) }}
+          chats: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
           uhrzeit: "{{ now().strftime('%H:%M') }}"
       # Bildschirm wecken (nachts bleibt die 1-Minuten-Abschaltung, aber erst nach 3 Minuten)
       - action: script.monitor_an
@@ -45,14 +62,14 @@ automation:
         continue_on_error: true
         data:
           url: http://localhost:8123/flur-display/klingel
-      # altes Foto weg, dann der Reihe nach Tapo und Ring versuchen, bis ein neues Foto da ist
+      # altes Foto weg, dann der Reihe nach versuchen, bis ein neues Foto da ist
       - action: shell_command.klingel_foto_loeschen
         continue_on_error: true
       - variables:
           foto_ok: false
       # 1. Wahl: aktuelles Einzelbild über go2rtc (dieselbe Quelle wie das Livebild auf dem Monitor)
       - repeat:
-          for_each: ["draussen_hot_tor_kamera", "hoftor_klingel"]
+          for_each: "{{ streams }}"
           sequence:
             - if: "{{ not foto_ok }}"
               then:
@@ -63,7 +80,7 @@ automation:
                     datei: /media/klingel.jpg
                   response_variable: go2rtc
                 - variables:
-                    foto_ok: "{{ go2rtc is defined and (go2rtc.stdout | default('') | trim) == 'ok' }}"
+                    foto_ok: "{{ go2rtc is defined and go2rtc is mapping and (go2rtc.stdout | default('') | trim) == 'ok' }}"
       # 2. Wahl: Schnappschuss der Home-Assistant-Kamera
       - repeat:
           for_each: "{{ kameras if not foto_ok else [] }}"
@@ -80,23 +97,29 @@ automation:
                   continue_on_error: true
                   response_variable: pruefung
                 - variables:
-                    foto_ok: "{{ pruefung is defined and (pruefung.stdout | default('') | trim) == 'ok' }}"
-      - if: "{{ foto_ok }}"
-        then:
-          - action: telegram_bot.send_photo
-            continue_on_error: true
-            data:
-              file: /media/klingel.jpg
-              caption: "🔔 Es klingelt am Hoftor ({{ uhrzeit }} Uhr)"
-        else:
-          - action: telegram_bot.send_message
-            continue_on_error: true
-            data:
-              message: "🔔 Es klingelt am Hoftor ({{ uhrzeit }} Uhr) – kein aktuelles Kamerabild verfügbar."
+                    foto_ok: "{{ pruefung is defined and pruefung is mapping and (pruefung.stdout | default('') | trim) == 'ok' }}"
+      # an jeden Empfänger einzeln (mit Foto, sonst als Text)
+      - repeat:
+          for_each: "{{ chats }}"
+          sequence:
+            - if: "{{ foto_ok }}"
+              then:
+                - action: telegram_bot.send_photo
+                  continue_on_error: true
+                  data:
+                    chat_id: "{{ repeat.item | int }}"
+                    file: /media/klingel.jpg
+                    caption: "🔔 Es klingelt {{ ort }} ({{ uhrzeit }} Uhr)"
+              else:
+                - action: telegram_bot.send_message
+                  continue_on_error: true
+                  data:
+                    chat_id: "{{ repeat.item | int }}"
+                    message: "🔔 Es klingelt {{ ort }} ({{ uhrzeit }} Uhr){{ '' if foto_ok else ' – kein aktuelles Kamerabild verfügbar.' }}"
       - delay: "00:03:00"
       - action: rest_command.kiosk_dashboard
+        continue_on_error: true
       - action: script.monitor_an
         continue_on_error: true
         data:
           timeout: "{{ 60 if is_state('binary_sensor.monitor_nachtmodus', 'on') else 0 }}"
-
