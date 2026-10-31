@@ -51,6 +51,11 @@ script:
               message: >-
                 {% if antwort.gefunden | default([]) %}📡 Omada-Controller gefunden: {{ antwort.gefunden | map(attribute='url') | join(' oder ') }}
                 – diese Adresse bei der Integration „TP-Link Omada“ als Host eintragen (SSL prüfen: aus).
+                {% for t in antwort.gefunden %}
+                🔎 {{ t.url }} (Version {{ t.version }}): {{ t.test | default('') }}{% endfor %}
+                {% if antwort.log | default([]) %}
+                📄 Letzte Omada-Meldungen im Protokoll:
+                {{ antwort.log | join('\n') }}{% endif %}
                 {%- else %}📡 Kein Omada-Controller im Netz {{ antwort.netz | default('') }} gefunden{{ (': ' ~ antwort.fehler) if antwort.fehler is defined else '' }}.{% endif %}
       - stop: fertig
         response_variable: antwort

@@ -30,10 +30,38 @@ def pruefen(url):
             d = json.loads(r.read(20000).decode("utf-8", "replace"))
         res = d.get("result") or {}
         if res.get("omadacId"):
-            return {"url": url, "version": str(res.get("controllerVer") or "")}
+            return {"url": url, "version": str(res.get("controllerVer") or ""), "id": res["omadacId"]}
     except Exception:  # noqa: BLE001
         return None
     return None
+
+
+def anmeldung_testen(t):
+    """Macht dasselbe wie die HA-Integration beim Einrichten, aber mit einem absichtlich falschen Test-Benutzer:
+    Antwortet der Controller „Benutzer/Passwort falsch“, ist die Verbindung in Ordnung."""
+    try:
+        anfrage = urllib.request.Request(
+            f"{t['url']}/{t['id']}/api/v2/login",
+            data=json.dumps({"username": "ha-verbindungstest", "password": "x"}).encode(),
+            headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(anfrage, timeout=8, context=KONTEXT) as r:
+            d = json.loads(r.read(20000).decode("utf-8", "replace"))
+        return f"Anmeldeseite antwortet (Code {d.get('errorCode')}: {str(d.get('msg') or '')[:80]})"
+    except Exception as fehler:  # noqa: BLE001
+        return f"Anmeldeseite NICHT erreichbar: {str(fehler)[:120]}"
+
+
+def log_zeilen():
+    """Letzte Fehlermeldungen der Omada-Integration aus dem Home-Assistant-Protokoll (falls vorhanden)."""
+    for datei in ("/config/home-assistant.log", "/config/home-assistant.log.1"):
+        try:
+            with open(datei, encoding="utf-8", errors="replace") as f:
+                zeilen = [z.strip() for z in f if "omada" in z.lower()]
+            if zeilen:
+                return [z[-220:] for z in zeilen[-4:]]
+        except OSError:
+            continue
+    return []
 
 
 def main():
@@ -41,7 +69,10 @@ def main():
     ziele = [f"https://{netz}.{i}" + (":8043" if port == 8043 else "") for i in range(1, 255) for port in (443, 8043)]
     with ThreadPoolExecutor(max_workers=64) as pool:
         treffer = [x for x in pool.map(pruefen, ziele) if x]
-    print(json.dumps({"ok": True, "netz": netz + ".0/24", "gefunden": treffer}))
+    for t in treffer:
+        t["test"] = anmeldung_testen(t)
+        del t["id"]
+    print(json.dumps({"ok": True, "netz": netz + ".0/24", "gefunden": treffer, "log": log_zeilen()}, ensure_ascii=False))
 
 
 if __name__ == "__main__":
