@@ -14,8 +14,17 @@ automation:
       - trigger: time_pattern
         hours: "/2"
         minutes: 17
+      # „Ich bin Mirka“ an den Bot → gleich danach senden
+      - trigger: event
+        event_type: telegram_text
+        id: ichbin
     actions:
-      - delay: "00:03:00"
+      - if: >-
+          {{ trigger.id == 'ichbin' and not ((trigger.event.data.text | default('') | string)
+             is match('^\s*(ich\s+bin|ich\s+hei(ß|ss)e|mein\s+name\s+ist|hier\s+ist)\s+(mirka|mika)', ignorecase=True)) }}
+        then:
+          - stop: keine Vorstellung
+      - delay: "{{ '00:00:15' if trigger.id == 'ichbin' else '00:03:00' }}"
       - action: shell_command.neuigkeiten
         continue_on_error: true
         data:
@@ -27,10 +36,10 @@ automation:
           r: >-
             {% set a = roh.stdout | default('') if roh is defined and roh is mapping else '' %}
             {{ a | from_json if (a | string).startswith('{') else {'ok': false, 'fehler': 'keine Antwort'} }}
-      - if: "{{ trigger.id == 'start' and not r.ok | default(false) }}"
+      - if: "{{ trigger.id in ['start', 'ichbin'] and not r.ok | default(false) }}"
         then:
           - action: telegram_bot.send_message
             continue_on_error: true
             data:
               chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
-              message: "⚠️ Die Übersicht an Mirka ging noch nicht raus: {{ r.fehler | default('?') }}. Mirka muss dem Bot einmal etwas schreiben."
+              message: "⚠️ Die Übersicht an Mirka ging noch nicht raus: {{ r.fehler | default('?') }}. Lösung: Mirka schreibt dem Bot einmal genau „Ich bin Mirka“ – danach kommt die Übersicht von selbst (spätestens nach 2 Stunden)."

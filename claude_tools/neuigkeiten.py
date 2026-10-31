@@ -63,9 +63,14 @@ def main():
         print(json.dumps({"ok": True, "schon": True}))
         return
     chats = [str(c) for c in json.loads(base64.b64decode(sys.argv[1]).decode("utf-8")).get("chats") or []]
-    mirka, name = akte.empfaenger_finden("Mirka", chats)
+    mirka, name = None, None
+    for n in ("Mirka", "Mika", "Mirk"):
+        mirka, name = akte.empfaenger_finden(n, chats)
+        if mirka:
+            break
     if not mirka:
-        print(json.dumps({"ok": False, "fehler": "Mirka nicht unter den Telegram-Empfängern gefunden"}))
+        print(json.dumps({"ok": False, "fehler": "Mirka finde ich nicht unter den Telegram-Empfängern (bekannt: "
+                                                  + akte.bekannte_namen(chats) + f", {len(chats)} Chats)"}, ensure_ascii=False))
         return
     for t in TEXTE:
         akte.senden(mirka, t)
