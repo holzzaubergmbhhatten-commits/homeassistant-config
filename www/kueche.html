@@ -231,7 +231,7 @@ const zahl = v => v == null || !isFinite(v) ? "" : (Math.abs(v - Math.round(v)) 
 const STANDARD = {
   einstellungen: { erwachsene: 2, kinder: [{ alter: 8 }], kinder_gleich: true, tage: [0, 1, 2, 3, 4, 5, 6], budget: 75, stil: ["Familienlieblinge"],
     reste: "1", ernaehrung: "keine", allergien: [], zeit: 30, geraete: ["Herd", "Backofen"], platz: ["Kühlschrank", "Gefrierschrank"],
-    arbeitszeiten: "", hinweise: "", laden: "Rewe", eingerichtet: false },
+    arbeitszeiten: "", hinweise: "", laden: "Rewe", angebote: true, eingerichtet: false },
   rezepte: [], plan: {}, vorrat: [], hinweis_woche: {},
 };
 let daten = null, reiter = "woche", woche = montagVon(new Date()), arbeit = null, fehlerText = "", suche = "";
@@ -316,6 +316,7 @@ function marken(g) {
   if (g.zeit_min) m.push(`<span class="marke">${ic("uhr")} ${g.zeit_min} min</span>`);
   if (g.kosten_eur) m.push(`<span class="marke">ca. ${zahl(g.kosten_eur)} €</span>`);
   for (const v of g.nutzt_vorrat || []) m.push(`<span class="marke gruen">${esc(v)}</span>`);
+  for (const a of g.angebote || []) m.push(`<span class="marke gold">Angebot: ${esc(a)}</span>`);
   if (g.rezept_id && (daten.rezepte.find(r => r.id === g.rezept_id) || {}).favorit) m.push(`<span class="marke gold">Liebling</span>`);
   return m.join("");
 }
@@ -349,6 +350,13 @@ function wocheSeite() {
     <div><b>${kosten ? zahl(Math.round(kosten)) + " €" : daten.einstellungen.budget + " €"}</b><span>${kosten ? "geschätzt" : "Budget"}</span></div>
     <div><b>${schnitt} min</b><span>Kochzeit</span></div></div>`;
   if (hinweis) h += `<div class="hinweis">${esc(hinweis)}</div>`;
+  const ang = daten.angebote || {};
+  if (daten.einstellungen.angebote !== false && (ang.liste || []).length) {
+    const genutzt = plan.reduce((n, g) => n + (g.angebote || []).length, 0);
+    h += `<div class="zeile" style="margin-bottom:12px"><span class="klein">Sonderangebote bei ${esc(ang.laden)}${ang.gueltig ? " (" + esc(ang.gueltig) + ")" : ""}:
+      ${ang.liste.length} gefunden${genutzt ? `, ${genutzt} eingeplant` : ""}</span>
+      <button class="knopf klein-k" data-a="angebote">Angebote zeigen</button></div>`;
+  }
   h += `<div class="zeile" style="margin-bottom:12px">
     <button class="knopf voll" data-a="planen" ${arbeit ? "disabled" : ""}>${ic("zauber")} ${plan.length ? "Woche neu planen" : "Woche planen lassen"}</button>
     <button class="knopf" data-a="einkauf" ${plan.length ? "" : "disabled"}>${ic("wagen")} Einkaufsliste</button></div>`;
@@ -450,7 +458,9 @@ function einstellungenSeite() {
     <div class="karte"><h2 class="serif">Wochenbudget</h2><div class="klein">Wie viel ihr pro Woche fürs Abendessen ausgeben möchtet (für ${portionenVon(e)} Personen).</div>
       <div class="zaehler"><b id="budgetzahl">${e.budget} €</b></div>
       <input type="range" id="budget" min="25" max="200" step="5" value="${e.budget}">
-      <label class="f">Wo kauft ihr meistens ein?</label>${kacheln(LAEDEN, e.laden, "laden", false)}</div>
+      <label class="f">Wo kauft ihr meistens ein?</label>${kacheln(LAEDEN, e.laden, "laden", false)}
+      <div style="margin-top:10px"><button class="knopf ${e.angebote !== false ? "voll" : ""}" data-a="ebool" data-f="angebote">${ic("haken")} Sonderangebote berücksichtigen</button></div>
+      <div class="klein" style="margin-top:6px">Claude schaut vor dem Planen in den aktuellen Prospekt eures Ladens und plant günstige Angebote mit ein.</div></div>
     <div class="karte"><h2 class="serif">Was ist euer Stil?</h2><div class="klein">Wähle bis zu 3 aus.</div>${kacheln(STILE, e.stil, "stil", true)}</div>
     <div class="karte"><h2 class="serif">Mögt ihr Reste?</h2><div class="klein">Einmal kochen, zweimal essen – nur mit Gerichten, die aufgewärmt gut schmecken.</div>${kacheln(RESTE, e.reste, "reste", false)}</div>
     <div class="karte"><h2 class="serif">Ernährung</h2><div class="klein">Diese wird nie gebrochen.</div>${kacheln(ERNAEHRUNG, e.ernaehrung, "ernaehrung", false)}
@@ -664,6 +674,13 @@ async function aktion(el) {
   if (a === "gekocht") { const g = daten.plan[k]; if (g) { g.gekocht = !g.gekocht; zeichnen(); speichern(); } return; }
   if (a === "kochen") { const g = daten.plan[k]; if (g) kochenOeffnen(g); return; }
   if (a === "einkauf") { einkauf = null; einkaufBlatt(); return; }
+  if (a === "angebote") {
+    const ang = daten.angebote || {};
+    oeffnen(`<h3>Angebote bei ${esc(ang.laden || "")}</h3><div class="klein">${esc(ang.gueltig || "")} · aus dem Internet zusammengesucht, Preise ohne Gewähr</div>` +
+      (ang.liste || []).map(x => `<div class="ek"><div class="mitte"><b>${esc(x.name)}</b><div class="klein">${esc(x.preis)}${x.info ? " · " + esc(x.info) : ""}</div></div></div>`).join("") +
+      `<div style="margin-top:14px"><button class="knopf" data-a="zu">Schließen</button></div>`);
+    return;
+  }
   if (a === "ekwahl") { const z = einkauf.liste[+el.dataset.i]; z.an = !z.an; einkaufBlatt(); return; }
   if (a === "ekok") {
     const liste = einkauf.liste.filter(z => z.an).map(z => ({ text: z.text, notiz: z.notiz }));

@@ -49,7 +49,7 @@ STANDARD = {
     "einstellungen": {"erwachsene": 2, "kinder": [{"alter": 8}], "kinder_gleich": True, "tage": [0, 1, 2, 3, 4, 5, 6],
                       "budget": 75, "stil": ["Familienlieblinge"], "reste": "1", "ernaehrung": "keine", "allergien": [],
                       "zeit": 30, "geraete": ["Herd", "Backofen"], "platz": ["Kühlschrank", "Gefrierschrank"],
-                      "arbeitszeiten": "", "hinweise": "", "laden": "Rewe", "eingerichtet": False},
+                      "arbeitszeiten": "", "hinweise": "", "laden": "Rewe", "angebote": True, "eingerichtet": False},
     "rezepte": [], "plan": {}, "vorrat": [], "hinweis_woche": {},
 }
 
@@ -154,7 +154,8 @@ def gericht_sauber(g):
     art = g.get("art") if g.get("art") in ("kochen", "reste", "auswaerts", "frei") else "kochen"
     aus = {"art": art, "titel": str(g.get("titel") or "")[:80], "kurz": str(g.get("kurz") or "")[:200],
            "grund": str(g.get("grund") or "")[:200], "zeit_min": int(float(g.get("zeit_min") or 0) or 0),
-           "portionen": int(float(g.get("portionen") or 0) or 0), "nutzt_vorrat": [str(x)[:40] for x in g.get("nutzt_vorrat") or []][:6]}
+           "portionen": int(float(g.get("portionen") or 0) or 0), "nutzt_vorrat": [str(x)[:40] for x in g.get("nutzt_vorrat") or []][:6],
+           "angebote": [str(x)[:50] for x in g.get("angebote") or []][:4]}
     try:
         aus["kosten_eur"] = round(float(g.get("kosten_eur") or 0), 2)
     except (TypeError, ValueError):
@@ -235,22 +236,37 @@ def termine_text(termine, von, bis):
 
 # ---------- Claude ----------
 
-def claude(system, inhalt, max_tokens=4000, effort="low", timeout=240):
+def claude(system, inhalt, max_tokens=4000, effort="low", timeout=240, werkzeuge=None):
     import anthropic
     import garten_ki
     client = anthropic.Anthropic(api_key=garten_ki.api_schluessel(), timeout=timeout, max_retries=1)
-    a = client.messages.create(model=garten_ki.MODELL, max_tokens=max_tokens, system=system,
-                               messages=[{"role": "user", "content": inhalt}],
-                               extra_body={"output_config": {"effort": effort}, "fallbacks": "default"},
-                               extra_headers={"anthropic-beta": "server-side-fallback-2026-07-01"})
+    nachrichten = [{"role": "user", "content": inhalt}]
+    extra = {"tools": werkzeuge} if werkzeuge else {}
+    for _ in range(4):
+        a = client.messages.create(model=garten_ki.MODELL, max_tokens=max_tokens, system=system, messages=nachrichten,
+                                   extra_body=dict({"output_config": {"effort": effort}, "fallbacks": "default"}, **extra),
+                                   extra_headers={"anthropic-beta": "server-side-fallback-2026-07-01"})
+        # Websuche dauert länger: die Antwort kommt dann in Etappen – einfach weiterlaufen lassen
+        if a.stop_reason != "pause_turn":
+            break
+        nachrichten = [{"role": "user", "content": inhalt}, {"role": "assistant", "content": a.content}]
     if a.stop_reason == "refusal":
         raise RuntimeError("Claude hat die Anfrage abgelehnt")
     roh = "".join(b.text for b in a.content if getattr(b, "type", "") == "text")
-    m = re.search(r"\{.*\}", roh, re.S)
-    try:
-        return json.loads(m.group(0)) if m else {}
-    except ValueError:
-        raise RuntimeError("Antwort von Claude war unvollständig – bitte nochmal versuchen")
+    # das größte gültige JSON-Objekt im Text nehmen (bei Websuche steht oft erst etwas Text davor)
+    beste, dekoder = None, json.JSONDecoder()
+    for m in re.finditer(r"\{", roh):
+        try:
+            obj, ende = dekoder.raw_decode(roh, m.start())
+        except ValueError:
+            continue
+        if isinstance(obj, dict) and (beste is None or ende - m.start() > beste[1]):
+            beste = (obj, ende - m.start())
+    if beste is None:
+        if "{" in roh:
+            raise RuntimeError("Antwort von Claude war unvollständig – bitte nochmal versuchen")
+        return {}
+    return beste[0]
 
 
 GRUND = """Du bist der Familienkoch und Essensplaner einer Familie in Norddeutschland (Wesermarsch, Resthof mit eigenem Gemüsegarten).
@@ -268,9 +284,48 @@ Kosten grob schätzen (deutsche Supermarktpreise, ohne Basiszutaten). Alles auf 
 
 GERICHT_FORMAT = """{"art": "kochen" | "reste" | "auswaerts" | "frei", "titel": "…", "kurz": "ein Satz, was es ist",
  "grund": "kurz, warum an diesem Tag (z. B. 'Training bis 19 Uhr – geht schnell')", "zeit_min": 25, "portionen": 3,
- "kosten_eur": 9.5, "nutzt_vorrat": ["Kürbis"],
+ "kosten_eur": 9.5, "nutzt_vorrat": ["Kürbis"], "angebote": ["Hähnchenbrust 4,99 €"],
  "zutaten": [{"menge": 500, "einheit": "g", "name": "Hackfleisch", "bereich": "Fleisch & Fisch", "basis": false}],
  "schritte": [{"text": "…", "timer_min": 0}], "rezept_id": "nur wenn es ein gespeichertes Rezept ist"}"""
+
+
+ANGEBOTE = """Du suchst für eine Familie die aktuellen Sonderangebote ihres Supermarkts (Prospekt der Woche) im Internet,
+damit der Essensplan günstige Zutaten nutzt. Suche gezielt (z. B. "<Laden> Prospekt Angebote diese Woche", Seiten wie
+marktguru, kaufDA, meinprospekt oder die Seite des Ladens). Nimm nur Lebensmittel, die man fürs Abendessen kocht (Fleisch, Fisch,
+Gemüse, Obst, Milchprodukte, Käse, Nudeln/Reis, Tiefkühl) – keine Getränke, Süßigkeiten, Drogerie oder Non-Food.
+Preise nur, wenn sie wirklich so angegeben sind. Antworte am Ende NUR mit JSON:
+{"gueltig": "z. B. 02.11.–07.11.", "angebote": [{"name": "Hähnchenbrustfilet", "preis": "4,99 € / 600 g", "info": "statt 7,49 €"}]}
+Höchstens 30 Angebote. Findest du nichts Verlässliches, gib eine leere Liste zurück."""
+
+
+def angebote_holen(d, start):
+    """Sonderangebote des Ladens für die geplante Woche (Websuche), 3 Tage zwischengespeichert. Fehler → ohne Angebote."""
+    e = d["einstellungen"]
+    if not e.get("angebote", True):
+        return []
+    laden = e.get("laden") or "Rewe"
+    alt = d.get("angebote") or {}
+    if alt.get("laden") == laden and alt.get("woche") == montag(start).isoformat() and alt.get("stand", "") >= (date.today() - timedelta(days=2)).isoformat():
+        return alt.get("liste") or []
+    status(True, f"Claude schaut nach den Angeboten bei {laden} …", art="plan")
+    try:
+        a = claude(ANGEBOTE, f"Laden: {laden}, Filiale in der Nähe von 26939 Ovelgönne (Wesermarsch, Niedersachsen; nächste "
+                             f"Städte Brake, Oldenburg). Gesucht: Angebote für die Woche ab {de(montag(start))} {start.year}; gibt es die "
+                             "noch nicht, dann die aktuellen.", max_tokens=6000, effort="low", timeout=200,
+                   werkzeuge=[{"type": "web_search_20260209", "name": "web_search", "max_uses": 6,
+                               "user_location": {"type": "approximate", "city": "Ovelgönne", "region": "Niedersachsen",
+                                                 "country": "DE", "timezone": "Europe/Berlin"}}])
+    except Exception:  # noqa: BLE001 – ohne Angebote planen
+        return alt.get("liste") or [] if alt.get("laden") == laden else []
+    liste = [{"name": str(x.get("name", ""))[:60], "preis": str(x.get("preis", ""))[:40], "info": str(x.get("info", ""))[:60]}
+             for x in a.get("angebote") or [] if isinstance(x, dict) and x.get("name")][:30]
+    with Sperre():
+        dd = daten_laden()
+        dd["angebote"] = {"laden": laden, "woche": montag(start).isoformat(), "stand": date.today().isoformat(),
+                          "gueltig": str(a.get("gueltig") or "")[:40], "liste": liste}
+        json_schreiben(DATEN, dd)
+    d["angebote"] = dd["angebote"]
+    return liste
 
 
 def kontext(d, auftrag, von, bis):
@@ -289,6 +344,11 @@ def kontext(d, auftrag, von, bis):
         teile.append("Was gerade im Garten wächst (Pflanzplan): " + g)
     if auftrag.get("wetter"):
         teile.append(f"Wetter: {auftrag['wetter']}")
+    ang = (d.get("angebote") or {})
+    if ang.get("liste") and e.get("angebote", True):
+        teile.append(f"Sonderangebote bei {ang.get('laden')} ({ang.get('gueltig') or 'diese Woche'}) – nutzt sie, wo es passt, damit es "
+                     "günstiger wird, und nenne sie im Gericht unter \"angebote\": "
+                     + "; ".join(f"{x['name']} {x['preis']}" + (f" ({x['info']})" if x.get("info") else "") for x in ang["liste"]))
     fav = [f"{r['id']}: {r.get('titel')}" for r in d.get("rezepte") or [] if r.get("favorit")][:30]
     andere = [f"{r['id']}: {r.get('titel')}" for r in d.get("rezepte") or [] if not r.get("favorit")][-30:]
     if fav:
@@ -325,6 +385,7 @@ def plan_machen(auftrag):
         raise LeiseFertig()
     feste = {k: v for k, v in (d.get("plan") or {}).items() if start.isoformat() <= k <= bis.isoformat() and v.get("fest")}
     liste = [start + timedelta(days=i) for i in range(tage)]
+    angebote_holen(d, start)
     frage = (kontext(d, auftrag, start, bis)
              + f"\n\nPlane die Abendessen für {de(start)} bis {de(bis)} – also für diese Tage: "
              + ", ".join(f"{de(x)} ({x.isoformat()})" for x in liste)
@@ -512,7 +573,7 @@ def speichern(teile):
     neu = json.loads(base64.b64decode("".join(teile)).decode("utf-8"))
     if not isinstance(neu, dict) or not isinstance(neu.get("einstellungen"), dict) or not isinstance(neu.get("plan"), dict):
         raise ValueError("unerwartetes Format")
-    if json_laden(STATUS, {}).get("laeuft") and time.time() - os.path.getmtime(STATUS) < 400:
+    if json_laden(STATUS, {}).get("laeuft") and time.time() - os.path.getmtime(STATUS) < 600:
         raise RuntimeError("Claude arbeitet gerade am Plan – gleich nochmal speichern")
     with Sperre():
         if os.path.exists(DATEN):
@@ -673,7 +734,7 @@ def main():
         if auftrag.get("art") not in ARBEIT:
             raise ValueError("unbekannte Arbeit")
         alt = json_laden(STATUS, {})
-        if alt.get("laeuft") and time.time() - os.path.getmtime(STATUS) < 400:
+        if alt.get("laeuft") and time.time() - os.path.getmtime(STATUS) < 600:
             raise RuntimeError("Claude arbeitet schon – bitte kurz warten")
         # Fotos von der Küchen-Seite als Datei ablegen (wie Fotos aus Telegram)
         for i, b in enumerate(auftrag.pop("bilder", None) or []):
