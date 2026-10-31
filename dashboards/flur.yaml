@@ -155,6 +155,22 @@ views:
         {{ '<br>' if not loop.first }}<font color="#8E8E93"><ha-icon icon="{{ t.icon }}"></ha-icon></font> {{ t.titel }}{{ ' – ' ~ t.kurz if t.kurz }}
         {%- endfor %}
         {%- endif %}
+    # Müllabfuhr (sensor.muell, packages/muell.yaml) – Termine kommen per Screenshot aus der GIB-App („Müll“ an den Bot)
+    - type: heading
+      heading: Müllabfuhr
+      heading_style: title
+      icon: mdi:trash-can-outline
+    - type: markdown
+      grid_options:
+        columns: full
+      content: |-
+        {% set n = state_attr('sensor.muell', 'naechste') or [] %}
+        {% set ns = namespace(tage=[], z=[]) %}
+        {% for t in n %}{% if t.tag not in ns.tage %}{% set ns.tage = ns.tage + [t.tag] %}{% endif %}{% endfor %}
+        {% for tag in ns.tage[:3] %}
+        {{ '<br>' if not loop.first }}<b>{{ tag }}</b> · {{ n | selectattr('tag', 'eq', tag) | map(attribute='art') | join(', ') }}
+        {%- endfor %}
+        {%- if not n %}<font color="#8E8E93">Noch keine Termine – Screenshots aus der GIB-App mit dem Text „Müll“ an den Telegram-Bot schicken</font>{% endif %}
     # Wartung (Regenrinne, Heizung, FI-Test …) aus dem Haus-Handbuch – nur was ansteht; abhaken im Reiter "Wartung"
     - type: heading
       heading: Wartung
