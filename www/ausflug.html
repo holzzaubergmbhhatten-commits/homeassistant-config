@@ -141,7 +141,8 @@ const WEITE_TAG = { Fahrrad: ["bis 30 km", "bis 50 km", "bis 80 km"], "Zu Fuß":
   Auto: ["bis 1 Stunde", "bis 2 Stunden", "bis 3 Stunden", "weiter weg"], Bahn: ["bis 1 Stunde", "bis 2 Stunden", "bis 3 Stunden", "weiter weg"] };
 const WEITE_WE = { Fahrrad: ["bis 50 km am Tag", "bis 80 km am Tag", "Räder mitnehmen (Auto/Bahn)"],
   "Zu Fuß": ["bis 15 km am Tag", "bis 25 km am Tag", "Anreise mit Auto/Bahn"],
-  Auto: ["bis 2 Stunden", "bis 4 Stunden", "bis 6 Stunden", "egal"], Bahn: ["bis 2 Stunden", "bis 4 Stunden", "egal"] };
+  Auto: ["bis 1 Stunde", "bis 2 Stunden", "bis 3 Stunden", "bis 4 Stunden", "bis 5 Stunden", "egal"],
+  Bahn: ["bis 1 Stunde", "bis 2 Stunden", "bis 3 Stunden", "bis 4 Stunden", "bis 5 Stunden", "egal"] };
 function weiten() {
   const t = w.dauer === "Wochenende mit Übernachtung" ? WEITE_WE : w.dauer === "Ganzer Tag" ? WEITE_TAG : WEITE;
   return t[w.wie] || t.Auto;
@@ -289,7 +290,7 @@ async function aktion(el) {
     leseWunsch();
     const f = el.dataset.f, v = el.dataset.w;
     if (el.dataset.m === "1") { const s = new Set(w[f] || []); s.has(v) ? s.delete(v) : s.add(v); w[f] = [...s]; }
-    else { w[f] = v; if ((f === "wie" || f === "dauer") && !weiten().includes(w.weite)) w.weite = weiten()[1] || weiten()[0]; }
+    else { w[f] = v; if ((f === "wie" || f === "dauer") && !weiten().includes(w.weite)) w.weite = weiten()[Math.min(2, weiten().length - 1)]; }
     zeichnen(); return;
   }
   if (a === "suchen") {
