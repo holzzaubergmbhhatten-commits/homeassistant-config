@@ -130,8 +130,12 @@ def zutaten_sauber(liste):
         except ValueError:
             menge = None
         bereich = z.get("bereich") if z.get("bereich") in BEREICHE else "Sonstiges"
+        try:
+            preis = round(float(str(z.get("preis_eur") or 0).replace(",", ".")), 2)
+        except ValueError:
+            preis = 0
         aus.append({"menge": menge, "einheit": str(z.get("einheit") or "")[:12], "name": str(z["name"]).strip()[:60],
-                    "bereich": bereich, "basis": bool(z.get("basis"))})
+                    "bereich": bereich, "basis": bool(z.get("basis")), "preis_eur": preis})
     return aus
 
 
@@ -280,12 +284,14 @@ Bereiche für die Einkaufsliste genau so: """ + ", ".join(BEREICHE) + """.
 "basis": true nur für Dinge, die man meist im Haus hat (Salz, Pfeffer, Öl, Zucker, Mehl, Brühe, Gewürze, Essig, Senf).
 Schritte kurz und klar (ein Handgriff pro Schritt, so dass man sie am Monitor in der Küche nacheinander abtippen kann);
 "timer_min" > 0, wenn in dem Schritt etwas eine feste Zeit braucht (kochen, backen, ziehen lassen), sonst 0.
-Kosten grob schätzen (deutsche Supermarktpreise, ohne Basiszutaten). Alles auf Deutsch. Keine Emojis."""
+Kosten grob schätzen (deutsche Supermarktpreise, ohne Basiszutaten): "preis_eur" je Zutat = was man im Laden für die
+benötigte Menge bezahlt (übliche Packung anteilig; Angebotspreis, wenn es im Angebot ist; Basiszutaten 0), "kosten_eur" =
+Summe fürs Gericht. Die Woche soll ins Budget passen. Alles auf Deutsch. Keine Emojis."""
 
 GERICHT_FORMAT = """{"art": "kochen" | "reste" | "auswaerts" | "frei", "titel": "…", "kurz": "ein Satz, was es ist",
  "grund": "kurz, warum an diesem Tag (z. B. 'Training bis 19 Uhr – geht schnell')", "zeit_min": 25, "portionen": 3,
  "kosten_eur": 9.5, "nutzt_vorrat": ["Kürbis"], "angebote": ["Hähnchenbrust 4,99 €"],
- "zutaten": [{"menge": 500, "einheit": "g", "name": "Hackfleisch", "bereich": "Fleisch & Fisch", "basis": false}],
+ "zutaten": [{"menge": 500, "einheit": "g", "name": "Hackfleisch", "bereich": "Fleisch & Fisch", "basis": false, "preis_eur": 3.99}],
  "schritte": [{"text": "…", "timer_min": 0}], "rezept_id": "nur wenn es ein gespeichertes Rezept ist"}"""
 
 

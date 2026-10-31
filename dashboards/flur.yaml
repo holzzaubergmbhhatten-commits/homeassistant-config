@@ -1580,7 +1580,7 @@ views:
   # Essensplan der Woche (Claude), Rezepte mit Kochmodus, Vorrat & Ernte, Einkauf – packages/kueche.yaml
   cards:
   - type: iframe
-    url: /local/kueche.html?v=2
+    url: /local/kueche.html?v=3
     aspect_ratio: 53.3%
 - title: Klima & Energie
   path: energie

@@ -82,6 +82,8 @@
   .tag .knoepfe { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
   .tag.leer .titel { color: var(--grau); font-weight: 600; }
   .gekocht .titel { text-decoration: line-through; text-decoration-thickness: 2px; color: var(--grau); }
+  .leiste { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 5;
+    box-shadow: 0 6px 20px rgba(40,20,10,.3); padding: 15px 22px; font-size: 16px; border-radius: 18px; white-space: nowrap; max-width: calc(100% - 28px); overflow: hidden; }
   .hinweis { background: #FBEFCB; color: #6B4E10; border-radius: 16px; padding: 12px 14px; font-size: 14px; line-height: 1.45; margin-bottom: 12px; }
   .dunkel .hinweis { background: #3A2F18; color: #F1D58E; }
   .arbeit { display: flex; align-items: center; gap: 10px; background: var(--braun); color: #fff; border-radius: 16px; padding: 14px; margin-bottom: 12px; font-weight: 600; }
@@ -360,6 +362,10 @@ function wocheSeite() {
   h += `<div class="zeile" style="margin-bottom:12px">
     <button class="knopf voll" data-a="planen" ${arbeit ? "disabled" : ""}>${ic("zauber")} ${plan.length ? "Woche neu planen" : "Woche planen lassen"}</button>
     <button class="knopf" data-a="einkauf" ${plan.length ? "" : "disabled"}>${ic("wagen")} Einkaufsliste</button></div>`;
+  if (kochen) {
+    const von = iso(woche) > heute ? iso(woche) : heute, rest = kostenVon(von, iso(tage[6]));
+    h += `<button class="knopf voll leiste" data-a="einkauf">${ic("wagen")} Einkaufsliste ${von > iso(tage[0]) ? "ab heute" : "für die Woche"}${rest ? ` · ca. ${zahl(Math.round(rest))} €` : ""}${rest && daten.einstellungen.budget && von === iso(tage[0]) ? ` von ${daten.einstellungen.budget} €` : ""}</button>`;
+  }
   for (const d of tage) {
     const k = iso(d), g = daten.plan[k];
     const kopfTag = `<div class="streifen"><span>${TAGE[d.getDay() === 0 ? 6 : d.getDay() - 1].slice(0, 2).toUpperCase()}</span><b>${d.getDate()}</b></div>`;
@@ -377,6 +383,7 @@ function wocheSeite() {
       ${g.grund ? `<div class="klein">${esc(g.grund)}</div>` : ""}
       <div class="knoepfe">
         ${kochbar ? `<button class="knopf klein-k ${k === heute ? "voll" : ""}" data-a="kochen" data-k="${k}">${ic("play")} Kochen</button>` : ""}
+        ${g.art === "kochen" && (g.zutaten || []).length ? `<button class="knopf klein-k" data-a="ektag" data-k="${k}">${ic("wagen")} Einkaufen</button>` : ""}
         <button class="knopf klein-k" data-a="tausch" data-k="${k}" ${arbeit ? "disabled" : ""}>${ic("neu")} Tauschen</button>
         <button class="knopf klein-k" data-a="aendern" data-k="${k}">${ic("stift")} Ändern</button>
         ${kochbar && !g.rezept_id ? `<button class="knopf klein-k" data-a="merken" data-k="${k}">${ic("stern")} Merken</button>` : ""}
@@ -527,9 +534,10 @@ function einkaufBerechnen(von, bis) {
     for (const z of g.zutaten || []) {
       const key = z.name.toLowerCase() + "|" + (z.einheit || "");
       if (!summe.has(key)) summe.set(key, { name: z.name, einheit: z.einheit || "", menge: 0, bereich: BEREICHE.includes(z.bereich) ? z.bereich : "Sonstiges",
-        basis: !!z.basis, vorrat: vorrat.some(v => v.includes(z.name.toLowerCase()) || z.name.toLowerCase().includes(v)), fuer: [] });
+        basis: !!z.basis, vorrat: vorrat.some(v => v.includes(z.name.toLowerCase()) || z.name.toLowerCase().includes(v)), fuer: [], preis: 0 });
       const s = summe.get(key);
       if (z.menge != null) s.menge += +z.menge;
+      s.preis += +z.preis_eur || 0;
       if (!s.fuer.includes(tag + " " + g.titel)) s.fuer.push(tag + " " + g.titel);
     }
   }
@@ -538,21 +546,32 @@ function einkaufBerechnen(von, bis) {
     if (einheit === "g" && menge >= 1000) { menge /= 1000; einheit = "kg"; }
     if (einheit === "ml" && menge >= 1000) { menge /= 1000; einheit = "l"; }
     return { text: [menge ? zahl(menge) : "", einheit, s.name].filter(Boolean).join(" "), notiz: "für " + s.fuer.join(", "),
-      bereich: s.bereich, an: !s.basis && !s.vorrat, basis: s.basis, vorrat: s.vorrat };
+      bereich: s.bereich, an: !s.basis && !s.vorrat, basis: s.basis, vorrat: s.vorrat, preis: s.preis };
   }).sort((a, b) => BEREICHE.indexOf(a.bereich) - BEREICHE.indexOf(b.bereich) || a.text.localeCompare(b.text, "de"));
 }
-function einkaufBlatt() {
-  const heute = iso(new Date()), von = iso(woche) > heute ? iso(woche) : heute, bis = iso(plusTage(woche, 6));
+function kostenVon(von, bis) {
+  let summe = 0;
+  for (const [k, g] of Object.entries(daten.plan)) if (k >= von && k <= bis && g.art === "kochen") summe += +g.kosten_eur || 0;
+  return summe;
+}
+function einkaufBlatt(von0, bis0) {
+  const heute = iso(new Date()), von = von0 || (iso(woche) > heute ? iso(woche) : heute), bis = bis0 || iso(plusTage(woche, 6));
   if (!einkauf) einkauf = { von, bis, liste: einkaufBerechnen(von, bis) };
   const l = einkauf.liste;
-  let h = `<h3>Einkaufsliste</h3><div class="klein">Alles für ${kurzDatum(vonIso(einkauf.von))} bis ${kurzDatum(vonIso(einkauf.bis))}, zusammengerechnet.
-    Was ihr schon habt, einfach abwählen.</div>`;
+  const mitPreis = l.some(z => z.preis > 0);
+  const gewaehlt = mitPreis ? l.filter(z => z.an).reduce((a, z) => a + z.preis, 0) : kostenVon(einkauf.von, einkauf.bis);
+  const budget = +daten.einstellungen.budget || 0, eintag = einkauf.von === einkauf.bis;
+  let h = `<h3>Einkaufsliste</h3><div class="klein">${eintag ? "Alles für " + kurzDatum(vonIso(einkauf.von)) : `Alles für ${kurzDatum(vonIso(einkauf.von))} bis ${kurzDatum(vonIso(einkauf.bis))}, zusammengerechnet`}.
+    Was ihr schon habt, einfach abwählen.</div>
+    ${gewaehlt ? `<div class="hinweis" style="margin:10px 0 0">Geschätzt <b>ca. ${zahl(Math.round(gewaehlt))} €</b>${!eintag && budget && einkauf.von === iso(woche) ? ` von ${budget} € Budget`
+      + (gewaehlt > budget ? " – etwas drüber, „Tauschen“ bei einem teuren Gericht hilft" : "") : ""}${daten.einstellungen.laden ? " bei " + esc(daten.einstellungen.laden) : ""} (ohne Gewähr)</div>` : ""}`;
   if (!l.length) h += `<div class="leerbild">Für diese Tage braucht ihr nichts.</div>`;
   let bereich = "";
   l.forEach((z, i) => {
     if (z.bereich !== bereich) { bereich = z.bereich; h += `<h3>${esc(bereich)}</h3>`; }
     h += `<div class="ek ${z.an ? "an" : ""}" data-a="ekwahl" data-i="${i}"><span class="box">${z.an ? ic("haken") : ""}</span>
-      <div class="mitte"><b>${esc(z.text)}</b><div class="klein">${esc(z.notiz)}${z.basis ? " · habt ihr meist da" : ""}${z.vorrat ? " · im Vorrat" : ""}</div></div></div>`;
+      <div class="mitte"><b>${esc(z.text)}</b><div class="klein">${esc(z.notiz)}${z.basis ? " · habt ihr meist da" : ""}${z.vorrat ? " · im Vorrat" : ""}</div></div>
+      ${z.preis > 0 ? `<span class="klein">ca. ${zahl(Math.round(z.preis * 10) / 10)} €</span>` : ""}</div>`;
   });
   h += `<div class="zeile" style="margin-top:14px"><button class="knopf voll" data-a="ekok">${ic("wagen")} ${l.filter(z => z.an).length} Sachen auf die Einkaufsliste</button>
     <button class="knopf" data-a="zu">Abbrechen</button></div>`;
@@ -681,7 +700,8 @@ async function aktion(el) {
       `<div style="margin-top:14px"><button class="knopf" data-a="zu">Schließen</button></div>`);
     return;
   }
-  if (a === "ekwahl") { const z = einkauf.liste[+el.dataset.i]; z.an = !z.an; einkaufBlatt(); return; }
+  if (a === "ekwahl") { const z = einkauf.liste[+el.dataset.i]; z.an = !z.an; einkaufBlatt(einkauf.von, einkauf.bis); return; }
+  if (a === "ektag") { einkauf = null; einkaufBlatt(k, k); return; }
   if (a === "ekok") {
     const liste = einkauf.liste.filter(z => z.an).map(z => ({ text: z.text, notiz: z.notiz }));
     if (!liste.length) { meldung("Nichts ausgewählt"); return; }
