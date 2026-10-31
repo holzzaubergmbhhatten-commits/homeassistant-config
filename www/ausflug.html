@@ -136,6 +136,16 @@ const INTERESSEN = ["Natur & Deich", "Tiere & Zoo", "Spielplatz & Toben", "Welln
   "Stadt & Bummeln", "Café & Essen", "Abenteuer & Action", "Bei Regen drinnen", "Geheimtipp"];
 const WEITE = { Fahrrad: ["bis 15 km", "bis 30 km", "bis 50 km"], "Zu Fuß": ["bis 5 km", "bis 10 km", "bis 15 km"],
   Auto: ["bis 30 Minuten", "bis 1 Stunde", "bis 2 Stunden", "weiter weg"], Bahn: ["bis 1 Stunde", "bis 2 Stunden", "weiter weg"] };
+// Ganzer Tag / Wochenende: es darf weiter weg gehen
+const WEITE_TAG = { Fahrrad: ["bis 30 km", "bis 50 km", "bis 80 km"], "Zu Fuß": ["bis 10 km", "bis 15 km", "bis 20 km"],
+  Auto: ["bis 1 Stunde", "bis 2 Stunden", "bis 3 Stunden", "weiter weg"], Bahn: ["bis 1 Stunde", "bis 2 Stunden", "bis 3 Stunden", "weiter weg"] };
+const WEITE_WE = { Fahrrad: ["bis 50 km am Tag", "bis 80 km am Tag", "Räder mitnehmen (Auto/Bahn)"],
+  "Zu Fuß": ["bis 15 km am Tag", "bis 25 km am Tag", "Anreise mit Auto/Bahn"],
+  Auto: ["bis 2 Stunden", "bis 4 Stunden", "bis 6 Stunden", "egal"], Bahn: ["bis 2 Stunden", "bis 4 Stunden", "egal"] };
+function weiten() {
+  const t = w.dauer === "Wochenende mit Übernachtung" ? WEITE_WE : w.dauer === "Ganzer Tag" ? WEITE_TAG : WEITE;
+  return t[w.wie] || t.Auto;
+}
 
 let daten = { gemerkt: [], erlebt: [], ideen: [], wunsch: {} }, reiter = "planen", arbeit = null, fehlerText = "", offen = {};
 let w = { wie: "Fahrrad", wann: iso(new Date()), dauer: "Halber Tag", wer: "Familie mit Mathilda", interessen: ["Natur & Deich", "Café & Essen"], weite: "bis 30 km", wunsch: "" };
@@ -174,7 +184,7 @@ function heim(i) {
   if (!la || !lo || (Math.abs(la - 52.3731) < 0.01 && Math.abs(lo - 4.8903) < 0.01)) return "";
   if (i && i.lat && i.lon) {
     const km = 111 * Math.hypot(la - i.lat, (lo - i.lon) * Math.cos(la * Math.PI / 180));
-    if (km > 250) return "";
+    if (km > 1200) return "";
   }
   return `${la},${lo}`;
 }
@@ -226,7 +236,7 @@ function planenSeite() {
     <div class="zwei"><div><label class="f">Wann?</label><div class="chips">${tage.map(d => `<button class="chip ${w.wann === iso(d) ? "an" : ""}" data-a="wahl" data-f="wann" data-w="${iso(d)}" data-m="0">${["heute", "morgen"][tage.indexOf(d)] || TAGE[d.getDay()] + " " + d.getDate() + "."}</button>`).join("")}</div></div>
     <div><label class="f">Wie lange?</label>${chips(DAUER, w.dauer, "dauer")}</div></div>
     <div class="zwei"><div><label class="f">Wer kommt mit?</label>${chips(WER, w.wer, "wer")}</div>
-    <div><label class="f">Wie weit höchstens?</label>${chips(WEITE[w.wie] || WEITE.Auto, w.weite, "weite")}</div></div>
+    <div><label class="f">Wie weit höchstens?</label>${chips(weiten(), w.weite, "weite")}</div></div>
     <label class="f">Was mögt ihr? (mehrere)</label>${chips(INTERESSEN, w.interessen, "interessen", true)}
     <label class="f">Besonderer Wunsch (optional)</label><input type="text" id="wunsch" value="${esc(w.wunsch)}" placeholder="z. B. mit Eis essen, Hund darf mit, Spa nur für Mirka …"></div>
     <button class="knopf voll gross" data-a="suchen" ${arbeit ? "disabled" : ""}>${ic("zauber")} Ideen finden</button>`;
@@ -279,7 +289,7 @@ async function aktion(el) {
     leseWunsch();
     const f = el.dataset.f, v = el.dataset.w;
     if (el.dataset.m === "1") { const s = new Set(w[f] || []); s.has(v) ? s.delete(v) : s.add(v); w[f] = [...s]; }
-    else { w[f] = v; if (f === "wie") w.weite = (WEITE[v] || WEITE.Auto)[1] || (WEITE[v] || WEITE.Auto)[0]; }
+    else { w[f] = v; if ((f === "wie" || f === "dauer") && !weiten().includes(w.weite)) w.weite = weiten()[1] || weiten()[0]; }
     zeichnen(); return;
   }
   if (a === "suchen") {
