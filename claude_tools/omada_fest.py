@@ -56,7 +56,7 @@ def ziel_adressen():
 
 async def main(ausfuehren):
     from tplink_omada_client import OmadaClient
-    from tplink_omada_client.omadasiteclient import OmadaClientSettings, OmadaClientFixedAddress
+    import omada_roh
 
     host, benutzer, passwort, ssl_pruefen, site_id = zugang()
     if not host.startswith("http"):
@@ -68,7 +68,7 @@ async def main(ausfuehren):
         sites = await client.get_sites()
         site = next((s for s in sites if s.id == site_id), None) or next((s for s in sites if "home" in s.name.lower()), None) or sites[0]
         sc = await client.get_site_client(site)
-        netze = await sc.get_lan_networks()
+        netze = await omada_roh.netze(sc)
         nach_ip = {}
         async for c in sc.get_connected_clients():
             if c.ip:
@@ -80,19 +80,18 @@ async def main(ausfuehren):
                 continue
             eintrag = {"name": name, "ip": ip, "mac": c.mac, "omada": c.name}
             try:
-                details = await sc.get_client(c.mac)
-                roh = details.raw_data
+                roh = await omada_roh.details(sc, c.mac)
                 fest = bool(roh.get("useFixedAddr") or (roh.get("ipSetting") or {}).get("useFixedAddr"))
                 fest_ip = (roh.get("ipSetting") or {}).get("ip") or roh.get("fixedIp") or ip
                 if fest and fest_ip == ip:
                     ergebnis["schon"].append(eintrag)
                     continue
-                netz = next((n for n in netze if n.gateway_subnet and
-                             ipaddress.ip_address(ip) in ipaddress.ip_network(n.gateway_subnet, strict=False)), None)
+                netz = next((n for n in netze if n[1] and
+                             ipaddress.ip_address(ip) in ipaddress.ip_network(n[1], strict=False)), None)
                 if not netz:
                     raise RuntimeError("kein passendes Netz")
                 if ausfuehren:
-                    await sc.update_client(c.mac, OmadaClientSettings(fixed_address=OmadaClientFixedAddress(network_id=netz.id, ip_address=ip)))
+                    await omada_roh.fest(sc, c.mac, netz[0], ip)
                 ergebnis["neu"].append(eintrag)
             except Exception as fehler:  # noqa: BLE001
                 eintrag["fehler"] = str(fehler)[:120]
@@ -100,16 +99,16 @@ async def main(ausfuehren):
     print(json.dumps(ergebnis, ensure_ascii=False))
 
 
-MARKE = "/config/.omada_fest_vorgeschlagen"
+MARKE = "/config/.omada_fest_vorgeschlagen_2"   # erst nach einem erfolgreichen Vorschlag gesetzt
 
 if __name__ == "__main__":
     try:
         modus = sys.argv[1] if len(sys.argv) > 1 else "plan"
-        if modus == "plan_einmal":
-            if os.path.exists(MARKE):
-                print(json.dumps({"ok": True, "still": True, "neu": [], "schon": [], "fehlt": [], "fehler": []}))
-                sys.exit(0)
-            open(MARKE, "w").close()
+        if modus == "plan_einmal" and os.path.exists(MARKE):
+            print(json.dumps({"ok": True, "still": True, "neu": [], "schon": [], "fehlt": [], "fehler": []}))
+            sys.exit(0)
         asyncio.run(main(modus == "ausfuehren"))
+        if modus == "plan_einmal":
+            open(MARKE, "w").close()
     except Exception as fehler:  # noqa: BLE001
         print(json.dumps({"ok": False, "fehler_text": str(fehler)[:200]}, ensure_ascii=False))

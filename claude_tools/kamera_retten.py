@@ -26,6 +26,7 @@ import sys
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 MACS = "/config/kamera_macs.json"
 GEMELDET = "/config/.kamera_retten_gemeldet.json"
 
@@ -129,12 +130,13 @@ async def omada(aufgabe):
             nach_mac[c.mac] = c
             if c.ip:
                 nach_ip[c.ip] = c
-        netze = await sc.get_lan_networks()
+        import omada_roh
+        netze = await omada_roh.netze(sc)
         return await aufgabe(sc, nach_ip, nach_mac, netze)
 
 
 async def main():
-    from tplink_omada_client.omadasiteclient import OmadaClientSettings, OmadaClientFixedAddress
+    import omada_roh
     liste = kameras()
     try:
         gemerkt = json.load(open(MACS, encoding="utf-8"))
@@ -178,23 +180,23 @@ async def main():
                 ergebnis.append(eintrag)
                 continue
             gemerkt[k["entity"] or k["name"]] = c.mac
-            netz = next((n for n in netze if n.gateway_subnet and
-                         ipaddress.ip_address(k["ip"]) in ipaddress.ip_network(n.gateway_subnet, strict=False)), None)
+            netz = next((n for n in netze if n[1] and
+                         ipaddress.ip_address(k["ip"]) in ipaddress.ip_network(n[1], strict=False)), None)
             besetzt = nach_ip.get(k["ip"])
-            if not netz or (besetzt and besetzt.mac != c.mac and not besetzt.is_wireless):
+            if not netz or (besetzt and besetzt.mac != c.mac and not omada_roh.drahtlos(besetzt)):
                 # alte Adresse geht nicht (fest verkabeltes Gerät sitzt darauf) → neue Adresse festhalten
                 if netz:
-                    await sc.update_client(c.mac, OmadaClientSettings(fixed_address=OmadaClientFixedAddress(network_id=netz.id, ip_address=neu_ip)))
+                    await omada_roh.fest(sc, c.mac, netz[0], neu_ip)
                 eintrag["hinweis"] = (f"Die alte Adresse {k['ip']} ist von einem Kabel-Gerät belegt. Kamera jetzt fest auf {neu_ip} – "
                                       f"in Home Assistant bei der Kamera die Adresse auf {neu_ip} ändern.")
                 ergebnis.append(eintrag)
                 continue
-            await sc.update_client(c.mac, OmadaClientSettings(fixed_address=OmadaClientFixedAddress(network_id=netz.id, ip_address=k["ip"])))
+            await omada_roh.fest(sc, c.mac, netz[0], k["ip"])
             if besetzt and besetzt.mac != c.mac:
-                await sc.reconnect_client(besetzt.mac)
+                await omada_roh.neu_verbinden(sc, besetzt.mac)
                 await asyncio.sleep(20)
-            if c.is_wireless:
-                await sc.reconnect_client(c.mac)
+            if omada_roh.drahtlos(c):
+                await omada_roh.neu_verbinden(sc, c.mac)
                 for _ in range(12):   # bis zu 2 Minuten warten, bis sie unter der alten Adresse antwortet
                     await asyncio.sleep(10)
                     if rtsp_ok(k["ip"], k):
