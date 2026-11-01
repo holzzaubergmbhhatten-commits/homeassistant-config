@@ -81,6 +81,8 @@ automation:
         👉 Falls das ein Problem ist: an Claude weiterleiten.
 
 # Wichtige Geräte länger als 10 Minuten nicht erreichbar (Schloss, Hoftor-Shelly, Kameras, HomePods)
+# Nur einmal melden: Ein Gerät, das ständig kurz an- und wieder ausgeht, meldet sich erst wieder,
+# wenn es vorher mindestens 30 Minuten am Stück erreichbar war.
 - id: geraet_offline_an_telegram
   alias: Wichtiges Gerät offline an Telegram melden
   mode: parallel
@@ -95,12 +97,16 @@ automation:
       {{ trigger.event.data.new_state is not none and trigger.event.data.old_state is not none
          and trigger.event.data.new_state.state == 'unavailable'
          and trigger.event.data.old_state.state not in ['unavailable', 'unknown']
+         and trigger.event.data.old_state.last_changed < now() - timedelta(minutes=30)
          and (e.startswith('lock.') or e.startswith('camera.draussen') or e.startswith('switch.shelly')
               or e in integration_entities('music_assistant')) }}
   actions:
   - delay: 00:10:00
+  # ununterbrochen 10 Minuten weg (nicht nur kurz zwischendurch wieder da gewesen)
   - condition: template
-    value_template: "{{ is_state(trigger.event.data.entity_id, 'unavailable') }}"
+    value_template: >-
+      {{ is_state(trigger.event.data.entity_id, 'unavailable')
+         and states[trigger.event.data.entity_id].last_changed <= now() - timedelta(minutes=9) }}
   - action: telegram_bot.send_message
     continue_on_error: true
     data:
