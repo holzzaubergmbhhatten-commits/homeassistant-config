@@ -63,12 +63,13 @@ automation:
   - trigger: persistent_notification
     update_type:
     - added
-  # HomeKit-Kopplungscode erscheint nach jedem Neustart erneut – nicht jedes Mal aufs Handy schicken
+  # HomeKit-Kopplungscode erscheint nach jedem Neustart erneut – nicht jedes Mal aufs Handy schicken;
+  # Kamera-Selbsttest schickt seine Telegram-Nachricht selbst (sonst käme sie doppelt)
   conditions:
   - condition: template
     value_template: >-
       {{ not ((trigger.notification.notification_id | default('') | string) is search('homekit', ignorecase=True)
-         or (trigger.notification.title | default('') | string) is search('homekit', ignorecase=True)) }}
+         or (trigger.notification.title | default('') | string) is search('homekit|kamera-selbsttest', ignorecase=True)) }}
   actions:
   - action: telegram_bot.send_message
     continue_on_error: true

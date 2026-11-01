@@ -1,0 +1,229 @@
+# Haus-Check und kurze Telegram-Befehle – damit Marco nicht in Menüs (Entwicklerwerkzeuge, Omada-App) suchen muss.
+#
+# Befehle an den Bot (Groß/klein egal, mit oder ohne „/“):
+#   hilfe / befehle        → diese Liste
+#   hauscheck / check      → Haus-Check sofort (sonst jeden Sonntag 17:40 Uhr)
+#   kameras                → alle Kameras prüfen; fehlt eine, sucht Home Assistant sie selbst
+#   netzwerk               → Router, Switch, Access Points: was läuft, was fehlt, Firmware
+#   adressen               → feste Adressen im Router vorschlagen (Knopf „Ja, festmachen“)
+#
+# Der Haus-Check sammelt in EINER Nachricht: Geräte, die fehlen; schwache Batterien; anstehende Updates;
+# fällige Wartung; Kühlgeräte ohne Strom. Mit Knöpfen zum Erledigen. Ist alles in Ordnung, kommt nur eine kurze Zeile.
+script:
+  haus_check:
+    alias: "Haus-Check schicken"
+    icon: mdi:home-search
+    mode: single
+    fields:
+      chat:
+        description: Telegram-Chat (leer = Marco)
+    sequence:
+      - variables:
+          ziel: >-
+            {% set c = chat | default('') | string %}
+            {{ c if c | regex_match('^-?\\d+$') else
+               (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\\d+$') | first | default('') }}
+          kameras_weg: >-
+            {{ states.camera | selectattr('entity_id', 'search', '^camera\\.draussen') | selectattr('state', 'eq', 'unavailable')
+               | map(attribute='name') | list }}
+          netz_weg: "{{ state_attr('sensor.netzwerk_offline', 'geraete') or [] }}"
+          sonst_weg: >-
+            {% set ns = namespace(l=[]) %}
+            {% for e in (states.lock | map(attribute='entity_id') | list) + integration_entities('shelly') %}
+              {% if is_state(e, 'unavailable') %}
+                {% set n = device_attr(e, 'name_by_user') or device_attr(e, 'name') or state_attr(e, 'friendly_name') or e %}
+                {% if n not in ns.l %}{% set ns.l = ns.l + [n] %}{% endif %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.l }}
+          batterien: "{{ state_attr('sensor.batterien_schwach', 'liste') or [] }}"
+          omada_updates: "{{ integration_entities('tplink_omada') | select('match', 'update\\.') | select('is_state', 'on') | list | count }}"
+          andere_updates: >-
+            {{ states.update | selectattr('state', 'eq', 'on') | rejectattr('entity_id', 'in', integration_entities('tplink_omada'))
+               | map(attribute='name') | list }}
+          wartung: "{{ (state_attr('sensor.wartung', 'anstehend') or []) | selectattr('status', 'ne', 'bald') | list }}"
+          wartung_bald: "{{ (state_attr('sensor.wartung', 'anstehend') or []) | selectattr('status', 'eq', 'bald') | list }}"
+          kuehl: "{{ state_attr('binary_sensor.kuehlgeraete_ohne_strom', 'geraete') or [] if is_state('binary_sensor.kuehlgeraete_ohne_strom', 'on') else [] }}"
+          probleme: >-
+            {{ (kameras_weg | count) + (netz_weg | count) + (sonst_weg | count) + (batterien | count) + (kuehl | count) + (wartung | count) }}
+          text: >-
+            {% set ns = namespace(z=['🏠 Haus-Check ' ~ now().strftime('%d.%m.')]) %}
+            {% if kuehl %}{% set ns.z = ns.z + ['', '🧊 Kühlgeräte ohne Strom: ' ~ kuehl | join(', ')] %}{% endif %}
+            {% if kameras_weg or netz_weg or sonst_weg %}{% set ns.z = ns.z + ['', '📴 Nicht erreichbar:'] %}
+              {% for n in kameras_weg %}{% set ns.z = ns.z + ['• Kamera ' ~ n ~ ' (Home Assistant sucht sie selbst)'] %}{% endfor %}
+              {% for n in netz_weg %}{% set ns.z = ns.z + ['• Netzwerk: ' ~ n] %}{% endfor %}
+              {% for n in sonst_weg %}{% set ns.z = ns.z + ['• ' ~ n] %}{% endfor %}
+            {% endif %}
+            {% if batterien %}{% set ns.z = ns.z + ['', '🔋 Batterien wechseln:'] %}
+              {% for b in batterien %}{% set ns.z = ns.z + ['• ' ~ b.name ~ ' – ' ~ b.wert] %}{% endfor %}{% endif %}
+            {% if wartung or wartung_bald %}{% set ns.z = ns.z + ['', '🔧 Wartung:'] %}
+              {% for w in wartung[:8] %}{% set ns.z = ns.z + ['• ' ~ w.titel ~ ' (' ~ ('überfällig' if w.status == 'ueberfaellig' else 'jetzt dran') ~ ')'] %}{% endfor %}
+              {% for w in wartung_bald[:5] %}{% set ns.z = ns.z + ['• ' ~ w.titel ~ ' (bald' ~ ((' – in ' ~ w.tage ~ ' Tagen') if w.tage is defined else '') ~ ')'] %}{% endfor %}{% endif %}
+            {% if andere_updates or omada_updates | int > 0 %}{% set ns.z = ns.z + ['', '⬆️ Updates:'] %}
+              {% if omada_updates | int > 0 %}{% set ns.z = ns.z + ['• Netzwerk-Firmware für ' ~ omada_updates ~ ' Geräte – kommt nachts von selbst'] %}{% endif %}
+              {% if andere_updates %}{% set ns.z = ns.z + ['• ' ~ andere_updates[:6] | join(', ') ~ (' …' if andere_updates | count > 6 else '') ~ ' – spielt die Nacht-Automatik ein'] %}{% endif %}
+            {% endif %}
+            {% if probleme | int == 0 %}{% set ns.z = ns.z + ['', '✅ Alles in Ordnung – nichts zu tun.'] %}{% endif %}
+            {{ ns.z | join('\n') }}
+      - condition: template
+        value_template: "{{ ziel != '' }}"
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ ziel | int }}"
+          message: "{{ text }}"
+          inline_keyboard:
+            - "📷 Kameras prüfen:/hc_kameras, 📌 Adressen festmachen:/hc_adressen"
+            - "🌐 Netzwerk-Übersicht:/hc_netzwerk"
+
+  haus_netzwerk_uebersicht:
+    alias: "Netzwerk-Übersicht schicken"
+    icon: mdi:lan
+    mode: queued
+    fields:
+      chat:
+        description: Telegram-Chat
+    sequence:
+      - variables:
+          geraete: >-
+            {% set ns = namespace(d={}) %}
+            {% for e in integration_entities('tplink_omada') if not e.startswith('device_tracker.') %}
+              {% set d = device_id(e) %}
+              {% if d %}{% set ns.d = dict(ns.d, **{d: (ns.d.get(d, true) and states(e) == 'unavailable')}) %}{% endif %}
+            {% endfor %}
+            {% set ns2 = namespace(l=[]) %}
+            {% for d, weg in ns.d.items() %}{% set ns2.l = ns2.l + [{'name': device_attr(d, 'name_by_user') or device_attr(d, 'name') or 'Omada-Gerät', 'weg': weg}] %}{% endfor %}
+            {{ ns2.l | sort(attribute='name') }}
+          firmware: "{{ integration_entities('tplink_omada') | select('match', 'update\\.') | select('is_state', 'on') | list | count }}"
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ chat | int }}"
+          message: >-
+            {% set ns = namespace(z=['🌐 Netzwerk – ' ~ (geraete | rejectattr('weg') | list | count) ~ ' von ' ~ (geraete | count) ~ ' Geräten erreichbar']) %}
+            {% for g in geraete %}{% set ns.z = ns.z + [('❌ ' if g.weg else '✅ ') ~ g.name] %}{% endfor %}
+            {% if firmware | int > 0 %}{% set ns.z = ns.z + ['', '⬆️ Neue Firmware für ' ~ firmware ~ ' Geräte – wird nachts um 2:30 Uhr eingespielt.'] %}{% endif %}
+            {% if not geraete %}{% set ns.z = ['🌐 Keine Omada-Geräte gefunden – ist die Integration „TP-Link Omada“ eingerichtet?'] %}{% endif %}
+            {{ ns.z | join('\n') }}
+
+  haus_kameras_pruefen:
+    alias: "Kameras prüfen und Ergebnis schicken"
+    icon: mdi:cctv
+    mode: single
+    fields:
+      chat:
+        description: Telegram-Chat
+    sequence:
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ chat | int }}"
+          message: "📷 Ich prüfe alle Kameras … (ca. 30 Sekunden)"
+      - action: shell_command.kamera_check
+        continue_on_error: true
+        response_variable: bericht
+      - variables:
+          roh: "{{ bericht.stdout | default('') if bericht is defined and bericht is mapping else '' }}"
+          zeilen: "{{ roh.split('\n') | select('search', ': (Bild OK|FEHLER)') | list }}"
+          fehler: "{{ zeilen | select('search', 'FEHLER') | list | count }}"
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ chat | int }}"
+          message: >-
+            {% set ns = namespace(z=['📷 Kameras:']) %}
+            {% for z in zeilen %}{% set teile = z.split(':') %}
+              {% set ns.z = ns.z + [('✅ ' if 'OK' in z else '❌ ') ~ teile[0] | replace('draussen_', '') | replace('_', ' ')] %}{% endfor %}
+            {% if not zeilen %}{% set ns.z = ns.z + ['Kein Ergebnis vom Kamera-Test.'] %}{% endif %}
+            {% if fehler | int > 0 %}{% set ns.z = ns.z + ['', '🔧 Home Assistant sucht die fehlenden Kameras jetzt selbst – Nachricht kommt, sobald sie repariert sind.'] %}{% endif %}
+            {{ ns.z | join('\n') }}
+      - if: "{{ fehler | int > 0 }}"
+        then:
+          - action: automation.trigger
+            continue_on_error: true
+            target:
+              entity_id: automation.kameras_verrutschte_adresse_selbst_reparieren
+            data:
+              skip_condition: true
+
+automation:
+  - id: haus_check_sonntag
+    alias: "Haus-Check: jeden Sonntag"
+    triggers:
+      - trigger: time
+        at: "17:40:00"
+    conditions:
+      - condition: time
+        weekday: sun
+    actions:
+      - action: script.haus_check
+
+  - id: haus_befehle_telegram
+    alias: "Haus-Check: Telegram-Befehle"
+    mode: queued
+    triggers:
+      - trigger: event
+        event_type: telegram_text
+        id: text
+      - trigger: event
+        event_type: telegram_callback
+        id: knopf
+    conditions:
+      - condition: template
+        value_template: >-
+          {% if trigger.id == 'knopf' %}{{ trigger.event.data.data in ['/hc_kameras', '/hc_adressen', '/hc_netzwerk'] }}
+          {% else %}{{ (trigger.event.data.text | default('') | string) is match('^\s*/?(hilfe|befehle|help|hauscheck|haus-check|check|kameras?|kamera\s*test|kameras?\s*pr(ü|ue)fen|netzwerk|netz|adressen|feste\s+adressen)\s*[?!.]*\s*$', ignorecase=True) }}{% endif %}
+    actions:
+      - variables:
+          chat: "{{ trigger.event.data.chat_id }}"
+          befehl: >-
+            {% set t = (trigger.event.data.data if trigger.id == 'knopf' else trigger.event.data.text) | default('') | string | lower %}
+            {% if t is search('kamera|hc_kameras') %}kameras{% elif t is search('netz|hc_netzwerk') %}netzwerk
+            {% elif t is search('adress|hc_adressen') %}adressen{% elif t is search('check') %}check{% else %}hilfe{% endif %}
+      - if: "{{ trigger.id == 'knopf' }}"
+        then:
+          - action: telegram_bot.answer_callback_query
+            continue_on_error: true
+            data:
+              callback_query_id: "{{ trigger.event.data.id }}"
+              message: "OK"
+      - choose:
+          - conditions: "{{ befehl == 'check' }}"
+            sequence:
+              - action: script.haus_check
+                data:
+                  chat: "{{ chat }}"
+          - conditions: "{{ befehl == 'kameras' }}"
+            sequence:
+              - action: script.haus_kameras_pruefen
+                data:
+                  chat: "{{ chat }}"
+          - conditions: "{{ befehl == 'netzwerk' }}"
+            sequence:
+              - action: script.haus_netzwerk_uebersicht
+                data:
+                  chat: "{{ chat }}"
+          - conditions: "{{ befehl == 'adressen' }}"
+            sequence:
+              - action: telegram_bot.send_message
+                continue_on_error: true
+                data:
+                  chat_id: "{{ chat | int }}"
+                  message: "📌 Ich schaue im Router nach … (ca. 20 Sekunden)"
+              - action: script.netzwerk_adressen_festmachen
+                data:
+                  modus: plan
+        default:
+          - action: telegram_bot.send_message
+            continue_on_error: true
+            data:
+              chat_id: "{{ chat | int }}"
+              message: >-
+                🤖 Kurze Befehle an mich:
+                {{ '\n' }}• hauscheck – was im Haus gerade nicht stimmt
+                {{ '\n' }}• kameras – alle Kameras prüfen (fehlende sucht Home Assistant selbst)
+                {{ '\n' }}• netzwerk – Router, Switch, Access Points
+                {{ '\n' }}• adressen – feste Adressen im Router festmachen
+                {{ '\n' }}• liste / aufgaben – Einkaufsliste, Aufgaben
+                {{ '\n' }}• monitor – Monitor zurück zum Dashboard
+                {{ '\n' }}Alles andere einfach normal schreiben – dann antwortet Claude.

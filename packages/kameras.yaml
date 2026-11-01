@@ -106,7 +106,7 @@ automation:
               chat_id: "{{ empfaenger }}"
               parse_mode: html
               message: >-
-                {% set t %}🔧 Kamera-Selbsttest (bitte an Claude weitergeben):
+                {% set t %}🔧 Kamera-Selbsttest: {{ 'Eine Kamera fehlt – Home Assistant sucht sie gerade selbst und meldet sich, wenn sie repariert ist. Nur weiterleiten, wenn in 15 Minuten keine Erfolgsmeldung kommt.' if text is search('FEHLER') else 'bitte an Claude weitergeben' }}
                 {{ text }}{% endset %}{{ t | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}
 
   # Telegram "go2rtc" → Zugangsdaten für die go2rtc-Oberfläche (nur für erlaubte Chats des Bots)

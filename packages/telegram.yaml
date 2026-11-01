@@ -36,6 +36,10 @@ automation:
   - condition: template
     value_template: >-
       {{ not (trigger.event.data.text | default('') | string) is match('^\s*/?go2rtc\s*$', ignorecase=True) }}
+  # Kurze Haus-Befehle (hauscheck, kameras, netzwerk, adressen, hilfe) beantwortet packages/haus_check.yaml
+  - condition: template
+    value_template: >-
+      {{ not (trigger.event.data.text | default('') | string) is match('^\s*/?(hilfe|befehle|help|hauscheck|haus-check|check|kameras?|kamera\s*test|kameras?\s*pr(ü|ue)fen|netzwerk|netz|adressen|feste\s+adressen)\s*[?!.]*\s*$', ignorecase=True) }}
   # Ausweis/Pass-Ablauf merken beantwortet packages/alltag.yaml
   - condition: template
     value_template: >-
