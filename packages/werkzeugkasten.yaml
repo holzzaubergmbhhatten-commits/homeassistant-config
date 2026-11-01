@@ -54,8 +54,8 @@ automation:
     triggers:
       - trigger: homeassistant
         event: start
-      - trigger: time
-        at: "04:37:00"
+      - trigger: time_pattern
+        minutes: "17"
       - trigger: state
         entity_id: input_text.github_handbuch_schluessel
     actions:

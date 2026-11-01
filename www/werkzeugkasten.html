@@ -145,7 +145,8 @@ function design() { const h = hass(); document.documentElement.classList.toggle(
 let versuche = 0;
 function start() {
   if (!hass()) { if (++versuche === 15) $("inhalt").innerHTML = `<div class="karte">Die Seite funktioniert nur im Dashboard (Reiter „Links“).</div>`; setTimeout(start, 400); return; }
-  design(); laden(false); setInterval(design, 5000);
+  design(); laden(false).then(() => laden(true));   // erst sofort den gespeicherten Stand, dann frisch holen (neue Links)
+  setInterval(design, 5000); setInterval(() => laden(true), 30 * 60e3);
 }
 start();
 </script>

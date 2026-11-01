@@ -134,3 +134,8 @@ Skripte müssen in Sprachassistenten → Entitäten freigeben für Assist freige
 - `packages/updates.yaml`: nachts 03:40 Add-ons/HACS (Update seit ≥ 2 Tagen da), Core ab x.y.1 (oder nach 14 Tagen) mit
   Sicherung, OS nach 7 Tagen (nicht in derselben Nacht wie Core). Keine Geräte-Firmware. Nicht im Urlaubsmodus.
   Pause: `input_boolean.updates_pause`. Telegram an Marco vorher und nach dem Core-Neustart.
+
+## Werkzeugkasten (Seite „Links“)
+Jede neue Seite oder jedes neue Werkzeug, das wir bauen, kommt sofort in die Linkliste im privaten Repository
+„webseiten“ (`werkzeug/werkzeugkasten.json`, `stand` aufs heutige Datum). Home Assistant holt sie stündlich und beim
+Öffnen der Seite „Links“ – die Adressen selbst stehen nie in diesem (öffentlichen) Repository.
