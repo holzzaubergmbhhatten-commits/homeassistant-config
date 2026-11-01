@@ -10,6 +10,7 @@
 shell_command:
   netzwerk: python3 /config/claude_tools/netzwerk.py {{ aktion }} {{ wert | default('') }}
   omada_finden: python3 /config/claude_tools/omada_finden.py
+  ip_liste: python3 /config/claude_tools/ip_liste.py {{ modus | default('') }}
 
 script:
   netzwerk_speichern:
@@ -61,6 +62,39 @@ script:
                 📄 Letzte Omada-Meldungen im Protokoll:
                 {{ antwort.log | join('\n') }}{% endif %}
                 {%- else %}📡 Kein Omada-Controller im Netz {{ antwort.netz | default('') }} gefunden{{ (': ' ~ antwort.fehler) if antwort.fehler is defined else '' }}.{% endif %}
+      - stop: fertig
+        response_variable: antwort
+
+  # Liste der Geräte, die Home Assistant über ihre Adresse anspricht → per Telegram an Marco (zum Festmachen im Router)
+  netzwerk_ip_liste:
+    alias: "Netzwerk: Geräte mit Adresse auflisten"
+    icon: mdi:ip-network
+    mode: single
+    fields:
+      modus:
+        description: '"einmal" = nur, wenn die Liste noch nie geschickt wurde'
+    sequence:
+      - action: shell_command.ip_liste
+        data:
+          modus: "{{ 'einmal' if modus | default('') == 'einmal' else '' }}"
+        response_variable: roh
+      - variables:
+          antwort: >-
+            {% set a = roh.stdout | default('') if roh is defined and roh is mapping else '' %}
+            {{ a | from_json if (a | string).startswith('{') else {'ok': false, 'fehler': a or 'keine Antwort'} }}
+          marco: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\\d+$') | first | default('') }}"
+      - if: "{{ marco != '' and not antwort.schon | default(false) }}"
+        then:
+          - action: telegram_bot.send_message
+            continue_on_error: true
+            data:
+              chat_id: "{{ marco | int }}"
+              message: >-
+                {% if antwort.ok | default(false) %}📌 Diese Geräte spricht Home Assistant über ihre Adresse an – bitte in der Omada-App
+                (Clients → Gerät → „Feste IP-Adresse verwenden“) festmachen:
+                {% for g in antwort.geraete %}
+                • {{ g.adresse }} – {{ g.name }} ({{ g.art }}){% endfor %}
+                {%- else %}📌 Liste ging nicht: {{ antwort.fehler | default('?') }}{% endif %}
       - stop: fertig
         response_variable: antwort
 
@@ -288,3 +322,15 @@ automation:
       - action: script.turn_on
         target:
           entity_id: script.netzwerk_firmware
+
+  # Einmalig nach dem Start die Adress-Liste schicken (danach jederzeit über das Skript)
+  - id: netzwerk_ip_liste_einmal
+    alias: "Netzwerk: Adress-Liste einmalig schicken"
+    triggers:
+      - trigger: homeassistant
+        event: start
+    actions:
+      - delay: "00:03:00"
+      - action: script.netzwerk_ip_liste
+        data:
+          modus: einmal
