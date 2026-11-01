@@ -264,6 +264,46 @@ automation:
           wieder_da: "{{ vorher | reject('in', jetzt) | list }}"
       - condition: template
         value_template: "{{ neu_weg | count > 0 or wieder_da | count > 0 }}"
+      # Selbstheilung: hängt ein weggefallenes Gerät (Access Point/Kamera) an einem beschrifteten PoE-Port,
+      # diesen Port einmal kurz stromlos machen – aber nie während/kurz nach einem Firmware-Update.
+      - variables:
+          firmware_ruhe: >-
+            {% set t = state_attr('script.netzwerk_firmware', 'last_triggered') %}
+            {{ is_state('script.netzwerk_firmware', 'off') and (t is none or as_datetime(t) < now() - timedelta(minutes=45)) }}
+      - action: shell_command.netzwerk
+        continue_on_error: true
+        data:
+          aktion: poe_port
+          wert: "{{ (neu_weg if firmware_ruhe else []) | to_json | base64_encode }}"
+        response_variable: roh
+      - variables:
+          zuordnung: >-
+            {% set t = roh.stdout | default('') if roh is defined and roh is mapping else '' %}
+            {% set ports = (t | from_json).ports | default({}) if (t | string).startswith('{') else {} %}
+            {% set ns = namespace(l=[]) %}
+            {% for name, liste in ports.items() %}
+              {% for p in liste %}
+                {% for e in integration_entities('tplink_omada') | select('match', 'switch\\.') %}
+                  {% if device_id(e) == p.geraet and e is search('port_?' ~ p.port ~ '(_|$)') and e is search('poe')
+                        and name not in ns.l | map(attribute='name') | list %}{% set ns.l = ns.l + [{'name': name, 'schalter': e}] %}{% endif %}
+                {% endfor %}
+              {% endfor %}
+            {% endfor %}
+            {{ ns.l }}
+          neustart: "{{ zuordnung | map(attribute='name') | list }}"
+      - repeat:
+          for_each: "{{ zuordnung }}"
+          sequence:
+            - action: script.netzwerk_poe_neustart
+              continue_on_error: true
+              data:
+                schalter: "{{ repeat.item.schalter }}"
+      - if: "{{ neustart | count > 0 }}"
+        then:
+          - delay: "00:04:00"
+      - variables:
+          noch_weg: "{{ neu_weg | select('in', state_attr('sensor.netzwerk_offline', 'geraete') or []) | list }}"
+          geheilt: "{{ neustart | reject('in', noch_weg) | list }}"
       - repeat:
           for_each: >-
             {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
@@ -273,8 +313,9 @@ automation:
               data:
                 chat_id: "{{ repeat.item | int }}"
                 message: >-
-                  {% if neu_weg %}📡 Netzwerk: {{ neu_weg | join(', ') }} ist seit 5 Minuten nicht erreichbar
-                  (Strom/PoE, Kabel oder Absturz?). Neu starten geht am Monitor unter „Netzwerk“.{% endif %}
+                  {% if geheilt %}🔧 Netzwerk: {{ geheilt | join(', ') }} war weg – per PoE neu gestartet, läuft wieder.{% endif %}
+                  {% if noch_weg %}📡 Netzwerk: {{ noch_weg | join(', ') }} ist nicht erreichbar{{ ' (PoE-Neustart hat nicht geholfen)' if noch_weg | select('in', neustart) | list else '' }}
+                  – Strom, Kabel oder Absturz? Neu starten geht am Monitor unter „Netzwerk“.{% endif %}
                   {% if wieder_da %}✅ Netzwerk: {{ wieder_da | join(', ') }} ist wieder erreichbar.{% endif %}
 
   # Neue Firmware für Omada-Geräte → Marco fragen (gesammelt, eine Nachricht)

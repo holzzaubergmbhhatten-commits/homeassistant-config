@@ -107,12 +107,23 @@ automation:
     value_template: >-
       {{ is_state(trigger.event.data.entity_id, 'unavailable')
          and states[trigger.event.data.entity_id].last_changed <= now() - timedelta(minutes=9) }}
+  # Selbstheilung: Verbindung zum Gerät in Home Assistant einmal neu aufbauen (nicht bei der Musik – das würde laufende
+  # Musik unterbrechen). Kameras holt zusätzlich „Kameras: verrutschte Adresse selbst reparieren“ zurück.
+  - if: "{{ trigger.event.data.entity_id not in integration_entities('music_assistant') }}"
+    then:
+    - action: homeassistant.reload_config_entry
+      continue_on_error: true
+      target:
+        entity_id: "{{ trigger.event.data.entity_id }}"
+    - delay: 00:05:00
+  - condition: template
+    value_template: "{{ is_state(trigger.event.data.entity_id, 'unavailable') }}"
   - action: telegram_bot.send_message
     continue_on_error: true
     data:
       message: >-
-        📴 Seit 10 Minuten nicht erreichbar: {{ state_attr(trigger.event.data.entity_id, 'friendly_name') or trigger.event.data.entity_id }}
-        ({{ trigger.event.data.entity_id }}). Strom/WLAN prüfen – oder an Claude weiterleiten.
+        📴 Nicht erreichbar: {{ state_attr(trigger.event.data.entity_id, 'friendly_name') or trigger.event.data.entity_id }}
+        ({{ trigger.event.data.entity_id }}). Neu verbinden hat nicht geholfen – Strom/WLAN prüfen oder an Claude weiterleiten.
 
 # Nach jedem Neustart (z. B. wenn Claude neue Einstellungen eingespielt hat) kurz Bescheid geben
 - id: neustart_an_telegram
