@@ -11,6 +11,7 @@ shell_command:
   netzwerk: python3 /config/claude_tools/netzwerk.py {{ aktion }} {{ wert | default('') }}
   omada_finden: python3 /config/claude_tools/omada_finden.py
   ip_liste: python3 /config/claude_tools/ip_liste.py {{ modus | default('') }}
+  omada_fest: python3 /config/claude_tools/omada_fest.py {{ modus }}
 
 script:
   netzwerk_speichern:
@@ -97,6 +98,54 @@ script:
                 {%- else %}📌 Liste ging nicht: {{ antwort.fehler | default('?') }}{% endif %}
       - stop: fertig
         response_variable: antwort
+
+  # Feste Adressen im Omada-Controller eintragen (jetzige Adresse bleibt, wird nur festgehalten).
+  # modus: plan = Telegram zeigt, was gemacht würde (mit Knopf „Ja, festmachen“); ausfuehren = eintragen
+  netzwerk_adressen_festmachen:
+    alias: "Netzwerk: feste Adressen eintragen"
+    icon: mdi:pin
+    mode: single
+    fields:
+      modus:
+        description: plan oder ausfuehren
+    sequence:
+      - action: shell_command.omada_fest
+        data:
+          modus: "{{ modus if modus | default('') in ['ausfuehren', 'plan_einmal'] else 'plan' }}"
+        response_variable: roh
+      - variables:
+          a: >-
+            {% set t = roh.stdout | default('') if roh is defined and roh is mapping else '' %}
+            {{ t | from_json if (t | string).startswith('{') else {'ok': false, 'fehler_text': t or 'keine Antwort'} }}
+          plan: "{{ modus | default('plan') != 'ausfuehren' }}"
+          marco: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\\d+$') | first | default('') }}"
+      - if: "{{ marco != '' and not a.still | default(false) }}"
+        then:
+          - action: telegram_bot.send_message
+            continue_on_error: true
+            data:
+              chat_id: "{{ marco | int }}"
+              message: >-
+                {% if not a.ok | default(false) %}📌 Feste Adressen: ging nicht – {{ a.fehler_text | default('?') }}{% else %}
+                {% set ns = namespace(z=['📌 Feste Adressen im Router' ~ (' – Vorschlag:' if plan else ' – erledigt:')]) %}
+                {% for g in a.neu %}{% set ns.z = ns.z + [('➕ ' if plan else '✅ ') ~ g.ip ~ ' – ' ~ g.name] %}{% endfor %}
+                {% for g in a.schon %}{% set ns.z = ns.z + ['✔️ ' ~ g.ip ~ ' – ' ~ g.name ~ ' (war schon fest)'] %}{% endfor %}
+                {% for g in a.fehlt %}{% set ns.z = ns.z + ['❓ ' ~ g.ip ~ ' – ' ~ g.name ~ ' (gerade nicht im Netz)'] %}{% endfor %}
+                {% for g in a.fehler %}{% set ns.z = ns.z + ['⚠️ ' ~ g.ip ~ ' – ' ~ g.name ~ ': ' ~ g.fehler] %}{% endfor %}
+                {% if plan and a.neu %}{% set ns.z = ns.z + ['', 'Die Adressen bleiben, wie sie sind – sie werden nur festgehalten, damit nach einem Router-Neustart nichts mehr verrutscht.'] %}
+                {% elif not a.neu %}{% set ns.z = ns.z + ['Nichts zu tun.'] %}{% endif %}
+                {{ ns.z | join('\n') }}{% endif %}
+          - if: "{{ plan and a.ok | default(false) and a.neu | default([]) | count > 0 }}"
+            then:
+              - action: telegram_bot.send_message
+                continue_on_error: true
+                data:
+                  chat_id: "{{ marco | int }}"
+                  message: "Soll ich diese {{ a.neu | count }} Adressen im Router festmachen?"
+                  inline_keyboard:
+                    - "Ja, festmachen:/omada_fest_ja, Nein:/omada_fest_nein"
+      - stop: fertig
+        response_variable: a
 
   netzwerk_poe_neustart:
     alias: "Netzwerk: Gerät per PoE neu starten"
@@ -323,14 +372,44 @@ automation:
         target:
           entity_id: script.netzwerk_firmware
 
-  # Einmalig nach dem Start die Adress-Liste schicken (danach jederzeit über das Skript)
+  # Einmalig nach dem Start vorschlagen, die Adressen festzumachen (danach jederzeit über das Skript)
   - id: netzwerk_ip_liste_einmal
-    alias: "Netzwerk: Adress-Liste einmalig schicken"
+    alias: "Netzwerk: feste Adressen einmalig vorschlagen"
     triggers:
       - trigger: homeassistant
         event: start
+    conditions:
+      - condition: template
+        value_template: "{{ integration_entities('tplink_omada') | count > 0 }}"
     actions:
       - delay: "00:03:00"
-      - action: script.netzwerk_ip_liste
+      - action: script.netzwerk_adressen_festmachen
         data:
-          modus: einmal
+          modus: plan_einmal
+
+  - id: netzwerk_adressen_knopf
+    alias: "Netzwerk: Knopf feste Adressen"
+    mode: queued
+    triggers:
+      - trigger: event
+        event_type: telegram_callback
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.event.data.data in ['/omada_fest_ja', '/omada_fest_nein'] }}"
+    actions:
+      - action: telegram_bot.answer_callback_query
+        continue_on_error: true
+        data:
+          callback_query_id: "{{ trigger.event.data.id }}"
+          message: "OK"
+      - action: telegram_bot.edit_replymarkup
+        continue_on_error: true
+        data:
+          chat_id: "{{ trigger.event.data.chat_id }}"
+          message_id: "{{ trigger.event.data.message.message_id }}"
+          inline_keyboard: []
+      - if: "{{ trigger.event.data.data == '/omada_fest_ja' }}"
+        then:
+          - action: script.netzwerk_adressen_festmachen
+            data:
+              modus: ausfuehren
