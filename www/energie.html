@@ -455,6 +455,25 @@ function aussenLuft(liste) {
   if (a && a.humidity != null) return { t: zahl(E.aussen) ?? a.temperature, rh: a.humidity, quelle: "Wetter" };
   return null;
 }
+// Heizkreise: Rücklauf-Fühler am Flur-Verteiler (Shelly-Sensor-Add-on). Die Fühler werden über ihre Nummer gefunden.
+const KREISE = [["100", "Kind 2"], ["101", "Schlafen"], ["102", "Flur"], ["103", "Badezimmer"], ["104", "Mucki"]];
+function heizkreise() {
+  const h = hass(); if (!h) return null;
+  const fund = {};
+  Object.keys(h.states).forEach(id => {
+    const name = String(h.states[id].attributes.friendly_name || ""), text = id + " " + name;
+    if (!id.startsWith("sensor.") || !/temperat/i.test(text) || zahl(id) == null) return;
+    KREISE.forEach(([n]) => { if (!fund[n] && new RegExp("(^|[^0-9])" + n + "([^0-9]|$)").test(text)) fund[n] = id; });
+  });
+  return KREISE.map(([n, raum]) => ({ n, raum, id: fund[n] || null, t: fund[n] ? zahl(fund[n]) : null }));
+}
+function heizkreiseKarte() {
+  const k = heizkreise(); if (!k) return "";
+  const gefunden = k.filter(x => x.id).length;
+  return `<div class="karte"><h2>Heizkreise: Rücklauf</h2>
+    <table class="werte raum">${k.map(x => `<tr><td><b>${esc(x.raum)}</b></td><td>${x.id ? fmt(x.t, 1) + " °C" : '<span class="klein">nicht gefunden</span>'}</td></tr>`).join("")}</table>
+    <div class="klein" style="margin-top:6px">${gefunden} von 5 Fühlern gefunden. Ein warmer Rücklauf heißt: der Kreis läuft. Bleibt er kalt, obwohl der Raumregler auf warm steht, prüfen: Stellmotor offen?</div></div>`;
+}
 function raeumeSeite() {
   const liste = raeume(), aussen = aussenLuft(liste), wa = aussen ? luftWasser(aussen.t, aussen.rh) : null;
   const innen = liste.filter(x => !x.draussen && !x.alt && x.h).map(x => luftWasser(zahl(x.t), zahl(x.h))).filter(v => v != null);
@@ -508,6 +527,7 @@ function raeumeSeite() {
         ${kachel(kwT(Math.max(0, kw(E.pvLeistung) || 0)), "PV jetzt")}${kachel(zahl(E.akkuStand) == null ? "–" : fmt(zahl(E.akkuStand), 0) + " %", "Speicher", zahl(E.akkuStand))}
         ${EW.durchfluss ? kachel(esc(st_text(EW.durchfluss)), "Wasser fließt") : kachel(kwhT(kwh(E.wpTag)), "Wärmepumpe heute")}
       </div></div>
+      ${heizkreiseKarte()}
     </div>
     <div class="karte">${navi()}${unten}</div>`;
 }
