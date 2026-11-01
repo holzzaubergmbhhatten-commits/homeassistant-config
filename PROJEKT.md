@@ -14,6 +14,7 @@ zum Antippen einzelner Räume.
   Vorher Testphase auf Windows-Laptop mit Docker.
 
 ## Entscheidungen
+- **Marco ist selbst Elektriker** – Elektroarbeiten (230 V, Verteiler, Shellys an Netzspannung) macht er selbst. Nicht auf einen Elektriker verweisen.
 - Plattform: Home Assistant (statt iPad)
 - Kalender: eigene Website (Direktbuchungen) + Holidu + lokaler Geburtstage-Kalender
 - Wetter: Met.no
