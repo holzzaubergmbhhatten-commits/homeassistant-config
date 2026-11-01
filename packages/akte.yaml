@@ -11,12 +11,89 @@
 # - Erinnerungen: Fristen eine Woche vorher (täglich geprüft), offene Arztrechnungen am Monatsanfang.
 # Ablage nur lokal: /config/akte_ablage (PDFs, damit in jedem Backup), /config/akte.json (Verzeichnis). Die Arbeit läuft im Hintergrund weiter und
 # antwortet selbst per Telegram (Home Assistant wartet nur 60 Sekunden auf einen Befehl).
+input_text:
+  # Schlüssel für das Haus-Handbuch (GitHub, nur Schreibrecht auf das Repository „webseiten“) – trägt Marco selbst ein,
+  # er steht nur hier in Home Assistant, nie im Repository. Gebraucht für „📖 Ja, ins Haus-Handbuch“.
+  github_handbuch_schluessel:
+    name: GitHub-Schlüssel Haus-Handbuch
+    mode: password
+    max: 255
+    icon: mdi:key-variant
+
 shell_command:
   akte: python3 /config/claude_tools/akte.py {{ aktion }} {{ wert }}
+  anleitung_handbuch: python3 /config/claude_tools/anleitung_handbuch.py {{ wert }}
   # Hochladen über die Akte-Seite: ein Stück der Datei (Base64, in Argumente zu je 100 000 Zeichen geteilt)
   akte_stueck: python3 /config/claude_tools/akte.py stueck {{ kennung }} {{ teil }} {{ name }} {{ letzt }} {{ daten }}
 
 automation:
+  # Knopf „📖 Ja, ins Haus-Handbuch“ (kommt von der Akte, wenn ein Dokument eine Bedienungsanleitung ist)
+  - id: akte_anleitung_ins_handbuch
+    alias: "Akte: Anleitung ins Haus-Handbuch"
+    mode: queued
+    triggers:
+      - trigger: event
+        event_type: telegram_callback
+    conditions:
+      - condition: template
+        value_template: "{{ (trigger.event.data.data | default('')).startswith('/anl_') }}"
+    actions:
+      - variables:
+          ja: "{{ trigger.event.data.data.startswith('/anl_ja_') }}"
+          kennung: "{{ trigger.event.data.data[8:] | regex_replace('[^A-Za-z0-9_-]', '') }}"
+          schluessel: "{{ states('input_text.github_handbuch_schluessel') | string }}"
+      - action: telegram_bot.answer_callback_query
+        continue_on_error: true
+        data:
+          callback_query_id: "{{ trigger.event.data.id }}"
+          message: "{{ 'Kommt ins Handbuch …' if ja else 'OK' }}"
+      - if: "{{ not ja }}"
+        then:
+          - action: telegram_bot.edit_replymarkup
+            continue_on_error: true
+            data:
+              chat_id: "{{ trigger.event.data.chat_id }}"
+              message_id: "{{ trigger.event.data.message.message_id }}"
+              inline_keyboard: []
+          - stop: Nein gedrückt
+      - action: shell_command.anleitung_handbuch
+        continue_on_error: true
+        data:
+          wert: >-
+            {{ {'id': kennung, 'schluessel': schluessel if schluessel not in ['unknown', 'unavailable'] else '',
+                'von': trigger.event.data.from_first | default('', true)} | to_json | base64_encode }}
+        response_variable: roh
+      - variables:
+          a: >-
+            {% set t = roh.stdout | default('') if roh is defined and roh is mapping else '' %}
+            {{ t | from_json if (t | string).startswith('{') else {'ok': false, 'fehler': t or 'keine Antwort'} }}
+      # Knopf erst weg, wenn es geklappt hat (fehlt der Schlüssel noch, kann man danach nochmal drücken)
+      - if: "{{ a.ok | default(false) }}"
+        then:
+          - action: telegram_bot.edit_replymarkup
+            continue_on_error: true
+            data:
+              chat_id: "{{ trigger.event.data.chat_id }}"
+              message_id: "{{ trigger.event.data.message.message_id }}"
+              inline_keyboard: []
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ trigger.event.data.chat_id }}"
+          message: >-
+            {% if a.ok | default(false) %}📖 „{{ a.name }}“ ist unterwegs ins Haus-Handbuch – in etwa 5 Minuten unter „📄 Anleitungen“
+            {{- ' (neu angelegt unter „Sonstiges“)' if a.neu else ' und beim Gerät' }}.
+            {%- elif a.fehler == 'kein_schluessel' %}📖 Dafür fehlt einmalig der GitHub-Schlüssel. So geht's (5 Minuten, nur einmal):
+            {{ '\n' }}1. Am Laptop auf github.com anmelden → oben rechts Profilbild → Settings → ganz unten „Developer settings“
+            → „Personal access tokens“ → „Fine-grained tokens“ → „Generate new token“.
+            {{ '\n' }}2. Name: Home Assistant Handbuch · Ablauf: 1 Jahr · Repository access: „Only select repositories“ → webseiten
+            · Permissions → Repository → Contents: „Read and write“ → „Generate token“.
+            {{ '\n' }}3. Den Schlüssel kopieren (nur jetzt sichtbar) und in Home Assistant eintragen: Einstellungen → Geräte & Dienste
+            → Helfer → „GitHub-Schlüssel Haus-Handbuch“ → einfügen → Aktualisieren.
+            {{ '\n' }}4. Dann oben nochmal auf „📖 Ja, ins Haus-Handbuch“ tippen.
+            {{ '\n' }}Den Schlüssel bitte nirgends sonst hinschicken.
+            {%- else %}⚠️ Ins Handbuch ging nicht: {{ a.fehler | default('?') }} – an Claude weiterleiten.{% endif %}
+
   # Nebenkosten Nadorster Str.: Zähler jedes Jahr zum Ende des Abrechnungszeitraums (31.10.) ablesen –
   # eine Woche vorher als Aufgabe + Telegram, am Stichtag nochmal per Telegram
   - id: nebenkosten_zaehler_ablesen

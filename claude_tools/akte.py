@@ -734,6 +734,28 @@ def ablegen(auftrag):
         # etwas warten: kommen keine weiteren Fotos mehr, wird der Vorgang gebildet (kommt später noch eins, wird er ergänzt)
         im_hintergrund(sendung_abschliessen, {"chat": chat, "id": neu_eintrag["id"], "von": auftrag.get("von", "")}, warten=150)
     senden(chat, "\n".join(zeilen))
+    anleitung_fragen(chat, neu_eintrag)
+
+
+ANLEITUNG = re.compile(r"(bedienungs|gebrauchs|betriebs|montage|installations|benutzer|wartungs)[-\s]*(anleitung|anweisung|handbuch)"
+                       r"|user\s*manual|operating\s*instructions|instruction\s*manual|owner'?s\s*manual", re.I)
+
+
+def anleitung_fragen(chat, e):
+    """Ist das eine Bedienungsanleitung (PDF)? Dann fragen, ob sie auch ins Haus-Handbuch soll
+    (Knopf → packages/akte.yaml „Akte: Anleitung ins Haus-Handbuch“ → claude_tools/anleitung_handbuch.py)."""
+    try:
+        if not chat or not str(e.get("datei", "")).lower().endswith(".pdf"):
+            return
+        text = " ".join(str(e.get(k) or "") for k in ("titel", "typ")) + " " + " ".join(e.get("schlagworte") or []) + " " + (e.get("inhalt") or "")[:3000]
+        if not ANLEITUNG.search(text):
+            return
+        knoepfe = {"inline_keyboard": [[{"text": "📖 Ja, ins Haus-Handbuch", "callback_data": f"/anl_ja_{e['id']}"[:64]},
+                                        {"text": "Nein", "callback_data": "/anl_nein"}]]}
+        telegram("sendMessage", {"chat_id": chat, "text": f"📖 „{e.get('titel') or 'Das Dokument'}“ ist eine Anleitung. Soll sie auch ins "
+                                 "Haus-Handbuch (Seite „Anleitungen“ und beim Gerät)?", "reply_markup": knoepfe})
+    except Exception as fehler:  # noqa: BLE001
+        logbuch(f"Anleitung-Frage ging nicht: {fehler}")
 
 
 def felder_setzen(eintrag, e, jahr=None):
