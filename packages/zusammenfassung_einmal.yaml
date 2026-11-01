@@ -1,0 +1,52 @@
+# Einmalige Zusammenfassung per Telegram (Wunsch Marco, 1.11.2026): was heute an Urlaub-wie-Zuhause und Hüpfzauber gebaut wurde.
+# Wird genau einmal geschickt (Merker input_boolean) und nur am 1./2.11.2026; danach kann die Datei weg.
+# Keine Codes, Passwörter oder Links mit Zugang – der Familien-Code steht nur in der Verwaltung.
+input_boolean:
+  zusammenfassung_20261101_gesendet:
+    name: "Zusammenfassung 1.11. gesendet"
+    icon: mdi:email-check
+
+automation:
+  - id: zusammenfassung_20261101
+    alias: "Einmal: Zusammenfassung Urlaub wie Zuhause per Telegram"
+    mode: single
+    trigger:
+      - platform: homeassistant
+        event: start
+      - platform: time_pattern
+        minutes: "/5"
+    condition:
+      - condition: state
+        entity_id: input_boolean.zusammenfassung_20261101_gesendet
+        state: "off"
+      - condition: template
+        value_template: "{{ now().strftime('%Y-%m-%d') in ['2026-11-01', '2026-11-02'] }}"
+    action:
+      - delay: "00:01:00"
+      - condition: state
+        entity_id: input_boolean.zusammenfassung_20261101_gesendet
+        state: "off"
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.zusammenfassung_20261101_gesendet
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\\d+$') | first | int(0) }}"
+          message: >-
+            📋 Zusammenfassung – Urlaub wie Zuhause{{ '\n\n' }}
+            🔑 Gäste-Zugang: Jeder Gast hat jetzt einen eigenen Code (FW-… / SP-…). Gilt 3 Tage vor Anreise bis
+            Abreisetag, danach automatisch gesperrt. Steht von selbst in der Buchungsbestätigung; sonst in der
+            Verwaltung bei der Buchung auf „🔑 Code“ tippen (auch für Holidu-Gäste, mit WhatsApp-Knopf).
+            Altes gemeinsames Passwort gilt nur noch bis 15.11.{{ '\n\n' }}
+            👨‍👩‍👧 Familien-Code (FA-…): gilt dauerhaft für Ferienwohnung und Stellplatz. Zu finden in der Verwaltung unter
+            „Gäste-Zugänge“ (dort auch „Neu erzeugen“). In der Verwaltung angemeldet = Gästebereich ohne Code.{{ '\n\n' }}
+            🗺️ Ausflugsplaner für Gäste: Knopf „Ausflüge finden“ im Gästebereich, KI sucht Ausflüge ab der Unterkunft
+            (Wetter, Route, DE/EN/NL). Zum Einschalten: Anthropic-Schlüssel in der Verwaltung eintragen
+            (Kasten „Ausflugsplaner für Gäste“), Grenze 5 Suchen pro Tag und Unterkunft.{{ '\n\n' }}
+            🏠 Ferienwohnung: Holidu-Buchungen stehen jetzt mit in der Verwaltung (🔵, ohne Namen, alle 6 Std. aktualisiert).{{ '\n\n' }}
+            ⭐ Nach der Abreise: Kasten „Abgereist – um Google-Bewertung bitten“, ein Tipp fügt die Dankes-Mail mit
+            Bewertungslink ein, dann „Antwort senden“.{{ '\n\n' }}
+            🎈 Hüpfzauber: neue Seite mit Online-Buchung, echten Burgen, Preisen, Fotos, neuem Logo; Verwaltung unten
+            auf der Seite („🔒 Verwaltung“).{{ '\n\n' }}
+            Bitte einmal ausprobieren: Verwaltung neu laden → Familien-Code ansehen → Gästebereich am Handy testen.
