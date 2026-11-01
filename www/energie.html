@@ -463,7 +463,12 @@ function heizkreise() {
   Object.keys(h.states).forEach(id => {
     const name = String(h.states[id].attributes.friendly_name || ""), text = id + " " + name;
     if (!id.startsWith("sensor.") || !/temperat/i.test(text) || zahl(id) == null) return;
-    KREISE.forEach(([n]) => { if (!fund[n] && new RegExp("(^|[^0-9])" + n + "([^0-9]|$)").test(text)) fund[n] = id; });
+    // Gefunden über die Nummer (100–104) oder über den Namen „Rücklauf <Raum>“ / „RL <Raum>“
+    KREISE.forEach(([n, raum]) => {
+      const nummer = new RegExp("(^|[^0-9])" + n + "([^0-9]|$)").test(text);
+      const nach_name = /r(ü|ue)cklauf|\brl\b/i.test(name) && name.toLowerCase().includes(raum.toLowerCase());
+      if (!fund[n] && (nummer || nach_name)) fund[n] = id;
+    });
   });
   return KREISE.map(([n, raum]) => ({ n, raum, id: fund[n] || null, t: fund[n] ? zahl(fund[n]) : null }));
 }
