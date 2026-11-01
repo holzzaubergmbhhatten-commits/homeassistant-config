@@ -8,6 +8,10 @@ shell_command:
   go2rtc_einrichten: python3 /config/claude_tools/go2rtc_einrichten.py
   go2rtc_passwort: python3 /config/claude_tools/go2rtc_einrichten.py --passwort
   kamera_check: python3 /config/claude_tools/kamera_check.py
+  # Verrutschte Kamera-Adressen selbst reparieren (claude_tools/kamera_retten.py) – läuft im Hintergrund,
+  # weil es länger als die 60 Sekunden dauern kann, die Home Assistant einem Befehl gibt
+  kamera_retten_start: nohup python3 /config/claude_tools/kamera_retten.py > /config/.kamera_retten.json 2>&1 &
+  kamera_retten_lesen: cat /config/.kamera_retten.json
   kamera_drehen_befehl: python3 /config/claude_tools/kamera_drehen.py {{ kamera }} {{ richtung }}
   # aktuelles Einzelbild über go2rtc (zuverlässiger als camera.snapshot der Generic-Kameras, die alte Bilder liefern können)
   kamera_foto: python3 /config/claude_tools/kamera_foto.py {{ stream }} {{ datei }}
@@ -125,3 +129,57 @@ automation:
           parse_mode: html
           message: >-
             🔑 go2rtc-Oberfläche: Benutzer <code>zuhause</code> · Passwort <code>{{ pw.stdout | trim }}</code>
+
+  # Kamera nicht erreichbar → Home Assistant sucht sie selbst (neue Adresse nach Router-Neustart) und holt sie
+  # über den Omada-Controller auf ihre alte Adresse zurück. Telegram an Marco nur, wenn sich etwas geändert hat.
+  - id: kamera_selbst_reparieren
+    alias: "Kameras: verrutschte Adresse selbst reparieren"
+    mode: single
+    max_exceeded: silent
+    triggers:
+      - trigger: state
+        entity_id:
+          - camera.draussen_giebel_vorne
+          - camera.draussen_giebel_hinten
+          - camera.draussen_hof_hinten
+          - camera.draussen_hot_tor_kamera
+        to: unavailable
+        for: "00:05:00"
+      - trigger: time_pattern
+        minutes: "/30"
+      - trigger: homeassistant
+        event: start
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ trigger.platform == 'homeassistant' or
+             states.camera | selectattr('entity_id', 'search', '^camera\\.draussen') | selectattr('state', 'eq', 'unavailable') | list | count > 0 }}
+    actions:
+      - delay: "00:01:00"
+      - action: shell_command.kamera_retten_start
+        continue_on_error: true
+      - delay: "00:04:00"
+      - action: shell_command.kamera_retten_lesen
+        continue_on_error: true
+        response_variable: roh
+      - variables:
+          a: >-
+            {% set t = roh.stdout | default('') if roh is defined and roh is mapping else '' %}
+            {{ t | from_json if (t | string).startswith('{') else {'ok': false} }}
+          melden: "{{ a.kameras | default([]) | selectattr('melden') | list }}"
+          marco: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\\d+$') | first | default('') }}"
+      - condition: template
+        value_template: "{{ melden | count > 0 and marco != '' }}"
+      - action: telegram_bot.send_message
+        continue_on_error: true
+        data:
+          chat_id: "{{ marco | int }}"
+          message: >-
+            {% set ns = namespace(z=['📷 Kameras – selbst repariert:']) %}
+            {% for k in melden %}
+            {% if k.status == 'repariert' %}{% set ns.z = ns.z + ['✅ ' ~ k.name ~ ': war auf ' ~ k.neu_ip ~ ' verrutscht – jetzt wieder unter ' ~ k.ip ~ ', läuft.'] %}
+            {% elif k.status == 'gefunden' %}{% set ns.z = ns.z + ['🔧 ' ~ k.name ~ ': gefunden unter ' ~ k.neu_ip ~ '. ' ~ k.hinweis] %}
+            {% elif k.status == 'nicht_gefunden' %}{% set ns.z = ns.z + ['❓ ' ~ k.name ~ ': im Netz nicht gefunden (Strom/WLAN?)' ~ ((' – ' ~ k.hinweis) if k.hinweis else '')] %}
+            {% else %}{% set ns.z = ns.z + ['⚠️ ' ~ k.name ~ ': ' ~ k.hinweis] %}{% endif %}
+            {% endfor %}
+            {{ ns.z | join('\n') }}
