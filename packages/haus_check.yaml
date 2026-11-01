@@ -6,6 +6,7 @@
 #   kameras                → alle Kameras prüfen; fehlt eine, sucht Home Assistant sie selbst
 #   netzwerk               → Router, Switch, Access Points: was läuft, was fehlt, Firmware
 #   adressen               → feste Adressen im Router vorschlagen (Knopf „Ja, festmachen“)
+#   links                  → alle Links aus dem Werkzeugkasten (packages/werkzeugkasten.yaml)
 #
 # Der Haus-Check sammelt in EINER Nachricht: Geräte, die fehlen; schwache Batterien; anstehende Updates;
 # fällige Wartung; Kühlgeräte ohne Strom. Mit Knöpfen zum Erledigen. Ist alles in Ordnung, kommt nur eine kurze Zeile.
@@ -172,13 +173,13 @@ automation:
       - condition: template
         value_template: >-
           {% if trigger.id == 'knopf' %}{{ trigger.event.data.data in ['/hc_kameras', '/hc_adressen', '/hc_netzwerk'] }}
-          {% else %}{{ (trigger.event.data.text | default('') | string) is match('^\s*/?(hilfe|befehle|help|hauscheck|haus-check|check|kameras?|kamera\s*test|kameras?\s*pr(ü|ue)fen|netzwerk|netz|adressen|feste\s+adressen)\s*[?!.]*\s*$', ignorecase=True) }}{% endif %}
+          {% else %}{{ (trigger.event.data.text | default('') | string) is match('^\s*/?(hilfe|befehle|help|hauscheck|haus-check|check|kameras?|kamera\s*test|kameras?\s*pr(ü|ue)fen|netzwerk|netz|adressen|feste\s+adressen|links|werkzeugkasten)\s*[?!.]*\s*$', ignorecase=True) }}{% endif %}
     actions:
       - variables:
           chat: "{{ trigger.event.data.chat_id }}"
           befehl: >-
             {% set t = (trigger.event.data.data if trigger.id == 'knopf' else trigger.event.data.text) | default('') | string | lower %}
-            {% if t is search('kamera|hc_kameras') %}kameras{% elif t is search('netz|hc_netzwerk') %}netzwerk
+            {% if t is search('kamera|hc_kameras') %}kameras{% elif t is search('links|werkzeugkasten') %}links{% elif t is search('netz|hc_netzwerk') %}netzwerk
             {% elif t is search('adress|hc_adressen') %}adressen{% elif t is search('check') %}check{% else %}hilfe{% endif %}
       - if: "{{ trigger.id == 'knopf' }}"
         then:
@@ -203,6 +204,20 @@ automation:
               - action: script.haus_netzwerk_uebersicht
                 data:
                   chat: "{{ chat }}"
+          - conditions: "{{ befehl == 'links' }}"
+            sequence:
+              - action: script.werkzeugkasten_lesen
+                response_variable: wk
+              - action: telegram_bot.send_message
+                continue_on_error: true
+                data:
+                  chat_id: "{{ chat | int }}"
+                  disable_web_page_preview: true
+                  message: >-
+                    {% if wk.ok | default(false) %}{% set ns = namespace(z=['🧰 Unser Werkzeugkasten – alle Links']) %}
+                    {% for b in wk.liste.bereiche %}{% set ns.z = ns.z + ['', b.titel] %}
+                      {% for e in b.eintraege %}{% set ns.z = ns.z + ['🔗 ' ~ e.name ~ ': ' ~ e.url] %}{% endfor %}{% endfor %}
+                    {{ ns.z | join('\n') }}{% else %}🧰 Die Linkliste fehlt noch – dafür braucht Home Assistant einmalig den GitHub-Schlüssel (siehe Monitor → Links).{% endif %}
           - conditions: "{{ befehl == 'adressen' }}"
             sequence:
               - action: telegram_bot.send_message
@@ -224,6 +239,7 @@ automation:
                 {{ '\n' }}• kameras – alle Kameras prüfen (fehlende sucht Home Assistant selbst)
                 {{ '\n' }}• netzwerk – Router, Switch, Access Points
                 {{ '\n' }}• adressen – feste Adressen im Router festmachen
+                {{ '\n' }}• links – alle Links (Handbuch, Bauplaner, Verein …)
                 {{ '\n' }}• liste / aufgaben – Einkaufsliste, Aufgaben
                 {{ '\n' }}• monitor – Monitor zurück zum Dashboard
                 {{ '\n' }}Alles andere einfach normal schreiben – dann antwortet Claude.

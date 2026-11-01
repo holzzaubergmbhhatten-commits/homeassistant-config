@@ -1,0 +1,66 @@
+# Werkzeugkasten = Seite „Links“ am Monitor (www/werkzeugkasten.html): alle Seiten und Werkzeuge der Familie
+# (Haus-Handbuch, Bauplaner, Umbau-Lotse, Verein, Vermietung …) zum Öffnen, Kopieren und Verschicken
+# (Telegram, WhatsApp, Mail). Die Liste kommt aus dem privaten Repository (claude_tools/werkzeugkasten.py).
+shell_command:
+  werkzeugkasten: python3 /config/claude_tools/werkzeugkasten.py {{ aktion }} {{ wert | default('') }}
+
+script:
+  werkzeugkasten_lesen:
+    alias: "Werkzeugkasten: Liste lesen"
+    mode: queued
+    fields:
+      neu:
+        description: true = vorher frisch aus dem Repository holen
+    sequence:
+      - action: shell_command.werkzeugkasten
+        data:
+          aktion: "{{ 'holen' if neu | default(false) else 'lesen' }}"
+          wert: "{{ (states('input_text.github_handbuch_schluessel') | string | replace('unknown', '') | replace('unavailable', '')) | base64_encode if neu | default(false) else '' }}"
+        response_variable: roh
+      - variables:
+          a: >-
+            {% set t = roh.stdout | default('') if roh is defined and roh is mapping else '' %}
+            {{ t | from_json if (t | string).startswith('{') else {'ok': false, 'fehler': t or 'keine Antwort'} }}
+      - stop: fertig
+        response_variable: a
+
+  # Link(s) per Telegram schicken – an Marco (erster Empfänger) oder an alle freigegebenen Chats
+  werkzeugkasten_schicken:
+    alias: "Werkzeugkasten: per Telegram schicken"
+    mode: queued
+    fields:
+      text:
+        description: Nachricht mit dem Link
+      an:
+        description: ich (Marco) oder alle
+    sequence:
+      - variables:
+          chats: >-
+            {% set l = (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\\d+$') | list %}
+            {{ l if an | default('ich') == 'alle' else l[:1] }}
+      - repeat:
+          for_each: "{{ chats }}"
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                chat_id: "{{ repeat.item | int }}"
+                message: "{{ text[:3800] }}"
+                disable_web_page_preview: true
+
+automation:
+  - id: werkzeugkasten_aktualisieren
+    alias: "Werkzeugkasten: Liste aktualisieren"
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: time
+        at: "04:37:00"
+      - trigger: state
+        entity_id: input_text.github_handbuch_schluessel
+    actions:
+      - delay: 30
+      - action: script.werkzeugkasten_lesen
+        continue_on_error: true
+        data:
+          neu: true

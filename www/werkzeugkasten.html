@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Links</title>
+<!--
+  Werkzeugkasten (Dashboard-Reiter „Links“, packages/werkzeugkasten.yaml): alle Seiten und Werkzeuge der Familie –
+  öffnen, kopieren, per Telegram an mich/alle, per WhatsApp oder Mail weitergeben.
+  Die Links stehen NICHT hier (dieses Repository ist öffentlich), sondern kommen über script.werkzeugkasten_lesen
+  aus dem privaten Repository „webseiten“ (claude_tools/werkzeugkasten.py).
+-->
+<style>
+  :root { --bg: #f7f4ed; --karte: #fff; --text: #2d3329; --grau: #6b7266; --linie: #eee8d9; --gruen: #536b45; --dunkel: #33442b;
+    --sand2: #efe8d8; --hinweis: #8a5a12; --wa: #1f8f4e; }
+  .dunkel { --bg: #161a13; --karte: #232a1f; --text: #efe9dc; --grau: #a9a493; --linie: #343d2e; --gruen: #a9be8f; --dunkel: #c9d8b4;
+    --sand2: #2c3326; --hinweis: #e0b46a; --wa: #58c58a; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: Montserrat, -apple-system, Roboto, sans-serif; }
+  body { display: flex; flex-direction: column; overflow: hidden; touch-action: manipulation; }
+  button { font: inherit; border: 0; background: none; color: inherit; cursor: pointer; padding: 0; }
+  .kopf { display: flex; align-items: center; gap: 10px; padding: 10px 14px 8px; flex-wrap: wrap; }
+  .kopf h1 { margin: 0; font-size: 26px; }
+  .kopf .stand { font-size: 13px; color: var(--grau); }
+  .kopf .rechts { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+  main { flex: 1; overflow: auto; padding: 6px 14px 90px; -webkit-overflow-scrolling: touch; }
+  #suche { width: 100%; font: inherit; font-size: 16px; padding: 11px 13px; border-radius: 12px; border: 1px solid var(--linie); background: var(--karte); color: var(--text); margin-bottom: 4px; }
+  .spalten { columns: 2 520px; column-gap: 14px; }
+  section { break-inside: avoid; margin-top: 16px; }
+  h2 { margin: 0; font-size: 20px; }
+  .bereich { font-size: 13px; color: var(--grau); margin: 2px 0 8px; }
+  .liste { background: var(--karte); border: 1px solid var(--linie); border-radius: 18px; box-shadow: 0 4px 16px rgba(51,68,43,.06); }
+  .eintrag { padding: 13px 14px; border-top: 1px solid var(--linie); }
+  .eintrag:first-child { border-top: 0; }
+  .name { font-weight: 700; font-size: 16.5px; }
+  .marke { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 99px;
+    color: var(--gruen); background: var(--sand2); margin-left: 6px; vertical-align: 2px; }
+  .marke.offen { color: var(--hinweis); background: transparent; border: 1px solid currentColor; }
+  .was { color: var(--grau); font-size: 14px; margin-top: 2px; line-height: 1.4; }
+  .url { font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; color: var(--grau); margin-top: 3px; overflow-wrap: anywhere; }
+  .knoepfe { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+  .k { display: inline-flex; align-items: center; gap: 5px; padding: 8px 11px; border-radius: 11px; background: var(--sand2); color: var(--dunkel); font-weight: 600; font-size: 13.5px; text-decoration: none; }
+  .k.haupt { background: var(--dunkel); color: #fff; } .dunkel .k.haupt { color: #161a13; }
+  .k.wa { color: var(--wa); }
+  .unter { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .unter a { font-size: 13px; color: var(--text); text-decoration: none; border: 1px solid var(--linie); border-radius: 99px; padding: 4px 10px; }
+  .karte { background: var(--karte); border: 1px solid var(--linie); border-radius: 18px; padding: 16px; margin-top: 14px; }
+  .karte ol { margin: 8px 0 0; padding-left: 20px; line-height: 1.55; }
+  .meldung { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--dunkel); color: var(--bg); padding: 11px 18px; border-radius: 99px; display: none; z-index: 20; max-width: 90vw; text-align: center; }
+  .befehle code { font: 13px ui-monospace, Menlo, monospace; background: var(--sand2); color: var(--gruen); padding: 2px 7px; border-radius: 6px; margin: 2px 3px 0 0; display: inline-block; }
+</style>
+<link rel="stylesheet" href="/local/hausstil.css?v=2">
+</head>
+<body>
+<div class="kopf"><h1>Links</h1><span class="stand" id="stand"></span>
+  <div class="rechts"><button class="k" data-alle="ich">📲 Alle Links an mich</button><button class="k" data-neu="1">↻ Aktualisieren</button></div></div>
+<main><input id="suche" type="search" placeholder="Suchen, z. B. Bauplaner, Anleitungen, Chor …" autocomplete="off"><div id="inhalt"><div class="karte">Lädt …</div></div></main>
+<div class="meldung" id="meldung"></div>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
+function meldung(t) { const m = $("meldung"); m.textContent = t; m.style.display = "block"; clearTimeout(meldung.t); meldung.t = setTimeout(() => m.style.display = "none", 3500); }
+let LISTE = null, FEHLER = "", letzterFinger = 0;
+const voll = (basis, u) => /^https?:/.test(u) ? u : basis.replace(/[^/]*$/, "") + u;
+
+async function laden(neu) {
+  const h = hass(); if (!h) return;
+  try {
+    const r = await h.callWS({ type: "call_service", domain: "script", service: "werkzeugkasten_lesen", service_data: { neu: !!neu }, return_response: true });
+    const a = (r && r.response) || {};
+    if (a.ok) { LISTE = a.liste; FEHLER = ""; } else { FEHLER = a.fehler || "?"; }
+  } catch (e) { FEHLER = e.message || String(e); }
+  zeichnen();
+}
+function eintragText(e) {
+  const zeilen = [`🔗 ${e.name}: ${e.url}`];
+  (e.unter || []).forEach(([n, u]) => zeilen.push(`   • ${n}: ${voll(e.url, u)}`));
+  return zeilen.join("\n");
+}
+function zeichnen() {
+  if (!LISTE) {
+    $("stand").textContent = "";
+    $("inhalt").innerHTML = FEHLER === "kein_schluessel" || FEHLER === "noch_nicht_geholt"
+      ? `<div class="karte"><b>Die Linkliste fehlt noch.</b><div class="klein" style="margin-top:6px">Sie liegt geschützt im privaten Webseiten-Repository. Home Assistant holt sie mit dem GitHub-Schlüssel – demselben wie für „Anleitungen ins Haus-Handbuch“. Einmalig, ca. 5 Minuten am Laptop:</div>
+          <ol><li>github.com → Profilbild → <b>Settings</b> → <b>Developer settings</b> → <b>Personal access tokens</b> → <b>Fine-grained tokens</b> → <b>Generate new token</b></li>
+          <li>Name „Home Assistant Handbuch“, Ablauf 1 Jahr, Repository access: <b>Only select repositories → webseiten</b>, Permissions → Contents: <b>Read and write</b> → Generate</li>
+          <li>Schlüssel kopieren → Home Assistant: <b>Einstellungen → Geräte &amp; Dienste → Helfer → „GitHub-Schlüssel Haus-Handbuch“</b> → einfügen</li>
+          <li>Hier auf <b>↻ Aktualisieren</b> tippen.</li></ol></div>`
+      : `<div class="karte">Linkliste konnte nicht geladen werden: ${esc(FEHLER)}. <button class="k" data-neu="1">Nochmal versuchen</button></div>`;
+    return;
+  }
+  $("stand").textContent = LISTE.stand ? "Stand " + LISTE.stand.split("-").reverse().join(".") : "";
+  const q = ($("suche").value || "").trim().toLowerCase();
+  const passt = e => !q || [e.name, e.was, e.url, ...(e.unter || []).map(x => x[0])].join(" ").toLowerCase().includes(q);
+  let nr = 0;
+  const html = (LISTE.bereiche || []).map(b => {
+    const l = (b.eintraege || []).filter(passt); if (!l.length) return "";
+    return `<section><h2>${esc(b.titel)}</h2><div class="bereich">${esc(b.was || "")}</div><div class="liste">${l.map(e => {
+      const i = nr++; EINTRAEGE[i] = e; const text = eintragText(e);
+      return `<div class="eintrag"><div class="name">${esc(e.name)}${e.marke ? `<span class="marke ${/ohne|nur/.test(e.marke) ? "offen" : ""}">${esc(e.marke)}</span>` : ""}</div>
+        <div class="was">${esc(e.was || "")}</div><div class="url">${esc(e.url)}</div>
+        <div class="knoepfe"><a class="k haupt" href="${esc(e.url)}" target="_blank" rel="noopener">Öffnen</a>
+          <button class="k" data-tg="${i}">📲 Telegram</button>
+          <a class="k wa" href="https://wa.me/?text=${encodeURIComponent(text)}" target="_blank" rel="noopener">WhatsApp</a>
+          <a class="k" target="_blank" rel="noopener" href="mailto:?subject=${encodeURIComponent(e.name)}&body=${encodeURIComponent(text)}">✉️ Mail</a>
+          <button class="k" data-kopie="${i}">Kopieren</button></div>
+        ${e.unter ? `<div class="unter">${e.unter.map(([n, u]) => `<a href="${esc(voll(e.url, u))}" target="_blank" rel="noopener">${esc(n)}</a>`).join("")}</div>` : ""}</div>`;
+    }).join("")}</div></section>`;
+  }).join("");
+  $("inhalt").innerHTML = (html ? `<div class="spalten">${html}</div>` : `<div class="karte">Nichts gefunden.</div>`)
+    + `<div class="karte befehle"><b>Telegram-Bot „Zuhause“</b> – kurze Befehle: <br>${["hauscheck", "kameras", "netzwerk", "adressen", "liste", "aufgaben", "monitor", "hilfe"].map(c => `<code>${c}</code>`).join("")}</div>`;
+}
+const EINTRAEGE = [];
+
+async function schicken(text, an) {
+  const h = hass(); if (!h) return;
+  try { await h.callService("script", "werkzeugkasten_schicken", { text, an: an || "ich" }); meldung("Per Telegram geschickt"); }
+  catch (e) { meldung("Ging nicht: " + (e.message || e)); }
+}
+function kopieren(text) {
+  const fertig = () => meldung("Kopiert");
+  try { navigator.clipboard.writeText(text).then(fertig, () => ersatz(text)); } catch (e) { ersatz(text); }
+}
+function ersatz(text) { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); try { document.execCommand("copy"); meldung("Kopiert"); } catch (e) { meldung("Kopieren ging nicht"); } t.remove(); }
+
+async function aktion(t) {
+  if (t.dataset.neu) { meldung("Hole die Liste …"); await laden(true); if (LISTE) meldung("Aktuell"); return; }
+  if (t.dataset.tg) { const e = EINTRAEGE[+t.dataset.tg]; await schicken(eintragText(e), "ich"); return; }
+  if (t.dataset.kopie) { kopieren(EINTRAEGE[+t.dataset.kopie].url); return; }
+  if (t.dataset.alle && LISTE) {
+    const text = "🧰 Unser Werkzeugkasten – alle Links\n" + (LISTE.bereiche || []).map(b => `\n${b.titel}\n` + b.eintraege.map(eintragText).join("\n")).join("\n");
+    await schicken(text, "ich"); return;
+  }
+}
+let start0 = null;
+document.addEventListener("touchstart", ev => { const t = ev.touches[0]; start0 = { x: t.clientX, y: t.clientY, el: ev.target.closest("button") }; }, { passive: true });
+document.addEventListener("touchmove", ev => { const t = ev.touches[0]; if (start0 && Math.hypot(t.clientX - start0.x, t.clientY - start0.y) > 12) start0 = null; }, { passive: true });
+document.addEventListener("touchend", ev => { const s0 = start0; start0 = null; if (!s0 || !s0.el) return; letzterFinger = Date.now(); ev.preventDefault(); aktion(s0.el); }, { passive: false });
+document.addEventListener("click", ev => { const t = ev.target.closest("button"); if (!t) return; if (Date.now() - letzterFinger < 800) return; aktion(t); });
+$("suche").addEventListener("input", zeichnen);
+
+function design() { const h = hass(); document.documentElement.classList.toggle("dunkel", !!(h && h.themes && h.themes.darkMode)); }
+let versuche = 0;
+function start() {
+  if (!hass()) { if (++versuche === 15) $("inhalt").innerHTML = `<div class="karte">Die Seite funktioniert nur im Dashboard (Reiter „Links“).</div>`; setTimeout(start, 400); return; }
+  design(); laden(false); setInterval(design, 5000);
+}
+start();
+</script>
+</body>
+</html>
