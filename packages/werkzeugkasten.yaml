@@ -64,3 +64,50 @@ automation:
         continue_on_error: true
         data:
           neu: true
+
+  # Einmalige Erinnerung (Wunsch Marco, 1.11.2026): GitHub-Schlüssel einrichten – Aufgabe auf die Liste und
+  # um 17:30 Uhr eine Telegram-Nachricht, nur solange der Schlüssel noch fehlt.
+  - id: erinnerung_github_schluessel
+    alias: "Erinnerung: GitHub-Schlüssel einrichten"
+    triggers:
+      - trigger: homeassistant
+        event: start
+        id: start
+      - trigger: time
+        at: "17:30:00"
+        id: zeit
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ now().strftime('%Y-%m-%d') == '2026-11-01'
+             and (states('input_text.github_handbuch_schluessel') | string | length) < 20 }}
+    actions:
+      - if: "{{ trigger.id == 'start' }}"
+        then:
+          - action: todo.get_items
+            continue_on_error: true
+            target:
+              entity_id: todo.aufgaben
+            data:
+              status: needs_action
+            response_variable: offen
+          - if: "{{ offen is defined and 'todo.aufgaben' in offen and not (offen['todo.aufgaben']['items'] | selectattr('summary', 'search', 'GitHub') | list) }}"
+            then:
+              - action: todo.add_item
+                continue_on_error: true
+                target:
+                  entity_id: todo.aufgaben
+                data:
+                  item: "GitHub-Schlüssel einrichten (Anleitung am Monitor unter „Links“)"
+        else:
+          - action: telegram_bot.send_message
+            continue_on_error: true
+            data:
+              chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\\d+$') | first | int(0) }}"
+              message: >-
+                ⏰ Erinnerung: GitHub-Schlüssel einrichten (ca. 5 Minuten am Laptop) – dann gehen die Links-Seite
+                und „Anleitung ins Haus-Handbuch“.{{ '\n\n' }}1. github.com → Profilbild → Settings → Developer settings →
+                Personal access tokens → Fine-grained tokens → Generate new token{{ '\n' }}2. Name „Home Assistant Handbuch“,
+                Ablauf 1 Jahr, Repository access: Only select repositories → webseiten, Permissions → Contents: Read and write
+                → Generate{{ '\n' }}3. Schlüssel kopieren → Home Assistant: Einstellungen → Geräte & Dienste → Helfer →
+                „GitHub-Schlüssel Haus-Handbuch“ → einfügen{{ '\n\n' }}Den Schlüssel bitte nirgends sonst hinschicken.
