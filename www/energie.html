@@ -430,7 +430,7 @@ function raeume() {
   Object.keys(h.states).forEach(id => {
     const a = h.states[id].attributes;
     if (!id.startsWith("sensor.") || zahl(id) == null) return;
-    if (!(a.device_class === "humidity" || /%/.test(a.unit_of_measurement || ""))) return;
+    if (a.device_class !== "humidity") return;   // nur echte Feuchtesensoren, nicht Batteriestände (auch in %)
     const r = raumVon(id + " " + (a.friendly_name || ""));
     if (r && !feucht[r]) feucht[r] = id;
   });
