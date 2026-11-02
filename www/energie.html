@@ -442,10 +442,11 @@ function raeume() {
     const r = raumVon(id + " " + (a.friendly_name || ""));
     if (r && !gefunden[r]) gefunden[r] = id;
   });
-  return Object.keys(gefunden).sort((x, y) => RAEUME.indexOf(x) - RAEUME.indexOf(y)).map((r, i) => {
-    const id = gefunden[r], s = h.states[id];
+  return RAEUME.map((r, i) => {
+    const id = gefunden[r] || null, st2 = id ? h.states[id] : null;
+    const zeit = st2 ? new Date(st2.last_reported || st2.last_updated) : new Date(0);
     return { t: id, h: feucht[r] || null, name: r, farbe: RAUM_FARBEN[i % RAUM_FARBEN.length], draussen: false,
-      zeit: new Date(s.last_reported || s.last_updated), alt: Date.now() - new Date(s.last_reported || s.last_updated) > 45 * 60e3 };
+      zeit, alt: !st2 || Date.now() - zeit > 45 * 60e3 };
   });
 }
 function linien(reihen, einheit, schritt, H = 190) {
@@ -549,9 +550,8 @@ function raeumeSeite() {
           ${fmt(wa, 1)} g Wasser pro m³, drinnen sind es ${fmt(min, 1)}–${fmt(max, 1)} g. Aufgewärmt ist frische Luft viel trockener, als die Prozentzahl draußen vermuten lässt.</div>`
       : `<div class="lueften">Lüften bringt gerade keine trockenere Luft: draußen ${fmt(wa, 1)} g Wasser pro m³, drinnen ${fmt(min, 1)}–${fmt(max, 1)} g.</div>`;
   }
-  const meldung = st("sensor.raumklima_homepods"), letzteMeldung = meldung && Date.parse(meldung.state);
-  const letzte = isFinite(letzteMeldung) ? new Date(letzteMeldung) : liste.length ? new Date(Math.max(...liste.map(x => +x.zeit))) : null;
-  const still = letzte && Date.now() - letzte > 45 * 60e3;
+  const letzte = liste.some(x => x.t) ? new Date(Math.max(...liste.filter(x => x.t).map(x => +x.zeit))) : null;
+  const still = false;
   const wann = d => (new Date().toDateString() === d.toDateString() ? "heute" : new Date(Date.now() - 864e5).toDateString() === d.toDateString() ? "gestern" : d.toLocaleDateString("de-DE"))
     + " " + d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) + " Uhr";
   let unten = `<div class="leer">Lade Verlauf …</div>`;
@@ -569,7 +569,7 @@ function raeumeSeite() {
       <div class="karte"><h2>${ic("haus")} Räume jetzt</h2>${liste.length ? `${lueften}<table class="werte raum"><tr><td></td><td>Temperatur</td><td>Feuchte</td><td></td></tr>${zeilen}</table>
         ${still ? `<div class="hinweis">Die HomePods melden sich seit ${esc(wann(letzte))} nicht mehr – die Werte oben sind von da.
           In der Home-App prüfen, ob der Schalter „HomePod-Abfrage“ erreichbar ist.</div>`
-          : `<div class="klein" style="margin-top:6px">Aus den HomePods, alle 15 Minuten${letzte ? " · zuletzt " + esc(wann(letzte)) : ""}</div>`}`
+          : `<div class="klein" style="margin-top:6px">Aus den Sensoren in Home Assistant. Leere Zeilen: für diesen Raum ist noch kein Sensor da${letzte ? " · zuletzt " + esc(wann(letzte)) : ""}</div>`}`
         : `<div class="klein">Von den HomePods ist noch nichts angekommen.</div>`}</div>
       <div class="karte"><h2>${ic("wp")} Heizung &amp; Strom jetzt</h2><div class="kacheln">
         ${kachel(gradT(E.aussen), "Außen")}${kachel(gradT(E.vorlauf), "Vorlauf")}${kachel(gradT(E.warmwasser), "Warmwasser")}
