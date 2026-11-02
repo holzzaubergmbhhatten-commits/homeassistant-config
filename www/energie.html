@@ -476,14 +476,18 @@ function heizkreise() {
     const id = Object.keys(h.states).find(e => e.startsWith("sensor.") && muster.test(e + " " + String(h.states[e].attributes.friendly_name || "")) && zahl(e) != null) || null;
     return { n: k, raum, id, t: id ? zahl(id) : null };
   });
-  return [...KREISE.map(([n, raum]) => ({ n, raum, id: fund[n] || null, t: fund[n] ? zahl(fund[n]) : null })), ...hauptFund];
+  // Wohnzimmer: vier Rückläufe (WZ 1 bis WZ 4), als eine Gruppe mit Mittelwert
+  const wz = Object.keys(h.states).filter(e => e.startsWith("sensor.") && /(^|[^a-z])wz[ _-]?[1-4]([^0-9]|$)/i.test(e + " " + String(h.states[e].attributes.friendly_name || "")) && zahl(e) != null);
+  const wzWerte = wz.map(e => zahl(e));
+  const wzGruppe = wz.length ? [{ n: "wz", raum: "Wohnzimmer (" + wz.length + " Rückläufe)", id: null, t: wzWerte.reduce((a, b) => a + b, 0) / wzWerte.length, gruppe: true }] : [];
+  return [...KREISE.filter(([n, raum]) => raum !== "Wohnzimmer").map(([n, raum]) => ({ n, raum, id: fund[n] || null, t: fund[n] ? zahl(fund[n]) : null })), ...wzGruppe, ...hauptFund];
 }
 function heizkreiseKarte() {
   const k = heizkreise(); if (!k) return "";
   const gefunden = k.filter(x => x.id).length;
   const anzahl = k.length;
   return `<div class="karte"><h2>Heizkreise: Rücklauf</h2>
-    <table class="werte raum">${k.map(x => `<tr><td><b>${esc(x.raum)}</b></td><td>${x.id ? fmt(x.t, 1) + " °C" : '<span class="klein">nicht gefunden</span>'}</td></tr>`).join("")}</table>
+    <table class="werte raum">${k.map(x => `<tr><td><b>${esc(x.raum)}</b></td><td>${(x.id || x.gruppe) ? fmt(x.t, 1) + " °C" : '<span class="klein">nicht gefunden</span>'}</td></tr>`).join("")}</table>
     <div class="klein" style="margin-top:6px">${gefunden} von ${anzahl} Fühlern gefunden. Ein warmer Rücklauf heißt: der Kreis läuft. Bleibt er kalt, obwohl der Raumregler auf warm steht, prüfen: Stellmotor offen?</div></div>`;
 }
 function raeumeSeite() {
