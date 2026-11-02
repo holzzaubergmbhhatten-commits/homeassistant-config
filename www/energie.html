@@ -490,6 +490,17 @@ function heizkreiseKarte() {
     <table class="werte raum">${k.map(x => `<tr><td><b>${esc(x.raum)}</b></td><td>${(x.id || x.gruppe) ? fmt(x.t, 1) + " °C" : '<span class="klein">nicht gefunden</span>'}</td></tr>`).join("")}</table>
     <div class="klein" style="margin-top:6px">${gefunden} von ${anzahl} Fühlern gefunden. Ein warmer Rücklauf heißt: der Kreis läuft. Bleibt er kalt, obwohl der Raumregler auf warm steht, prüfen: Stellmotor offen?</div></div>`;
 }
+// Übersicht aller Temperatursensoren in Home Assistant, unabhängig von Namen (mit technischer Kennung)
+function alleTemperaturen() {
+  const h = hass(); if (!h) return "";
+  const liste = Object.keys(h.states).filter(id => id.startsWith("sensor.") && (h.states[id].attributes.device_class === "temperature" || /°C/.test(h.states[id].attributes.unit_of_measurement || "")) && zahl(id) != null)
+    .map(id => ({ id, name: String(h.states[id].attributes.friendly_name || id), t: zahl(id) }))
+    .sort((a, b) => a.id.localeCompare(b.id, "de"));
+  if (!liste.length) return "";
+  return `<div class="karte"><h2>Alle Temperatursensoren (${liste.length})</h2>
+    <table class="werte raum">${liste.map(x => `<tr><td><b>${esc(x.name)}</b><div class="klein">${esc(x.id)}</div></td><td>${fmt(x.t, 1)} °C</td></tr>`).join("")}</table>
+    <div class="klein" style="margin-top:6px">Zum Abgleichen: Die Kennung zeigt, zu welchem Gerät der Sensor gehört.</div></div>`;
+}
 function raeumeSeite() {
   const liste = raeume(), aussen = aussenLuft(liste), wa = aussen ? luftWasser(aussen.t, aussen.rh) : null;
   const innen = liste.filter(x => !x.draussen && !x.alt && x.h).map(x => luftWasser(zahl(x.t), zahl(x.h))).filter(v => v != null);
@@ -545,6 +556,7 @@ function raeumeSeite() {
       </div></div>
       ${heizkreiseKarte()}
     </div>
+    ${alleTemperaturen()}
     <div class="karte">${navi()}${unten}</div>`;
 }
 
