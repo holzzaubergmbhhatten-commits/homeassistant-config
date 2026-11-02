@@ -470,14 +470,21 @@ function heizkreise() {
       if (!fund[n] && (nummer || nach_name)) fund[n] = id;
     });
   });
-  return KREISE.map(([n, raum]) => ({ n, raum, id: fund[n] || null, t: fund[n] ? zahl(fund[n]) : null }));
+  // Hauptleitung: Vor- und Rücklauf am Flur-Verteiler, über den Namen gefunden
+  const haupt = [["vl", "Vorlauf Hauptleitung", /vorlauf.*hauptleitung|hauptleitung.*vorlauf/i], ["rl", "Rücklauf Hauptleitung", /r(ü|ue)cklauf.*hauptleitung|hauptleitung.*r(ü|ue)cklauf/i]];
+  const hauptFund = haupt.map(([k, raum, muster]) => {
+    const id = Object.keys(h.states).find(e => e.startsWith("sensor.") && muster.test(e + " " + String(h.states[e].attributes.friendly_name || "")) && zahl(e) != null) || null;
+    return { n: k, raum, id, t: id ? zahl(id) : null };
+  });
+  return [...KREISE.map(([n, raum]) => ({ n, raum, id: fund[n] || null, t: fund[n] ? zahl(fund[n]) : null })), ...hauptFund];
 }
 function heizkreiseKarte() {
   const k = heizkreise(); if (!k) return "";
   const gefunden = k.filter(x => x.id).length;
+  const anzahl = k.length;
   return `<div class="karte"><h2>Heizkreise: Rücklauf</h2>
     <table class="werte raum">${k.map(x => `<tr><td><b>${esc(x.raum)}</b></td><td>${x.id ? fmt(x.t, 1) + " °C" : '<span class="klein">nicht gefunden</span>'}</td></tr>`).join("")}</table>
-    <div class="klein" style="margin-top:6px">${gefunden} von 5 Fühlern gefunden. Ein warmer Rücklauf heißt: der Kreis läuft. Bleibt er kalt, obwohl der Raumregler auf warm steht, prüfen: Stellmotor offen?</div></div>`;
+    <div class="klein" style="margin-top:6px">${gefunden} von ${anzahl} Fühlern gefunden. Ein warmer Rücklauf heißt: der Kreis läuft. Bleibt er kalt, obwohl der Raumregler auf warm steht, prüfen: Stellmotor offen?</div></div>`;
 }
 function raeumeSeite() {
   const liste = raeume(), aussen = aussenLuft(liste), wa = aussen ? luftWasser(aussen.t, aussen.rh) : null;
