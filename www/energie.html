@@ -456,7 +456,7 @@ function aussenLuft(liste) {
   return null;
 }
 // Heizkreise: Rücklauf-Fühler am Flur-Verteiler (Shelly-Sensor-Add-on). Die Fühler werden über ihre Nummer gefunden.
-const KREISE = [["100", "Kind 2"], ["101", "Schlafen"], ["102", "Flur"], ["103", "Badezimmer"], ["104", "Mucki"]];
+const KREISE = [["100", "Kind 2"], ["101", "Schlafen"], ["102", "Flur"], ["103", "Badezimmer"], ["104", "Mucki"], ["", "Küche"], ["", "Büro"], ["", "WC"], ["", "Diele"]];
 function heizkreise() {
   const h = hass(); if (!h) return null;
   const fund = {};
