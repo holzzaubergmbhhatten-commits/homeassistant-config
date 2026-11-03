@@ -513,16 +513,16 @@ function heizkreiseKarte() {
     <table class="werte raum">${k.map(x => `<tr><td><b>${esc(x.raum)}</b></td><td>${(x.id || x.gruppe) ? fmt(x.t, 1) + " °C" : '<span class="klein">nicht gefunden</span>'}</td></tr>`).join("")}</table>
     <div class="klein" style="margin-top:6px">${gefunden} von ${anzahl} Fühlern gefunden. Ein warmer Rücklauf heißt: der Kreis läuft. Bleibt er kalt, obwohl der Raumregler auf warm steht, prüfen: Stellmotor offen?</div></div>`;
 }
-// Übersicht aller Temperatursensoren in Home Assistant, unabhängig von Namen (mit technischer Kennung)
+// Übersicht aller Sensoren in Home Assistant, ungefiltert (mit technischer Kennung, Wert und Einheit)
 function alleTemperaturen() {
   const h = hass(); if (!h) return "";
-  const liste = Object.keys(h.states).filter(id => id.startsWith("sensor.") && (h.states[id].attributes.device_class === "temperature" || h.states[id].attributes.device_class === "humidity" || /°C|%/.test(h.states[id].attributes.unit_of_measurement || "")) && !/batter/i.test(id + " " + (h.states[id].attributes.friendly_name || "")) && zahl(id) != null)
-    .map(id => ({ id, name: String(h.states[id].attributes.friendly_name || id), t: zahl(id) }))
+  const liste = Object.keys(h.states).filter(id => id.startsWith("sensor."))
+    .map(id => { const a = h.states[id].attributes; return { id, name: String(a.friendly_name || id), s: h.states[id].state, einheit: a.unit_of_measurement || "" }; })
     .sort((a, b) => a.id.localeCompare(b.id, "de"));
   if (!liste.length) return "";
-  return `<div class="karte"><h2>Alle Messwerte: Temperatur und Feuchte (${liste.length})</h2>
-    <table class="werte raum">${liste.map(x => `<tr><td><b>${esc(x.name)}</b><div class="klein">${esc(x.id)}</div></td><td>${fmt(x.t, 1)} ${/%/.test(h.states[x.id].attributes.unit_of_measurement || "") ? "%" : "°C"}</td></tr>`).join("")}</table>
-    <div class="klein" style="margin-top:6px">Die Kennung zeigt das Gerät an. Bitte Nummer oder Kennung nennen, dann ordnen wir die Sensoren zu.</div></div>`;
+  return `<div class="karte"><h2>Alle Sensoren (${liste.length})</h2>
+    <table class="werte raum">${liste.map(x => `<tr><td><b>${esc(x.name)}</b><div class="klein">${esc(x.id)}</div></td><td>${esc(x.s)} ${esc(x.einheit)}</td></tr>`).join("")}</table>
+    <div class="klein" style="margin-top:6px">Alle Sensoren aus Home Assistant, ohne Filter. Die Kennung zeigt das Gerät an. „unavailable“ heißt: der Sensor meldet gerade nichts.</div></div>`;
 }
 function raeumeSeite() {
   const liste = raeume(), aussen = aussenLuft(liste), wa = aussen ? luftWasser(aussen.t, aussen.rh) : null;
