@@ -481,9 +481,15 @@ function aussenLuft(liste) {
 // Heizkreise: feste Zuordnung über die genaue Kennung. Nur was bestätigt ist, steht hier. Keine Namenssuche.
 const HEIZKREISE = [
   ["Rücklauf Küche", "sensor.shelly1g3_d0cf13def7fc_temperatur_6"],
+  ["Rücklauf Büro", "sensor.shelly1g3_d0cf13def7fc_temperatur_3"],
+  ["WC", "sensor.shelly1g3_d0cf13def7fc_temperatur_2"],
+  ["Diele", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_6"],
+  ["Wohnzimmer 1", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_5"],
+  ["Wohnzimmer 2", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_2"],
+  ["Wohnzimmer 3", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_3"],
+  ["Wohnzimmer 4", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_4"],
   ["Rücklauf Kind 2", null], ["Rücklauf Schlafen", null], ["Rücklauf Flur", null], ["Rücklauf Badezimmer", null],
-  ["Rücklauf Mucki", null], ["Rücklauf Büro", null], ["Rücklauf WC", null], ["Rücklauf Diele", null],
-  ["Vorlauf Diele", null], ["Vorlauf Hauptleitung", null], ["Rücklauf Hauptleitung", null], ["Rücklauf WZ 1", null]
+  ["Rücklauf Mucki", null], ["Vorlauf Diele", null], ["Vorlauf Hauptleitung", null], ["Rücklauf Hauptleitung", null]
 ];
 function heizkreise() {
   const h = hass(); if (!h) return null;
@@ -500,7 +506,8 @@ function heizkreiseKarte() {
 // Übersicht aller Sensoren in Home Assistant, ungefiltert (mit technischer Kennung, Wert und Einheit)
 function alleTemperaturen() {
   const h = hass(); if (!h) return "";
-  const liste = Object.keys(h.states).filter(id => id.startsWith("sensor."))
+  const belegt = new Set(HEIZKREISE.map(x => x[1]).filter(Boolean));   // schon zugeordnet: stehen in der Heizkreis-Karte, nicht mehr hier
+  const liste = Object.keys(h.states).filter(id => id.startsWith("sensor.") && !belegt.has(id))
     .map(id => { const a = h.states[id].attributes; return { id, name: String(a.friendly_name || id), s: h.states[id].state, einheit: a.unit_of_measurement || "" }; })
     .sort((a, b) => a.id.localeCompare(b.id, "de"));
   if (!liste.length) return "";
