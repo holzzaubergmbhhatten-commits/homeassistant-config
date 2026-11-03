@@ -421,8 +421,10 @@ const RAUM_ZUSATZ = { "Muckis Zimmer": "Mucki", "Bad": "Badezimmer", "Schlafen":
 function raumVon(text) {
   const t = text.toLowerCase();
   if (/rücklauf|vorlauf|hauptleitung|puffer|kamin|wärmepumpe/.test(t)) return null;
-  for (const [k, v] of Object.entries(RAUM_ZUSATZ)) if (t.includes(k.toLowerCase())) return v;
-  return RAEUME.find(r => t.includes(r.toLowerCase())) || null;
+  // Nur ganze Wörter: „bad“ steckt sonst in „Gästebadezimmer“ und würde das Badezimmer treffen
+  const wort = k => new RegExp("(^|[^a-zäöüß])" + k.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "($|[^a-zäöüß])").test(t);
+  for (const [k, v] of Object.entries(RAUM_ZUSATZ)) if (wort(k)) return v;
+  return RAEUME.find(r => wort(r)) || null;
 }
 function raeume() {
   const h = hass(); if (!h) return [];
