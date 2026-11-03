@@ -483,10 +483,11 @@ const HEIZKREISE = [
   ["Rücklauf Küche", "sensor.shelly1g3_d0cf13def7fc_temperatur_6"],
   ["Rücklauf Büro", "sensor.shelly1g3_d0cf13def7fc_temperatur_3"],
   ["Rücklauf WC", "sensor.shelly1g3_d0cf13def7fc_temperatur_2"],
-  ["Rücklauf Diele", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_6"],
   ["Rücklauf Wohnzimmer", ["sensor.shelly1g3_d0cf13ddb7b4_temperatur_5", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_2", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_3", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_4"]],
   ["Rücklauf Kind 2", null], ["Rücklauf Schlafen", null], ["Rücklauf Flur", null], ["Rücklauf Badezimmer", null],
-  ["Rücklauf Mucki", null], ["Vorlauf Hauptleitung", null], ["Rücklauf Hauptleitung", null]
+  ["Rücklauf Mucki", null],
+  ["Vorlauf Hauptleitung", "sensor.shelly1g3_d0cf13de58a0_temperatur_2"], ["Rücklauf Hauptleitung", "sensor.shelly1g3_d0cf13de58a0_temperatur_3"],
+  ["Vorlauf Diele", "sensor.shelly1g3_d0cf13def7fc_temperatur_4"], ["Rücklauf Diele", "sensor.shelly1g3_d0cf13def7fc_temperatur_5"]
 ];
 function heizkreise() {
   const h = hass(); if (!h) return null;
