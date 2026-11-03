@@ -575,13 +575,7 @@ function raeumeSeite() {
           In der Home-App prüfen, ob der Schalter „HomePod-Abfrage“ erreichbar ist.</div>`
           : `<div class="klein" style="margin-top:6px">Aus den Sensoren in Home Assistant. Leere Zeilen: für diesen Raum ist noch kein Sensor da${letzte ? " · zuletzt " + esc(wann(letzte)) : ""}</div>`}`
         : `<div class="klein">Von den HomePods ist noch nichts angekommen.</div>`}</div>
-      <div class="karte"><h2>${ic("wp")} Heizung &amp; Strom jetzt</h2><div class="kacheln">
-        ${kachel(gradT(E.aussen), "Außen")}${kachel(gradT(E.vorlauf), "Vorlauf")}${kachel(gradT(E.warmwasser), "Warmwasser")}
-        ${kachel(kwT(Math.max(0, kw(E.pvLeistung) || 0)), "PV jetzt")}${kachel(zahl(E.akkuStand) == null ? "–" : fmt(zahl(E.akkuStand), 0) + " %", "Speicher", zahl(E.akkuStand))}
-        ${EW.durchfluss ? kachel(esc(st_text(EW.durchfluss)), "Wasser fließt") : kachel(kwhT(kwh(E.wpTag)), "Wärmepumpe heute")}
-      </div></div>
-      ${co2Karte()}
-      ${heizkreiseKarte()}
+      <div>${heizkreiseKarte()}${co2Karte()}</div>
     </div>
     <div class="karte">${navi()}${unten}</div>`;
 }
