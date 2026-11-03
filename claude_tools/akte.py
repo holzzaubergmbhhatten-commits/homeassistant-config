@@ -559,6 +559,9 @@ def ablegen(auftrag):
         senden(chat, "🛡 Danke! Das Wappen steht ab jetzt oben rechts in jedem Schreiben aus der Akte.")
         return
     if not os.path.realpath(quelle).startswith((EINGANG, "/media/eingang/")) or not os.path.exists(quelle):
+        # Ursache festhalten: fehlt der Ordner, oder ist die Datei beim Download nicht angekommen?
+        da = sorted(os.listdir(EINGANG))[:5] if os.path.isdir(EINGANG) else "Ordner fehlt"
+        logbuch(f"Datei fehlt: {os.path.basename(quelle) or '-'} · Eingang: {da}", art="fehler")
         senden(chat, "⚠️ Akte: Datei nicht gefunden – bitte nochmal schicken.")
         return
     if quelle.lower().endswith(".zip"):
