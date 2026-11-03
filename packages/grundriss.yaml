@@ -50,6 +50,7 @@ script:
           sequence:
             - action: telegram_bot.send_document
               data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                 chat_id: "{{ empfaenger | int }}"
                 file: "/media/grundriss_export/{{ repeat.item }}"
                 caption: >-

@@ -160,6 +160,7 @@ script:
                 - action: telegram_bot.send_message
                   continue_on_error: true
                   data:
+                    config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                     chat_id: "{{ repeat.item | int }}"
                     message: >-
                       {{ '🏆' if alles else '💰' }} {{ ansage }}{{ '' if gespielt else ' (Die Durchsage über die Lautsprecher hat nicht geklappt: ' ~ (durchsage.ergebnis | default('keine Antwort') if durchsage is defined and durchsage is mapping else 'keine Antwort') ~ ')' }}

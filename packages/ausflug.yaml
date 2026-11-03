@@ -79,6 +79,7 @@ script:
             - action: telegram_bot.send_message
               continue_on_error: true
               data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                 chat_id: "{{ repeat.item | int }}"
                 message: "{{ text }}"
                 parse_mode: plain_text
@@ -100,6 +101,7 @@ automation:
       - action: telegram_bot.send_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ trigger.event.data.chat_id }}"
           message: "🚲 Ich suche passende Ausflugsziele und prüfe Öffnungszeiten – das dauert etwa eine Minute …"
       - action: script.ausflug_ki
@@ -114,5 +116,6 @@ automation:
           - action: telegram_bot.send_message
             continue_on_error: true
             data:
+              config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
               chat_id: "{{ trigger.event.data.chat_id }}"
               message: "⚠️ Ausflug: {{ ki.fehler | default('hat nicht geklappt') }}"

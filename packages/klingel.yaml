@@ -107,6 +107,7 @@ automation:
                 - action: telegram_bot.send_photo
                   continue_on_error: true
                   data:
+                    config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                     chat_id: "{{ repeat.item | int }}"
                     file: /media/klingel.jpg
                     caption: "🔔 Es klingelt {{ ort }} ({{ uhrzeit }} Uhr)"
@@ -114,6 +115,7 @@ automation:
                 - action: telegram_bot.send_message
                   continue_on_error: true
                   data:
+                    config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                     chat_id: "{{ repeat.item | int }}"
                     message: "🔔 Es klingelt {{ ort }} ({{ uhrzeit }} Uhr){{ '' if foto_ok else ' – kein aktuelles Kamerabild verfügbar.' }}"
       - delay: "00:03:00"

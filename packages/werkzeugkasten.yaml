@@ -44,6 +44,7 @@ script:
             - action: telegram_bot.send_message
               continue_on_error: true
               data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                 chat_id: "{{ repeat.item | int }}"
                 message: "{{ text[:3800] }}"
                 disable_web_page_preview: true
@@ -103,6 +104,7 @@ automation:
           - action: telegram_bot.send_message
             continue_on_error: true
             data:
+              config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
               chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\\d+$') | first | int(0) }}"
               message: >-
                 ⏰ Erinnerung: GitHub-Schlüssel einrichten (ca. 5 Minuten am Laptop) – dann gehen die Links-Seite

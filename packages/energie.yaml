@@ -63,6 +63,7 @@ automation:
       - action: telegram_bot.send_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
           message: >-
             ☁️ Erinnerung: Die Testphase von Home Assistant Cloud (Nabu Casa) endet am 31.10.

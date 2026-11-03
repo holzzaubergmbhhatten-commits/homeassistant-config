@@ -71,6 +71,7 @@ script:
       - action: telegram_bot.send_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ ziel | int }}"
           message: "{{ text }}"
           inline_keyboard:
@@ -99,6 +100,7 @@ script:
       - action: telegram_bot.send_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ chat | int }}"
           message: >-
             {% set ns = namespace(z=['🌐 Netzwerk – ' ~ (geraete | rejectattr('weg') | list | count) ~ ' von ' ~ (geraete | count) ~ ' Geräten erreichbar']) %}
@@ -118,6 +120,7 @@ script:
       - action: telegram_bot.send_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ chat | int }}"
           message: "📷 Ich prüfe alle Kameras … (ca. 30 Sekunden)"
       - action: shell_command.kamera_check
@@ -130,6 +133,7 @@ script:
       - action: telegram_bot.send_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ chat | int }}"
           message: >-
             {% set ns = namespace(z=['📷 Kameras:']) %}
@@ -186,6 +190,7 @@ automation:
           - action: telegram_bot.answer_callback_query
             continue_on_error: true
             data:
+              config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
               callback_query_id: "{{ trigger.event.data.id }}"
               message: "OK"
       - choose:
@@ -211,6 +216,7 @@ automation:
               - action: telegram_bot.send_message
                 continue_on_error: true
                 data:
+                  config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                   chat_id: "{{ chat | int }}"
                   disable_web_page_preview: true
                   message: >-
@@ -223,6 +229,7 @@ automation:
               - action: telegram_bot.send_message
                 continue_on_error: true
                 data:
+                  config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                   chat_id: "{{ chat | int }}"
                   message: "📌 Ich schaue im Router nach … (ca. 20 Sekunden)"
               - action: script.netzwerk_adressen_festmachen
@@ -232,6 +239,7 @@ automation:
           - action: telegram_bot.send_message
             continue_on_error: true
             data:
+              config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
               chat_id: "{{ chat | int }}"
               message: >-
                 🤖 Kurze Befehle an mich:

@@ -249,6 +249,7 @@ automation:
       - action: telegram_bot.send_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ chat }}"
           message: "{{ '🍽 ' ~ r.antwort if r.antwort is defined else '⚠️ Küche: ' ~ (r.fehler | default('hat nicht geklappt')) }}"
       - event: kueche_geaendert
@@ -266,6 +267,7 @@ automation:
                 - action: telegram_bot.send_message
                   continue_on_error: true
                   data:
+                    config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                     chat_id: "{{ chat }}"
                     message: "🛒 {{ ek.anzahl | default(0) if ek is defined and ek is mapping else 0 }} Sachen auf die Einkaufsliste gesetzt."
               else:
@@ -285,6 +287,7 @@ automation:
                     - action: telegram_bot.send_message
                       continue_on_error: true
                       data:
+                        config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                         chat_id: "{{ chat }}"
                         message: "⚠️ Küche: {{ ki.fehler | default('hat nicht geklappt') }}"
 
@@ -306,12 +309,14 @@ automation:
       - action: telegram_bot.download_file
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           file_id: "{{ trigger.event.data.file_id }}"
           directory_path: /media/eingang
           file_name: "{{ datei.split('/')[-1] }}"
       - action: telegram_bot.send_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ trigger.event.data.chat_id }}"
           message: "📖 Ich lese das Rezept – einen Moment …"
       - action: script.kueche_ki

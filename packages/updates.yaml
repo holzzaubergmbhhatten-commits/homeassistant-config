@@ -62,6 +62,7 @@ automation:
           - action: telegram_bot.send_message
             continue_on_error: true
             data:
+              config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
               chat_id: "{{ marco | int }}"
               message: "🔄 Nachts-Updates: {{ namen | join(', ') }}"
       # Add-ons und HACS einzeln, ein Fehler hält den Rest nicht auf
@@ -115,6 +116,7 @@ automation:
           - action: telegram_bot.send_message
             continue_on_error: true
             data:
+              config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
               chat_id: "{{ marco | int }}"
               message: >-
                 ✅ Home Assistant läuft wieder – Version {{ state_attr('update.home_assistant_core_update', 'installed_version') }}.

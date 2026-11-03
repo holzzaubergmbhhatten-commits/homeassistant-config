@@ -103,6 +103,7 @@ automation:
           - action: telegram_bot.send_message
             continue_on_error: true
             data:
+              config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
               chat_id: "{{ empfaenger }}"
               parse_mode: html
               message: >-
@@ -125,6 +126,7 @@ automation:
         response_variable: pw
       - action: telegram_bot.send_message
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ trigger.event.data.chat_id }}"
           parse_mode: html
           message: >-
@@ -173,6 +175,7 @@ automation:
       - action: telegram_bot.send_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ marco | int }}"
           message: >-
             {% set ns = namespace(z=['📷 Kameras – selbst repariert:']) %}

@@ -130,6 +130,7 @@ automation:
       then:
       - action: telegram_bot.send_message
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ trigger.event.data.chat_id }}"
           message: "🏠 {{ w.antwort }}"
       - stop: aus dem gesammelten Wissen beantwortet
@@ -366,6 +367,7 @@ automation:
         - action: telegram_bot.send_message
           continue_on_error: true
           data:
+            config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
             chat_id: '{{ chat }}'
             message: "🗑️ Als Aufgabe entfernt: {{ weg | join(', ') }}"
       - variables:
@@ -395,6 +397,7 @@ automation:
             value: "{{ (chat ~ '~📅 Eingetragen: ' ~ titel ~ ' am ' ~ datum ~ ' um ' ~ beginn[11:16] ~ ' Uhr')[:250] }}"
         - action: telegram_bot.send_message
           data:
+            config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
             chat_id: '{{ chat }}'
             message: >-
               {% set t %}📅 Eingetragen: {{ titel }} am {{ datum_de }} um {{ beginn[11:16] }} Uhr{% endset %}{{ t
@@ -416,6 +419,7 @@ automation:
             value: "{{ (chat ~ '~📅 Eingetragen: ' ~ titel ~ ' am ' ~ datum ~ ' (ganztägig)')[:250] }}"
         - action: telegram_bot.send_message
           data:
+            config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
             chat_id: '{{ chat }}'
             message: >-
               {% set t %}📅 Eingetragen: {{ titel }} am {{ datum_de }} (ganztägig){% endset %}{{ t
@@ -444,6 +448,7 @@ automation:
         - action: telegram_bot.send_message
           continue_on_error: true
           data:
+            config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
             chat_id: '{{ chat }}'
             message: >-
               {{ ('🔁 Wiederholt sich ab jetzt ' ~ serie_text.split(' – ab jetzt ')[-1].replace(' 🔁', '') ~ '.')
@@ -475,6 +480,7 @@ automation:
         - event: kalender_geaendert
       - action: telegram_bot.send_message
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: '{{ chat }}'
           message: >-
             {% set t %}{{ meldung or '⚠️ Der Termin konnte nicht bearbeitet werden (Zusatzprogramm hat nicht geantwortet).' }}{% endset %}{{ t
@@ -494,6 +500,7 @@ automation:
           zeitpunkt: '{{ wann }}'
       - action: telegram_bot.send_message
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: '{{ chat }}'
           parse_mode: html
           message: >-
@@ -517,6 +524,7 @@ automation:
         then:
         - action: telegram_bot.send_message
           data:
+            config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
             chat_id: '{{ chat }}'
             parse_mode: html
             message: >-
@@ -568,6 +576,7 @@ automation:
           value: "{{ (chat ~ '~' ~ antwort_text | replace('\n', ' '))[:250] }}"
       - action: telegram_bot.send_message
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: '{{ chat }}'
           parse_mode: html
           message: >-
@@ -577,6 +586,7 @@ automation:
       then:
       - action: telegram_bot.send_message
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: '{{ chat }}'
           message: >-
             {% set t %}⚠️ Terminerkennung nicht verfügbar ({{ ai_entity or 'keine KI-Aufgabe gefunden' }}) – die
@@ -628,6 +638,7 @@ automation:
       response_variable: antwort
     - action: telegram_bot.send_message
       data:
+        config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
         chat_id: '{{ chat }}'
         message: >-
           {% set t %}{{ antwort.response.speech.plain.speech
@@ -647,6 +658,7 @@ automation:
       response_variable: antwort_rest
     - action: telegram_bot.send_message
       data:
+        config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
         chat_id: '{{ chat }}'
         message: >-
           {% set t %}{{ antwort_rest.response.speech.plain.speech
@@ -674,6 +686,7 @@ automation:
     response_variable: liste
   - action: telegram_bot.send_message
     data:
+      config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
       chat_id: '{{ trigger.event.data.chat_id }}'
       parse_mode: html
       message: '{% set items = liste[''todo.einkaufsliste''][''items''] %}{% set t %}🛒 Einkaufsliste{% if items
@@ -705,6 +718,7 @@ automation:
     response_variable: liste
   - action: telegram_bot.send_message
     data:
+      config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
       chat_id: '{{ trigger.event.data.chat_id }}'
       parse_mode: html
       message: |-
@@ -734,6 +748,7 @@ automation:
   - action: rest_command.kiosk_dashboard
   - action: telegram_bot.send_message
     data:
+      config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
       chat_id: '{{ trigger.event.data.chat_id }}'
       parse_mode: html
       message: 🏠 Der Monitor zeigt wieder das Dashboard.

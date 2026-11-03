@@ -95,6 +95,7 @@ automation:
             - action: telegram_bot.send_message
               continue_on_error: true
               data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                 chat_id: "{{ repeat.item | int }}"
                 message: >-
                   🎒 Mathilda morgen ({{ state_attr('sensor.schule_morgen', 'tag') }}): {{ state_attr('sensor.schule_morgen', 'faecher') | join(', ') }}.
@@ -195,6 +196,7 @@ automation:
             - action: telegram_bot.send_message
               continue_on_error: true
               data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                 chat_id: "{{ repeat.item | int }}"
                 message: "{{ text }}"
 
@@ -246,6 +248,7 @@ automation:
                   - action: telegram_bot.send_message
                     continue_on_error: true
                     data:
+                      config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                       chat_id: "{{ repeat.item | int }}"
                       message: >-
                         🎂 {{ 'In einer Woche' if bald else 'Morgen' }} ({{ ['Mo','Di','Mi','Do','Fr','Sa','So'][as_datetime(repeat.item.start).weekday()] }}
@@ -294,6 +297,7 @@ automation:
             - action: telegram_bot.send_message
               continue_on_error: true
               data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                 chat_id: "{{ repeat.item | int }}"
                 message: |-
                   {%- for w in neu %}
@@ -327,6 +331,7 @@ automation:
       - action: telegram_bot.send_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
           message: >-
             🏠 Alle sind aus dem Haus, aber:
@@ -363,6 +368,7 @@ automation:
       - action: telegram_bot.send_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
           message: >-
             ☀️🚿 Sonnenstrom übrig – die Wärmepumpe heizt jetzt einmal das Warmwasser auf
@@ -397,6 +403,7 @@ automation:
       - action: telegram_bot.send_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ trigger.event.data.chat_id }}"
           message: >-
             {% if liste_zeigen %}🪪 Ausweise & Pässe:{% for x in r.liste | default([]) %}
@@ -425,6 +432,7 @@ automation:
             - action: telegram_bot.send_message
               continue_on_error: true
               data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                 chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
                 message: >-
                   🪪 {{ repeat.item.art }} {{ repeat.item.person }} läuft
@@ -487,6 +495,7 @@ automation:
             - action: telegram_bot.send_message
               continue_on_error: true
               data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                 chat_id: "{{ repeat.item | int }}"
                 message: |-
                   🧹 Hausarbeit diese Woche:

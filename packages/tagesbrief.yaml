@@ -93,6 +93,7 @@ script:
             - action: telegram_bot.send_message
               continue_on_error: true
               data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                 chat_id: "{{ repeat.item | int }}"
                 message: "{{ text }}"
 

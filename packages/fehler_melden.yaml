@@ -21,6 +21,7 @@ automation:
   - action: telegram_bot.send_message
     continue_on_error: true
     data:
+      config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
       parse_mode: html
       message: |-
         {% set esc = (trigger.event.data.message | join(' '))[:900] | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') -%}
@@ -47,6 +48,7 @@ automation:
   - action: telegram_bot.send_message
     continue_on_error: true
     data:
+      config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
       message: '{% set t %}👋 Jemand Unbekanntes hat dem Bot geschrieben. Chat-ID: {{ ids | join('', '') if ids else
         ''(nicht erkannt)'' }} Zum Freigeben in Home Assistant: Telegram bot → „Zulässige Chat-ID hinzufügen“.{%
         endset %}{{ t | replace(''&'',''&amp;'') | replace(''<'',''&lt;'') | replace(''>'',''&gt;'') }}'
@@ -74,6 +76,7 @@ automation:
   - action: telegram_bot.send_message
     continue_on_error: true
     data:
+      config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
       parse_mode: html
       message: |-
         {% set n = trigger.notification -%}
@@ -122,6 +125,7 @@ automation:
   - action: telegram_bot.send_message
     continue_on_error: true
     data:
+      config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
       message: >-
         📴 Nicht erreichbar: {{ state_attr(trigger.event.data.entity_id, 'friendly_name') or trigger.event.data.entity_id }}
         ({{ trigger.event.data.entity_id }}). Neu verbinden hat nicht geholfen – Strom/WLAN prüfen oder an Claude weiterleiten.
@@ -137,5 +141,6 @@ automation:
   - action: telegram_bot.send_message
     continue_on_error: true
     data:
+      config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
       message: >-
         🔄 Home Assistant ist neu gestartet ({{ now().strftime('%H:%M') }} Uhr) – neue Einstellungen sind aktiv.

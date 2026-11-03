@@ -55,11 +55,13 @@ automation:
       - action: telegram_bot.send_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ chat }}"
           message: "📷 Danke! Ich schaue mir das Foto an – einen Moment …"
       - action: telegram_bot.download_file
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           file_id: "{{ trigger.event.data.file_id }}"
           directory_path: /media/eingang
           file_name: "{{ datei.split('/')[-1] }}"
@@ -137,6 +139,7 @@ automation:
                 🌱 {{ g.text if g.ok | default(false) else 'Das hat leider nicht geklappt' ~ (': ' ~ g.fehler if g.fehler is defined else ' – bitte nochmal schicken.') }}
           - action: telegram_bot.send_message
             data:
+              config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
               chat_id: "{{ chat }}"
               parse_mode: html
               message: >-
@@ -147,6 +150,7 @@ automation:
                 {{ e.text if e.ok | default(false) else '⚠️ Das hat leider nicht geklappt' ~ (': ' ~ e.fehler if e.fehler is defined else ' (keine Antwort – bitte nochmal schicken).') }}
           - action: telegram_bot.send_message
             data:
+              config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
               chat_id: "{{ chat }}"
               parse_mode: html
               message: >-

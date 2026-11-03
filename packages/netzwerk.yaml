@@ -53,6 +53,7 @@ script:
           - action: telegram_bot.send_message
             continue_on_error: true
             data:
+              config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
               chat_id: "{{ marco | int }}"
               message: >-
                 {% if antwort.gefunden | default([]) %}📡 Omada-Controller gefunden: {{ antwort.gefunden | map(attribute='url') | join(' oder ') }}
@@ -89,6 +90,7 @@ script:
           - action: telegram_bot.send_message
             continue_on_error: true
             data:
+              config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
               chat_id: "{{ marco | int }}"
               message: >-
                 {% if antwort.ok | default(false) %}📌 Diese Geräte spricht Home Assistant über ihre Adresse an – bitte in der Omada-App
@@ -124,6 +126,7 @@ script:
           - action: telegram_bot.send_message
             continue_on_error: true
             data:
+              config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
               chat_id: "{{ marco | int }}"
               message: >-
                 {% if not a.ok | default(false) %}📌 Feste Adressen: ging nicht – {{ a.fehler_text | default('?') }}{% else %}
@@ -140,6 +143,7 @@ script:
               - action: telegram_bot.send_message
                 continue_on_error: true
                 data:
+                  config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                   chat_id: "{{ marco | int }}"
                   message: "Soll ich diese {{ a.neu | count }} Adressen im Router festmachen?"
                   inline_keyboard:
@@ -211,6 +215,7 @@ script:
           - action: telegram_bot.send_message
             continue_on_error: true
             data:
+              config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
               chat_id: "{{ marco | int }}"
               message: >-
                 {% if offen_namen %}⚠️ Netzwerk-Firmware: {{ liste | count - offen_namen | count }} von {{ liste | count }} fertig.
@@ -311,6 +316,7 @@ automation:
             - action: telegram_bot.send_message
               continue_on_error: true
               data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                 chat_id: "{{ repeat.item | int }}"
                 message: >-
                   {% if geheilt %}🔧 Netzwerk: {{ geheilt | join(', ') }} war weg – per PoE neu gestartet, läuft wieder.{% endif %}
@@ -348,6 +354,7 @@ automation:
       - action: telegram_bot.send_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ marco | int }}"
           message: >-
             📡 Neue Firmware fürs Netzwerk: {{ liste | join(', ') }}.
@@ -370,11 +377,13 @@ automation:
       - action: telegram_bot.answer_callback_query
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           callback_query_id: "{{ trigger.event.data.id }}"
           message: "OK"
       - action: telegram_bot.edit_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ trigger.event.data.chat_id }}"
           message_id: "{{ trigger.event.data.message.message_id }}"
           message: >-
@@ -441,11 +450,13 @@ automation:
       - action: telegram_bot.answer_callback_query
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           callback_query_id: "{{ trigger.event.data.id }}"
           message: "OK"
       - action: telegram_bot.edit_replymarkup
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ trigger.event.data.chat_id }}"
           message_id: "{{ trigger.event.data.message.message_id }}"
           inline_keyboard: []

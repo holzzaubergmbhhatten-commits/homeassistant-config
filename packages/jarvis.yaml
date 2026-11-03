@@ -119,7 +119,7 @@ script:
             - action: telegram_bot.send_photo
               continue_on_error: true
               data: >-
-                {% set x = {'file': datei, 'caption': '📷 ' ~ state_attr(repeat.item, 'friendly_name')
+                {% set x = {'config_entry_id': '01M3HM1R6DDKSC07MG87X4YEVB', 'file': datei, 'caption': '📷 ' ~ state_attr(repeat.item, 'friendly_name')
                    ~ ' · ' ~ now().strftime('%H:%M') ~ ' Uhr'} %}
                 {% if ziel %}{% set x = dict(x, chat_id=ziel | int) %}{% endif %}{{ x }}
       - variables:
@@ -395,6 +395,7 @@ script:
           - action: telegram_bot.send_message
             continue_on_error: true
             data:
+              config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
               message: >-
                 ☀️ Morgen-Ansage – die Lautsprecher haben nicht abgespielt
                 ({{ ergebnis.ergebnis | default('keine Antwort') if ergebnis is defined and ergebnis is mapping else 'Skript-Fehler' }},
@@ -592,7 +593,7 @@ script:
       - action: telegram_bot.send_message
         continue_on_error: true
         data: >-
-          {% set x = {'message': nachricht} %}
+          {% set x = {'config_entry_id': '01M3HM1R6DDKSC07MG87X4YEVB', 'message': nachricht} %}
           {% if ziel %}{% set x = dict(x, chat_id=ziel | int) %}{% endif %}{{ x }}
       - variables:
           ok:
@@ -889,7 +890,7 @@ automation:
             - action: telegram_bot.send_message
               continue_on_error: true
               data: >-
-                {% set x = {'message': '⏰ Erinnerung: ' ~ (repeat.item.summary | replace('⏰', '') | trim)} %}
+                {% set x = {'config_entry_id': '01M3HM1R6DDKSC07MG87X4YEVB', 'message': '⏰ Erinnerung: ' ~ (repeat.item.summary | replace('⏰', '') | trim)} %}
                 {% if an | length > 1 %}{% set x = dict(x, chat_id=an[1:] | int) %}{% endif %}{{ x }}
             - action: todo.update_item
               continue_on_error: true
@@ -928,6 +929,7 @@ automation:
             - action: telegram_bot.send_message
               continue_on_error: true
               data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                 chat_id: "{{ repeat.item | int }}"
                 message: "💡 Noch an: {{ an | join(', ') }}"
                 inline_keyboard:
@@ -956,11 +958,13 @@ automation:
       - action: telegram_bot.answer_callback_query
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           callback_query_id: "{{ trigger.event.data.id }}"
           message: "{{ 'Ausgeschaltet' if trigger.event.data.data == '/licht_aus' else 'OK' }}"
       - action: telegram_bot.edit_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ trigger.event.data.chat_id }}"
           message_id: "{{ trigger.event.data.message.message_id }}"
           message: >-
@@ -991,6 +995,7 @@ automation:
             - action: telegram_bot.send_message
               continue_on_error: true
               data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                 chat_id: "{{ repeat.item | int }}"
                 message: "🔓 Nicht abgeschlossen: {{ offen | join(', ') }}"
                 inline_keyboard:
@@ -1017,11 +1022,13 @@ automation:
       - action: telegram_bot.answer_callback_query
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           callback_query_id: "{{ trigger.event.data.id }}"
           message: "{{ 'Wird abgeschlossen' if trigger.event.data.data == '/abschliessen' else 'OK' }}"
       - action: telegram_bot.edit_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ trigger.event.data.chat_id }}"
           message_id: "{{ trigger.event.data.message.message_id }}"
           message: >-

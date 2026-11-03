@@ -58,6 +58,7 @@ automation:
             - action: telegram_bot.send_message
               continue_on_error: true
               data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                 chat_id: "{{ repeat.item | int }}"
                 message: "🗑 Morgen wird abgeholt: {{ state_attr('sensor.muell', 'morgen') | join(', ') }} – bitte heute Abend rausstellen."
 
@@ -93,6 +94,7 @@ automation:
       - action: telegram_bot.send_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ trigger.event.data.chat_id }}"
           message: |-
             {%- if m.fehler | default('') %}⚠️ Müll-Kalender: {{ m.fehler }}
@@ -121,6 +123,7 @@ automation:
       - action: telegram_bot.download_file
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           file_id: "{{ trigger.event.data.file_id }}"
           directory_path: /media/akte/_eingang
           file_name: "{{ name }}"
@@ -138,6 +141,7 @@ automation:
       - action: telegram_bot.send_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ trigger.event.data.chat_id }}"
           message: >-
             {{ '⚠️ Müll-Kalender: ' ~ m.fehler if m.fehler | default('') else '✅ Müll-Kalender übernommen (bis '
@@ -165,6 +169,7 @@ automation:
       - action: telegram_bot.download_file
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           file_id: "{{ trigger.event.data.file_id }}"
           directory_path: /media/eingang
           file_name: "{{ name }}"
@@ -182,6 +187,7 @@ automation:
       - action: telegram_bot.send_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ trigger.event.data.chat_id }}"
           message: >-
             {{ '⚠️ Müll: ' ~ m.fehler if m.fehler | default('') else '✅ ' ~ m.meldung ~ ' (gespeichert bis ' ~ (m.bis | default('?')) ~ '). Nächste: ' ~ m.text }}

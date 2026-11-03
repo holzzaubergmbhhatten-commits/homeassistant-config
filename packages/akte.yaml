@@ -45,6 +45,7 @@ automation:
       - action: telegram_bot.answer_callback_query
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           callback_query_id: "{{ trigger.event.data.id }}"
           message: "{{ 'Kommt ins Handbuch …' if ja else 'OK' }}"
       - if: "{{ not ja }}"
@@ -52,6 +53,7 @@ automation:
           - action: telegram_bot.edit_replymarkup
             continue_on_error: true
             data:
+              config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
               chat_id: "{{ trigger.event.data.chat_id }}"
               message_id: "{{ trigger.event.data.message.message_id }}"
               inline_keyboard: []
@@ -73,12 +75,14 @@ automation:
           - action: telegram_bot.edit_replymarkup
             continue_on_error: true
             data:
+              config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
               chat_id: "{{ trigger.event.data.chat_id }}"
               message_id: "{{ trigger.event.data.message.message_id }}"
               inline_keyboard: []
       - action: telegram_bot.send_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ trigger.event.data.chat_id }}"
           message: >-
             {% if a.ok | default(false) %}📖 „{{ a.name }}“ ist unterwegs ins Haus-Handbuch – in etwa 5 Minuten unter „📄 Anleitungen“
@@ -118,6 +122,7 @@ automation:
       - action: telegram_bot.send_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
           message: >-
             {{ '🔢 In einer Woche (31.10.) Zähler in der Nadorster Str. ablesen' if now().day == 24 else '🔢 Heute Stichtag: Zähler in der Nadorster Str. ablesen' }}
@@ -146,6 +151,7 @@ automation:
       - action: telegram_bot.download_file
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           file_id: "{{ trigger.event.data.file_id }}"
           directory_path: /media/akte/_eingang
           file_name: "{{ name }}"
@@ -158,6 +164,7 @@ automation:
       - action: telegram_bot.send_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ chat }}"
           message: "📁 Kommt in die Akte – ich lese den Beleg, einen Moment …"
 

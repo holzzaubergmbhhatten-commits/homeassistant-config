@@ -282,6 +282,7 @@ automation:
       - action: telegram_bot.send_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
           message: |-
             🔋 Batterie tauschen:
@@ -304,6 +305,7 @@ automation:
       - action: telegram_bot.send_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
           message: |-
             🔋 Erinnerung – diese Batterien sind noch schwach:
@@ -352,6 +354,7 @@ automation:
                   - action: telegram_bot.send_message
                     continue_on_error: true
                     data:
+                      config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                       chat_id: "{{ repeat.item | int }}"
                       message: >-
                         🚨 {{ text }}
@@ -376,6 +379,7 @@ automation:
             - action: telegram_bot.send_message
               continue_on_error: true
               data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                 chat_id: "{{ repeat.item | int }}"
                 message: >-
                   💧 Wasser läuft seit {{ '10 Minuten' if is_state('input_boolean.urlaubsmodus', 'on') else 'einer Stunde' }} ohne Pause
@@ -419,6 +423,7 @@ automation:
             - action: telegram_bot.send_message
               continue_on_error: true
               data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                 chat_id: "{{ repeat.item | int }}"
                 message: "{{ symbol }} {{ name }} ist fertig (lief {{ dauer }} Minuten) – bitte ausräumen."
 
@@ -458,6 +463,7 @@ automation:
             - action: telegram_bot.send_message
               continue_on_error: true
               data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                 chat_id: "{{ repeat.item | int }}"
                 message: >-
                   ☀️ Sonnenstrom übrig: Akku {{ states(state_attr('sensor.haus_kennungen', 'akku_stand')) | float(0) | round(0) | int }} %,
@@ -486,6 +492,7 @@ automation:
             - action: telegram_bot.send_message
               continue_on_error: true
               data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
                 chat_id: "{{ repeat.item | int }}"
                 message: >-
                   {% if trigger.to_state.state == 'on' %}🧳 Urlaubsmodus ist an: abends geht Licht wie bewohnt an und aus,
@@ -496,6 +503,7 @@ automation:
       - action: telegram_bot.send_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
           message: >-
             {% if trigger.to_state.state == 'on' %}🚐 Fahrt ihr mit dem Wohnwagen? Dann den CO-Melder (FireAngel) im Wohnzimmer
@@ -552,6 +560,7 @@ automation:
       - action: telegram_bot.send_message
         continue_on_error: true
         data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
           message: |-
             🧳 Zuhause alles im Blick:
