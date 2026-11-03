@@ -429,7 +429,7 @@ function raeume() {
   const feucht = {};
   Object.keys(h.states).forEach(id => {
     const a = h.states[id].attributes;
-    if (!id.startsWith("sensor.") || zahl(id) == null) return;
+    if (!id.startsWith("sensor.") || zahl(id) == null || Object.values(ALPSTUGA).includes(id)) return;
     if (a.device_class !== "humidity") return;   // nur echte Feuchtesensoren, nicht Batteriestände (auch in %)
     const r = raumVon(id + " " + (a.friendly_name || ""));
     if (r && !feucht[r]) feucht[r] = id;
@@ -437,7 +437,7 @@ function raeume() {
   const gefunden = {};
   Object.keys(h.states).forEach(id => {
     const a = h.states[id].attributes;
-    if (!id.startsWith("sensor.") || zahl(id) == null) return;
+    if (!id.startsWith("sensor.") || zahl(id) == null || Object.values(ALPSTUGA).includes(id)) return;
     if (!(a.device_class === "temperature" || /°C/.test(a.unit_of_measurement || ""))) return;
     const r = raumVon(id + " " + (a.friendly_name || ""));
     if (r && !gefunden[r]) gefunden[r] = id;
@@ -499,6 +499,25 @@ function heizkreise() {
     return { raum, id: ids.length ? id : null, t: werte.length ? werte.reduce((a, b) => a + b, 0) / werte.length : null, gruppe: ids.length > 1 ? ids.length : 0 };
   });
 }
+// IKEA ALPSTUGA im Wohnzimmer (Matter, Gerät „CO2 Wohnzimmer“). Feste Kennungen, nicht über den Namen gesucht.
+const ALPSTUGA = {
+  co2: "sensor.wohnzimmer_co2_wohnzimmer_kohlendioxid",
+  feuchte: "sensor.wohnzimmer_co2_wohnzimmer_luftfeuchtigkeit",
+  qualitaet: "sensor.wohnzimmer_co2_wohnzimmer_luftqualitat",
+  pm25: "sensor.wohnzimmer_co2_wohnzimmer_pm25",
+  temp: "sensor.wohnzimmer_co2_wohnzimmer_temperatur"
+};
+function co2Karte() {
+  const h = hass(); if (!h) return "";
+  const wert = id => { const s = h.states[id]; return s && s.state !== "unavailable" && s.state !== "unknown" ? s.state : null; };
+  const zeile = (name, id, einheit) => { const v = wert(id); return `<tr><td><b>${name}</b></td><td>${v == null ? '<span class="klein">keine Werte</span>' : esc(v) + (einheit ? " " + esc(einheit) : "")}</td></tr>`; };
+  const co2 = wert(ALPSTUGA.co2);
+  const ampel = co2 == null ? "" : +co2 < 800 ? "gut (unter 800 ppm)" : +co2 < 1200 ? "mittel (800 bis 1200 ppm), bald lüften" : "hoch (über 1200 ppm), jetzt lüften";
+  return `<div class="karte"><h2>CO2-Sensor Wohnzimmer (IKEA ALPSTUGA)</h2>
+    <table class="werte raum">${zeile("CO2", ALPSTUGA.co2, "ppm")}${zeile("Luftqualität", ALPSTUGA.qualitaet)}${zeile("Temperatur", ALPSTUGA.temp, "°C")}${zeile("Luftfeuchte", ALPSTUGA.feuchte, "%")}${zeile("Feinstaub PM2,5", ALPSTUGA.pm25, "µg/m³")}</table>
+    ${ampel ? `<div class="klein" style="margin-top:6px">CO2 (Richtwert): ${esc(ampel)}</div>` : ""}
+    <div class="klein" style="margin-top:6px">Die Temperatur stimmt nur, wenn der Sensor weit genug vom Ofen steht.</div></div>`;
+}
 function heizkreiseKarte() {
   const k = heizkreise(); if (!k) return "";
   const gefunden = k.filter(x => x.id).length;
@@ -559,6 +578,7 @@ function raeumeSeite() {
         ${kachel(kwT(Math.max(0, kw(E.pvLeistung) || 0)), "PV jetzt")}${kachel(zahl(E.akkuStand) == null ? "–" : fmt(zahl(E.akkuStand), 0) + " %", "Speicher", zahl(E.akkuStand))}
         ${EW.durchfluss ? kachel(esc(st_text(EW.durchfluss)), "Wasser fließt") : kachel(kwhT(kwh(E.wpTag)), "Wärmepumpe heute")}
       </div></div>
+      ${co2Karte()}
       ${heizkreiseKarte()}
     </div>
     <div class="karte">${navi()}${unten}</div>`;
