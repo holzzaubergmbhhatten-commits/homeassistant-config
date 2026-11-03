@@ -150,7 +150,6 @@ automation:
           directory_path: /media/akte/_eingang
           file_name: "{{ name }}"
       - action: shell_command.akte
-        continue_on_error: true
         data:
           aktion: neu
           wert: >-
