@@ -478,39 +478,23 @@ function aussenLuft(liste) {
   if (a && a.humidity != null) return { t: zahl(E.aussen) ?? a.temperature, rh: a.humidity, quelle: "Wetter" };
   return null;
 }
-// Heizkreise: Rücklauf-Fühler am Flur-Verteiler (Shelly-Sensor-Add-on). Die Fühler werden über ihre Nummer gefunden.
-const KREISE = [["100", "Kind 2"], ["101", "Schlafen"], ["102", "Flur"], ["103", "Badezimmer"], ["104", "Mucki"], ["", "Küche"], ["", "Büro"], ["", "WC"], ["", "Diele"]];
+// Heizkreise: feste Zuordnung über die genaue Kennung. Nur was bestätigt ist, steht hier. Keine Namenssuche.
+const HEIZKREISE = [
+  ["Rücklauf Küche", "sensor.shelly1g3_d0cf13def7fc_temperatur_6"],
+  ["Rücklauf Kind 2", null], ["Rücklauf Schlafen", null], ["Rücklauf Flur", null], ["Rücklauf Badezimmer", null],
+  ["Rücklauf Mucki", null], ["Rücklauf Büro", null], ["Rücklauf WC", null], ["Rücklauf Diele", null],
+  ["Vorlauf Diele", null], ["Vorlauf Hauptleitung", null], ["Rücklauf Hauptleitung", null], ["Rücklauf WZ 1", null]
+];
 function heizkreise() {
   const h = hass(); if (!h) return null;
-  const fund = {};
-  Object.keys(h.states).forEach(id => {
-    const name = String(h.states[id].attributes.friendly_name || ""), text = id + " " + name;
-    if (!id.startsWith("sensor.") || !/temperat/i.test(text) || zahl(id) == null) return;
-    // Gefunden über die Nummer (100–104) oder über den Namen „Rücklauf <Raum>“ / „RL <Raum>“
-    KREISE.forEach(([n, raum]) => {
-      const nummer = new RegExp("(^|[^0-9])" + n + "([^0-9]|$)").test(text);
-      const nach_name = /r(ü|ue)cklauf|\brl\b/i.test(name) && name.toLowerCase().includes(raum.toLowerCase());
-      if (!fund[n] && (nummer || nach_name)) fund[n] = id;
-    });
-  });
-  // Hauptleitung: Vor- und Rücklauf am Flur-Verteiler, über den Namen gefunden
-  const haupt = [["vl", "Vorlauf Hauptleitung", /vorlauf.*hauptleitung|hauptleitung.*vorlauf/i], ["rl", "Rücklauf Hauptleitung", /r(ü|ue)cklauf.*hauptleitung|hauptleitung.*r(ü|ue)cklauf/i]];
-  const hauptFund = haupt.map(([k, raum, muster]) => {
-    const id = Object.keys(h.states).find(e => e.startsWith("sensor.") && muster.test(e + " " + String(h.states[e].attributes.friendly_name || "")) && zahl(e) != null) || null;
-    return { n: k, raum, id, t: id ? zahl(id) : null };
-  });
-  // Wohnzimmer: vier Rückläufe (WZ 1 bis WZ 4), als eine Gruppe mit Mittelwert
-  const wz = Object.keys(h.states).filter(e => e.startsWith("sensor.") && /(^|[^a-z])wz[ _-]?[1-4]([^0-9]|$)/i.test(e + " " + String(h.states[e].attributes.friendly_name || "")) && zahl(e) != null);
-  const wzWerte = wz.map(e => zahl(e));
-  const wzGruppe = wz.length ? [{ n: "wz", raum: "Wohnzimmer (" + wz.length + " Rückläufe)", id: null, t: wzWerte.reduce((a, b) => a + b, 0) / wzWerte.length, gruppe: true }] : [];
-  return [...KREISE.filter(([n, raum]) => raum !== "Wohnzimmer").map(([n, raum]) => ({ n, raum, id: fund[n] || null, t: fund[n] ? zahl(fund[n]) : null })), ...wzGruppe, ...hauptFund];
+  return HEIZKREISE.map(([raum, id]) => ({ raum, id, t: id && h.states[id] ? zahl(id) : null }));
 }
 function heizkreiseKarte() {
   const k = heizkreise(); if (!k) return "";
   const gefunden = k.filter(x => x.id).length;
   const anzahl = k.length;
   return `<div class="karte"><h2>Heizkreise: Rücklauf</h2>
-    <table class="werte raum">${k.map(x => `<tr><td><b>${esc(x.raum)}</b></td><td>${(x.id || x.gruppe) ? fmt(x.t, 1) + " °C" : '<span class="klein">nicht gefunden</span>'}</td></tr>`).join("")}</table>
+    <table class="werte raum">${k.map(x => `<tr><td><b>${esc(x.raum)}</b></td><td>${x.id ? fmt(x.t, 1) + " °C" : '<span class="klein">noch nicht zugeordnet</span>'}</td></tr>`).join("")}</table>
     <div class="klein" style="margin-top:6px">${gefunden} von ${anzahl} Fühlern gefunden. Ein warmer Rücklauf heißt: der Kreis läuft. Bleibt er kalt, obwohl der Raumregler auf warm steht, prüfen: Stellmotor offen?</div></div>`;
 }
 // Übersicht aller Sensoren in Home Assistant, ungefiltert (mit technischer Kennung, Wert und Einheit)
