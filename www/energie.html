@@ -507,18 +507,6 @@ function heizkreiseKarte() {
     <table class="werte raum">${k.map(x => `<tr><td><b>${esc(x.raum)}</b>${x.gruppe ? ` <span class="klein">Mittelwert aus ${x.gruppe}</span>` : ""}</td><td>${x.id ? fmt(x.t, 1) + " °C" : '<span class="klein">noch nicht zugeordnet</span>'}</td></tr>`).join("")}</table>
     <div class="klein" style="margin-top:6px">${gefunden} von ${anzahl} Fühlern gefunden. Ein warmer Rücklauf heißt: der Kreis läuft. Bleibt er kalt, obwohl der Raumregler auf warm steht, prüfen: Stellmotor offen?</div></div>`;
 }
-// Übersicht aller Sensoren in Home Assistant, ungefiltert (mit technischer Kennung, Wert und Einheit)
-function alleTemperaturen() {
-  const h = hass(); if (!h) return "";
-  const belegt = new Set(HEIZKREISE.flatMap(x => Array.isArray(x[1]) ? x[1] : [x[1]]).filter(Boolean));   // schon zugeordnet: stehen in der Heizkreis-Karte, nicht mehr hier
-  const liste = Object.keys(h.states).filter(id => id.startsWith("sensor.") && !belegt.has(id))
-    .map(id => { const a = h.states[id].attributes; return { id, name: String(a.friendly_name || id), s: h.states[id].state, einheit: a.unit_of_measurement || "" }; })
-    .sort((a, b) => a.id.localeCompare(b.id, "de"));
-  if (!liste.length) return "";
-  return `<div class="karte"><h2>Alle Sensoren (${liste.length})</h2>
-    <table class="werte raum">${liste.map(x => `<tr><td><b>${esc(x.name)}</b><div class="klein">${esc(x.id)}</div></td><td>${esc(x.s)} ${esc(x.einheit)}</td></tr>`).join("")}</table>
-    <div class="klein" style="margin-top:6px">Alle Sensoren aus Home Assistant, ohne Filter. Die Kennung zeigt das Gerät an. „unavailable“ heißt: der Sensor meldet gerade nichts.</div></div>`;
-}
 function raeumeSeite() {
   const liste = raeume(), aussen = aussenLuft(liste), wa = aussen ? luftWasser(aussen.t, aussen.rh) : null;
   const innen = liste.filter(x => !x.draussen && !x.alt && x.h).map(x => luftWasser(zahl(x.t), zahl(x.h))).filter(v => v != null);
@@ -573,7 +561,6 @@ function raeumeSeite() {
       </div></div>
       ${heizkreiseKarte()}
     </div>
-    ${alleTemperaturen()}
     <div class="karte">${navi()}${unten}</div>`;
 }
 
