@@ -482,14 +482,14 @@ function aussenLuft(liste) {
 const HEIZKREISE = [
   ["Rücklauf Küche", "sensor.shelly1g3_d0cf13def7fc_temperatur_6"],
   ["Rücklauf Büro", "sensor.shelly1g3_d0cf13def7fc_temperatur_3"],
-  ["WC", "sensor.shelly1g3_d0cf13def7fc_temperatur_2"],
-  ["Diele", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_6"],
-  ["Wohnzimmer 1", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_5"],
-  ["Wohnzimmer 2", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_2"],
-  ["Wohnzimmer 3", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_3"],
-  ["Wohnzimmer 4", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_4"],
+  ["Rücklauf WC", "sensor.shelly1g3_d0cf13def7fc_temperatur_2"],
+  ["Rücklauf Diele", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_6"],
+  ["Rücklauf Wohnzimmer 1", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_5"],
+  ["Rücklauf Wohnzimmer 2", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_2"],
+  ["Rücklauf Wohnzimmer 3", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_3"],
+  ["Rücklauf Wohnzimmer 4", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_4"],
   ["Rücklauf Kind 2", null], ["Rücklauf Schlafen", null], ["Rücklauf Flur", null], ["Rücklauf Badezimmer", null],
-  ["Rücklauf Mucki", null], ["Vorlauf Diele", null], ["Vorlauf Hauptleitung", null], ["Rücklauf Hauptleitung", null]
+  ["Rücklauf Mucki", null], ["Vorlauf Hauptleitung", null], ["Rücklauf Hauptleitung", null]
 ];
 function heizkreise() {
   const h = hass(); if (!h) return null;
