@@ -484,29 +484,31 @@ const HEIZKREISE = [
   ["Rücklauf Büro", "sensor.shelly1g3_d0cf13def7fc_temperatur_3"],
   ["Rücklauf WC", "sensor.shelly1g3_d0cf13def7fc_temperatur_2"],
   ["Rücklauf Diele", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_6"],
-  ["Rücklauf Wohnzimmer 1", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_5"],
-  ["Rücklauf Wohnzimmer 2", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_2"],
-  ["Rücklauf Wohnzimmer 3", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_3"],
-  ["Rücklauf Wohnzimmer 4", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_4"],
+  ["Rücklauf Wohnzimmer", ["sensor.shelly1g3_d0cf13ddb7b4_temperatur_5", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_2", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_3", "sensor.shelly1g3_d0cf13ddb7b4_temperatur_4"]],
   ["Rücklauf Kind 2", null], ["Rücklauf Schlafen", null], ["Rücklauf Flur", null], ["Rücklauf Badezimmer", null],
   ["Rücklauf Mucki", null], ["Vorlauf Hauptleitung", null], ["Rücklauf Hauptleitung", null]
 ];
 function heizkreise() {
   const h = hass(); if (!h) return null;
-  return HEIZKREISE.map(([raum, id]) => ({ raum, id, t: id && h.states[id] ? zahl(id) : null }));
+  // Einzelner Sensor oder Gruppe (Liste): bei einer Gruppe wird der Mittelwert der vorhandenen Sensoren gezeigt
+  return HEIZKREISE.map(([raum, id]) => {
+    const ids = Array.isArray(id) ? id : id ? [id] : [];
+    const werte = ids.map(i => h.states[i] ? zahl(i) : null).filter(v => v != null);
+    return { raum, id: ids.length ? id : null, t: werte.length ? werte.reduce((a, b) => a + b, 0) / werte.length : null, gruppe: ids.length > 1 ? ids.length : 0 };
+  });
 }
 function heizkreiseKarte() {
   const k = heizkreise(); if (!k) return "";
   const gefunden = k.filter(x => x.id).length;
   const anzahl = k.length;
   return `<div class="karte"><h2>Heizkreise: Rücklauf</h2>
-    <table class="werte raum">${k.map(x => `<tr><td><b>${esc(x.raum)}</b></td><td>${x.id ? fmt(x.t, 1) + " °C" : '<span class="klein">noch nicht zugeordnet</span>'}</td></tr>`).join("")}</table>
+    <table class="werte raum">${k.map(x => `<tr><td><b>${esc(x.raum)}</b>${x.gruppe ? ` <span class="klein">Mittelwert aus ${x.gruppe}</span>` : ""}</td><td>${x.id ? fmt(x.t, 1) + " °C" : '<span class="klein">noch nicht zugeordnet</span>'}</td></tr>`).join("")}</table>
     <div class="klein" style="margin-top:6px">${gefunden} von ${anzahl} Fühlern gefunden. Ein warmer Rücklauf heißt: der Kreis läuft. Bleibt er kalt, obwohl der Raumregler auf warm steht, prüfen: Stellmotor offen?</div></div>`;
 }
 // Übersicht aller Sensoren in Home Assistant, ungefiltert (mit technischer Kennung, Wert und Einheit)
 function alleTemperaturen() {
   const h = hass(); if (!h) return "";
-  const belegt = new Set(HEIZKREISE.map(x => x[1]).filter(Boolean));   // schon zugeordnet: stehen in der Heizkreis-Karte, nicht mehr hier
+  const belegt = new Set(HEIZKREISE.flatMap(x => Array.isArray(x[1]) ? x[1] : [x[1]]).filter(Boolean));   // schon zugeordnet: stehen in der Heizkreis-Karte, nicht mehr hier
   const liste = Object.keys(h.states).filter(id => id.startsWith("sensor.") && !belegt.has(id))
     .map(id => { const a = h.states[id].attributes; return { id, name: String(a.friendly_name || id), s: h.states[id].state, einheit: a.unit_of_measurement || "" }; })
     .sort((a, b) => a.id.localeCompare(b.id, "de"));
