@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Familien-Mail</title>
+<!--
+  Mail-Seite (Reiter "Mail" im Flur-Dashboard) für familie@urlaub-wie-zuhause.eu – Programm: claude_tools/mail.py.
+  Daten kommen nur über die Home-Assistant-Anmeldung (script.familie_mail_aktion, packages/mail.yaml); in dieser Datei steht nichts davon.
+  Entwürfe: Senden / Ändern / Verwerfen · Posteingang: Antworten · Gesendet: Verlauf · Neue Mail: Claude schreibt den Entwurf.
+-->
+<style>
+  :root { --bg: #F2F2F7; --karte: #fff; --text: #1C1C1E; --grau: #8E8E93; --gruen: #536b45; --rot: #C4281C; --gold: #b8902f; --feld: #E3E3E8; }
+  :root.dunkel { --bg: #000; --karte: #1C1C1E; --text: #F2F2F7; --grau: #98989D; --feld: #2C2C2E; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "SF Pro Text", Roboto, "Helvetica Neue", system-ui, sans-serif, "Noto Color Emoji"; }
+  button { font: inherit; border: 0; background: none; color: inherit; cursor: pointer; padding: 0; }
+  main { max-width: 1100px; margin: 0 auto; padding: 14px 16px 60px; }
+  .kopf { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  .kopf h1 { margin: 0; font-size: 26px; }
+  .klein { font-size: 13px; color: var(--grau); line-height: 1.4; }
+  .kopf .klein { flex: 1; min-width: 200px; }
+  .knopf { padding: 9px 14px; border-radius: 11px; background: var(--feld); font-weight: 600; font-size: 14px; }
+  .knopf.gruen { background: var(--gruen); color: #fff; }
+  .knopf.rot { color: var(--rot); }
+  .reiter { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 10px; }
+  .reiter button { padding: 8px 14px; border-radius: 16px; background: var(--feld); font-size: 14px; font-weight: 600; }
+  .reiter button.an { background: var(--gruen); color: #fff; }
+  .suche { width: 100%; max-width: 420px; padding: 10px 14px; border-radius: 12px; border: 0; background: var(--feld); font: inherit; font-size: 16px; color: inherit; margin-bottom: 10px; }
+  .liste { display: grid; gap: 10px; }
+  .eintrag { background: var(--karte); border-radius: 14px; padding: 12px 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); display: grid; gap: 6px; border-left: 4px solid transparent; }
+  .eintrag.entwurf { border-left-color: var(--gold); }
+  .eintrag.ein { border-left-color: var(--gruen); }
+  .zeile { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .zeile b { font-size: 16px; min-width: 0; overflow-wrap: anywhere; }
+  .wer { font-size: 13px; color: var(--grau); overflow-wrap: anywhere; }
+  .text { font-size: 14px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .text.kurz { max-height: 4.5em; overflow: hidden; color: var(--grau); }
+  .aktionen { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+  .anh { font-size: 13px; }
+  textarea, input.feld { width: 100%; border-radius: 10px; border: 1px solid #C7C7CC; padding: 9px 10px; font: inherit; font-size: 15px; background: var(--karte); color: var(--text); }
+  textarea { min-height: 80px; }
+  .hinweis { background: #536b451A; color: var(--gruen); border-radius: 10px; padding: 8px 11px; font-size: 14px; font-weight: 600; }
+  .fehler { background: #C4281C1A; color: var(--rot); border-radius: 10px; padding: 8px 11px; font-size: 14px; }
+  .leer { color: var(--grau); padding: 20px 4px; }
+  .neu { background: var(--karte); border-radius: 14px; padding: 14px; display: grid; gap: 8px; margin-bottom: 12px; box-shadow: 0 0 0 2px var(--gruen); }
+</style>
+</head>
+<body>
+<main>
+  <div class="kopf">
+    <h1>✉️ Familien-Mail</h1>
+    <div class="klein" id="adresse">familie@urlaub-wie-zuhause.eu · Posteingang wird alle 5 Minuten abgeholt</div>
+    <button class="knopf gruen" id="neuKnopf">✍️ Neue Mail</button>
+    <button class="knopf" id="laden">↻</button>
+  </div>
+  <div id="meldung"></div>
+  <div id="neuBox"></div>
+  <div class="reiter" id="reiter"></div>
+  <input class="suche" id="suche" placeholder="Suchen (Name, Adresse, Betreff, Text) …">
+  <div class="liste" id="liste"><div class="leer">Lade …</div></div>
+</main>
+<script>
+let daten = { eingang: [], gesendet: [], entwuerfe: [] }, reiter = "eingang", offen = {}, eingabe = {};
+function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
+function wer() { const h = hass(); return (h && h.user && h.user.name) || ""; }
+const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function zeit(t, roh) {
+  const d = t ? new Date(t * 1000) : (roh ? new Date(roh) : null);
+  if (!d || isNaN(d)) return esc(roh || "");
+  const heute = new Date(); const gleich = d.toDateString() === heute.toDateString();
+  return gleich ? "heute " + d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })
+    : d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "2-digit" }) + " " + d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+}
+async function aktion(d) {
+  const r = await hass().callWS({ type: "call_service", domain: "script", service: "familie_mail_aktion", service_data: Object.assign({ wer: wer() }, d), return_response: true });
+  const a = r && r.response && r.response.stdout;
+  try { return JSON.parse(a); } catch (e) { return { ok: false, fehler: (r && r.response && r.response.stderr) || "keine Antwort" }; }
+}
+function melden(text, fehler) {
+  const m = document.getElementById("meldung");
+  m.innerHTML = text ? `<div class="${fehler ? "fehler" : "hinweis"}" style="margin-bottom:10px">${esc(text)}</div>` : "";
+  if (text && !fehler) setTimeout(() => { if (m.textContent === text) m.innerHTML = ""; }, 12000);
+}
+async function neuLaden() {
+  try {
+    const r = await aktion({ was: "liste" });
+    if (!r.ok) { melden(r.fehler || "Fehler beim Laden", true); return; }
+    daten = r; zeichnen();
+  } catch (e) { melden("Fehler beim Laden: " + (e.message || e), true); }
+}
+function zeichnen() {
+  const n = { entwuerfe: daten.entwuerfe.length, eingang: daten.eingang.length, gesendet: daten.gesendet.length };
+  document.getElementById("reiter").innerHTML = [["entwuerfe", "📝 Entwürfe"], ["eingang", "📥 Posteingang"], ["gesendet", "📤 Gesendet"]]
+    .map(([k, t]) => `<button data-reiter="${k}" class="${reiter === k ? "an" : ""}">${t} (${n[k]})</button>`).join("");
+  const q = document.getElementById("suche").value.trim().toLowerCase();
+  const passt = e => !q || JSON.stringify(e).toLowerCase().includes(q);
+  const liste = (daten[reiter] || []).filter(passt);
+  const el = document.getElementById("liste");
+  if (!liste.length) { el.innerHTML = `<div class="leer">${q ? "Nichts gefunden." : reiter === "entwuerfe" ? "Keine offenen Entwürfe." : "Noch keine Mails."}</div>`; return; }
+  el.innerHTML = liste.map(e => karte(e)).join("");
+  for (const [k, v] of Object.entries(eingabe)) { const t = document.getElementById("t_" + k); if (t) t.value = v; }
+}
+function karte(e) {
+  const auf = offen[e.id];
+  const textCls = auf ? "text" : "text kurz";
+  const feld = (art, ph) => `<textarea id="t_${art}_${e.id}" placeholder="${ph}"></textarea>
+     <div class="aktionen"><button class="knopf gruen" data-tun="${art}" data-id="${e.id}">Entwurf schreiben lassen</button>
+     <button class="knopf" data-zu="${e.id}">Abbrechen</button></div>`;
+  if (reiter === "entwuerfe") {
+    return `<div class="eintrag entwurf"><div class="zeile"><b>${esc(e.betreff)}</b><span class="wer">${zeit(e.zeit)}</span></div>
+      <div class="wer">An: ${esc(e.an)}${e.von ? " · von " + esc(e.von) : ""}${e.antwort_auf ? " · Antwort" : ""}</div>
+      <div class="text">${esc(e.text)}</div>
+      ${offen["ae_" + e.id] ? feld("aendern", "Was soll anders sein? z. B. kürzer, lockerer, Termin Freitag erwähnen …") :
+      `<div class="aktionen"><button class="knopf gruen" data-tun="senden" data-id="${e.id}">✅ Senden</button>
+        <button class="knopf" data-auf="ae_${e.id}">✏️ Ändern</button>
+        <button class="knopf rot" data-tun="verwerfen" data-id="${e.id}">🗑 Verwerfen</button></div>`}</div>`;
+  }
+  if (reiter === "eingang") {
+    return `<div class="eintrag ein"><div class="zeile"><b>${esc(e.betreff)}</b><span class="wer">${zeit(e.zeit, e.datum)}</span></div>
+      <div class="wer">Von: ${esc(e.von)}</div>
+      <div class="${textCls}" data-auf="${e.id}">${esc(e.text)}</div>
+      ${(e.anhaenge || []).length ? `<div class="anh">📎 ${e.anhaenge.map(esc).join(", ")} <span class="klein">(kamen per Telegram)</span></div>` : ""}
+      ${offen["an_" + e.id] ? feld("antworten", "Was soll ich antworten? In eigenen Worten, z. B. „Danke, Freitag passt“") :
+      `<div class="aktionen"><button class="knopf" data-auf="${e.id}">${auf ? "Weniger" : "Ganz lesen"}</button>
+        <button class="knopf gruen" data-auf="an_${e.id}">↩ Antworten</button></div>`}</div>`;
+  }
+  return `<div class="eintrag"><div class="zeile"><b>${esc(e.betreff)}</b><span class="wer">${zeit(e.zeit)}</span></div>
+    <div class="wer">An: ${esc(e.an)}${e.von ? " · von " + esc(e.von) : ""}</div>
+    <div class="${textCls}" data-auf="${e.id}">${esc(e.text)}</div>
+    <div class="aktionen"><button class="knopf" data-auf="${e.id}">${auf ? "Weniger" : "Ganz lesen"}</button></div></div>`;
+}
+function neuFormular(an) {
+  const b = document.getElementById("neuBox");
+  if (an === false) { b.innerHTML = ""; return; }
+  b.innerHTML = `<div class="neu"><b>Neue Mail</b>
+    <input class="feld" id="neuAn" type="email" placeholder="An (z. B. info@firma.de)" value="${esc(an || "")}">
+    <textarea id="neuText" placeholder="Worum geht es? In eigenen Worten – Claude schreibt daraus die Mail (in deinem Namen, Ich-Form)."></textarea>
+    <div class="aktionen"><button class="knopf gruen" id="neuLos">Entwurf schreiben lassen</button><button class="knopf" id="neuZu">Abbrechen</button></div>
+    <div class="klein">Der Entwurf erscheint gleich unter „Entwürfe“ und in Telegram. Raus geht er erst mit „Senden“.</div></div>`;
+  document.getElementById("neuAn").focus();
+}
+document.addEventListener("input", ev => { if (ev.target.id && ev.target.id.startsWith("t_")) eingabe[ev.target.id.slice(2)] = ev.target.value; if (ev.target.id === "suche") zeichnen(); });
+document.addEventListener("click", async ev => {
+  const b = ev.target.closest("button, [data-auf]"); if (!b) return;
+  if (b.id === "laden") { neuLaden(); return; }
+  if (b.id === "neuKnopf") { neuFormular(""); return; }
+  if (b.id === "neuZu") { neuFormular(false); return; }
+  if (b.id === "neuLos") {
+    const an = document.getElementById("neuAn").value.trim(), text = document.getElementById("neuText").value.trim();
+    if (!/^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/.test(an)) { melden("Bitte eine gültige Empfänger-Adresse eintragen.", true); return; }
+    if (!text) { melden("Bitte kurz schreiben, worum es gehen soll.", true); return; }
+    b.disabled = true; b.textContent = "Schreibe …";
+    const r = await aktion({ was: "neu", an, text });
+    if (r.ok) { neuFormular(false); reiter = "entwuerfe"; melden(r.hinweis || "Entwurf wird geschrieben …"); later(); }
+    else { melden(r.fehler, true); b.disabled = false; b.textContent = "Entwurf schreiben lassen"; }
+    return;
+  }
+  if (b.dataset.reiter) { reiter = b.dataset.reiter; zeichnen(); return; }
+  if (b.dataset.zu) { delete offen["ae_" + b.dataset.zu]; delete offen["an_" + b.dataset.zu]; zeichnen(); return; }
+  if (b.dataset.auf) { offen[b.dataset.auf] = !offen[b.dataset.auf]; zeichnen(); return; }
+  const tun = b.dataset.tun, id = b.dataset.id; if (!tun) return;
+  if (tun === "senden") {
+    const e = daten.entwuerfe.find(x => x.id === id);
+    if (!confirm(`Mail jetzt an ${e ? e.an : "?"} senden?`)) return;
+  }
+  if (tun === "verwerfen" && !confirm("Entwurf wirklich verwerfen?")) return;
+  let text = "";
+  if (tun === "aendern" || tun === "antworten") {
+    text = (document.getElementById(`t_${tun}_${id}`) || {}).value || "";
+    if (!text.trim()) { melden("Bitte erst etwas ins Feld schreiben.", true); return; }
+  }
+  b.disabled = true; const alt = b.textContent; b.textContent = "…";
+  const r = await aktion({ was: tun, id, text });
+  if (!r.ok) { melden(r.fehler || "Hat nicht geklappt", true); b.disabled = false; b.textContent = alt; return; }
+  delete offen["ae_" + id]; delete offen["an_" + id]; delete eingabe[`${tun}_${id}`];
+  if (tun === "senden") melden(`✅ Gesendet an ${r.an}`);
+  if (tun === "verwerfen") melden("🗑 Entwurf verworfen");
+  if (tun === "antworten" || tun === "aendern") { reiter = "entwuerfe"; melden(r.hinweis); later(); }
+  neuLaden();
+});
+function later() { [12000, 25000, 45000].forEach(t => setTimeout(neuLaden, t)); }
+function design() { const h = hass(); document.documentElement.classList.toggle("dunkel", !!(h && h.themes && h.themes.darkMode)); }
+function start() { if (!hass()) { setTimeout(start, 400); return; } design(); neuLaden(); setInterval(() => { design(); neuLaden(); }, 60000); }
+start();
+</script>
+</body>
+</html>

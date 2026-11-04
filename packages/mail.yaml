@@ -39,6 +39,33 @@ script:
           title: Familien-Mail Test
           message: "{{ ergebnis.stdout | default(ergebnis) }}"
 
+  # Mail-Seite (www/mail.html, Reiter „Mail“): Liste holen, Entwurf senden/verwerfen/ändern, neue Mail, Antwort
+  familie_mail_aktion:
+    alias: "Familien-Mail: Aktion von der Mail-Seite"
+    mode: queued
+    fields:
+      was:
+        description: liste, senden, verwerfen, neu, antworten oder aendern
+      id:
+        description: Kennung des Entwurfs bzw. der eingegangenen Mail
+      an:
+        description: Empfänger (bei neu)
+      text:
+        description: Wunsch / Änderung / Antwort in eigenen Worten
+      wer:
+        description: Name der angemeldeten Person (Marco oder Mirka – steht unter dem Gruß)
+    sequence:
+      - action: shell_command.mail
+        data:
+          wert: >-
+            {{ {'aktion': 'seite', 'was': was if was in ['liste', 'senden', 'verwerfen', 'neu', 'antworten', 'aendern'] else 'liste',
+                'id': id | default('', true), 'an': an | default('', true), 'text': text | default('', true), 'wer': wer | default('', true),
+                'chat': (states('input_text.telegram_empfaenger') | string).split(';') | first | trim,
+                'passwort': states('input_text.familie_mail_passwort') | string if was == 'senden' else ''} | to_json | base64_encode }}
+        response_variable: ergebnis
+      - stop: fertig
+        response_variable: ergebnis
+
 automation:
   - id: familie_mail_telegram_text
     alias: "Familien-Mail: Telegram-Befehle (Mail an / Antwort / Ändern)"
