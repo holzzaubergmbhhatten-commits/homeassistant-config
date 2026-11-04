@@ -368,6 +368,79 @@ def anhang(auftrag):
             "daten": base64.b64encode(roh).decode("ascii"), "ende": ab + len(roh) >= gesamt}
 
 
+HTML_DIR = "/config/mail_html"
+
+
+def html_aus(msg):
+    """HTML-Teil der Mail; eingebettete Bilder (cid:) werden als data:-Bilder eingesetzt, Skripte entfernt.
+    Reine Text-Mails werden als <pre> geliefert. Angezeigt wird es auf der Seite in einem abgeschotteten Rahmen (sandbox)."""
+    import html as h
+    teil = msg.get_body(preferencelist=("html",))
+    if not teil:
+        return "<pre style=\"white-space:pre-wrap;font:15px/1.5 -apple-system,Arial,sans-serif\">" + h.escape(text_aus(msg)) + "</pre>"
+    t = teil.get_content()
+    t = re.sub(r"<script\b.*?</script>", "", t, flags=re.S | re.I)
+    bilder, summe = {}, 0
+    for x in msg.walk():
+        cid = (x.get("Content-ID") or "").strip("<> ")
+        if cid and x.get_content_maintype() == "image":
+            daten = x.get_payload(decode=True) or b""
+            if len(daten) < 400_000 and summe + len(daten) < 1_500_000:
+                summe += len(daten)
+                bilder[cid] = f"data:{x.get_content_type()};base64," + base64.b64encode(daten).decode("ascii")
+    t = re.sub(r"cid:([^\"'\s>)]+)", lambda m: bilder.get(m.group(1), "about:blank"), t)
+    return '<base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1">' \
+           '<style>body{margin:12px;font-family:-apple-system,Arial,sans-serif;word-wrap:break-word}img{max-width:100%;height:auto}</style>' + t
+
+
+def mail_roh(i, auftrag):
+    """Die ganze Mail noch einmal aus dem Postfach holen (nur lesen) – für die Anzeige mit Signatur und Bildern."""
+    kd = laden(KONTAKT_DATEI, {})
+    if i[:2] in ("ke", "ka") and (i in kd.get("ein", {}) or i in kd.get("aus", {})):
+        konto, ordner_art, uid, mid = "kontakt", ("ein" if i.startswith("ke") else "aus"), i[2:], None
+    else:
+        e = laden(EINGANG, {}).get(i)
+        ordner_art = "ein" if e else "aus"
+        e = e or next((x for x in laden(VERLAUF, []) if x.get("id") == i), None)
+        if not e:
+            return None
+        konto, uid, mid = konto_von(e.get("konto")), None, e.get("message_id")
+        if not mid:
+            return None
+    k = KONTEN[konto]
+    pw = auftrag.get(k["pw"]) or ""
+    if len(pw) < 4:
+        return None
+    with imaplib.IMAP4_SSL(*IMAP, timeout=60) as im:
+        im.login(k["adresse"], pw)
+        ordner = "INBOX" if ordner_art == "ein" else (ordner_finden(im, "sent") or "Sent")
+        im.select(f'"{ordner}"', readonly=True)
+        if not uid:
+            _, u = im.uid("search", None, "HEADER", "Message-ID", f'"{mid}"')
+            uid = (u[0].split() or [b""])[-1].decode() if u and u[0] else ""
+            if not uid:
+                return None
+        _, roh = im.uid("fetch", uid, "(BODY.PEEK[])")
+        teile = [x for x in roh if isinstance(x, tuple)]
+        return email.message_from_bytes(teile[0][1], policy=email.policy.default) if teile else None
+
+
+def mail_html(auftrag):
+    i, ab = auftrag.get("id") or "", max(0, int(auftrag.get("ab") or 0))
+    if not re.match(r"^[\w-]+$", i):
+        return {"ok": False, "fehler": "ungültig"}
+    os.makedirs(HTML_DIR, exist_ok=True)
+    pfad = os.path.join(HTML_DIR, i + ".html")
+    if not os.path.exists(pfad):
+        msg = mail_roh(i, auftrag)
+        if msg is None:
+            return {"ok": False, "fehler": "nicht im Postfach gefunden"}
+        with open(pfad, "w", encoding="utf-8") as f:
+            f.write(html_aus(msg))
+    t = open(pfad, encoding="utf-8").read()
+    return {"ok": True, "html": t[ab:ab + 150_000], "ende": ab + 150_000 >= len(t)}
+
+
 def endgueltig_loeschen(e, pw):
     """Mail bei Strato in den Papierkorb-Ordner verschieben (dort kann man sie im Webmail noch eine Weile zurückholen)."""
     k = KONTEN[konto_von(e.get("konto"))]
@@ -519,6 +592,8 @@ def seite(auftrag):
         return r
     if was == "anhang":
         return anhang(auftrag)
+    if was == "html":
+        return mail_html(auftrag)
     if was == "anhang_telegram":   # Anhang an den eigenen Telegram-Chat (öffnet am Handy jede Art Datei)
         r = anhang(dict(auftrag, _nur_pfad=True))
         if not r.get("ok"):

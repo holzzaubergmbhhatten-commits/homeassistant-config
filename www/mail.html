@@ -167,7 +167,7 @@ function karte(e) {
       <div class="${textCls}" data-auf="${e.id}">${esc(e.text)}</div>
       ${(e.anhaenge || []).length ? `<div class="aktionen">${e.anhaenge.map((a, nr) => `<button class="knopf" data-anh="${e.id}" data-nr="${nr}">📎 ${esc(a)}</button>`).join("")}</div>` : ""}
       ${offen["an_" + e.id] ? feld("antworten", "Was soll ich antworten? In eigenen Worten, z. B. „Danke, Freitag passt“") :
-      `<div class="aktionen"><button class="knopf" data-auf="${e.id}">${auf ? "Weniger" : "Ganz lesen"}</button>
+      `<div class="aktionen"><button class="knopf" data-lesen="${e.id}">📖 Ganz lesen</button>
         <button class="knopf gruen" data-auf="an_${e.id}">↩ Antworten</button>
         <button class="knopf rot" data-tun="loeschen" data-id="${e.id}">🗑 Löschen</button></div>`}</div>`;
   }
@@ -176,14 +176,14 @@ function karte(e) {
     return `<div class="eintrag"><div class="zeile"><b>${esc(e.betreff)}</b><span class="wer">${zeit(e.zeit, e.datum)}</span></div>
       <div class="wer">${marke(e)}${ein ? "Von: " + esc(e.von) : "An: " + esc(e.an)} · aus ${ein ? "Posteingang" : "Gesendet"}</div>
       <div class="${textCls}" data-auf="${e.id}">${esc(e.text)}</div>
-      <div class="aktionen"><button class="knopf" data-auf="${e.id}">${auf ? "Weniger" : "Ganz lesen"}</button>
+      <div class="aktionen"><button class="knopf" data-lesen="${e.id}">📖 Ganz lesen</button>
         <button class="knopf gruen" data-tun="wiederherstellen" data-id="${e.id}">↩ Wiederherstellen</button>
         <button class="knopf rot" data-tun="endgueltig" data-id="${e.id}">✖ Endgültig löschen</button></div></div>`;
   }
   return `<div class="eintrag"><div class="zeile"><b>${esc(e.betreff)}</b><span class="wer">${zeit(e.zeit)}</span></div>
     <div class="wer">${marke(e)}An: ${esc(e.an)}${e.von && e.konto !== "kontakt" ? " · von " + esc(e.von) : ""}</div>
     <div class="${textCls}" data-auf="${e.id}">${esc(e.text)}</div>
-    <div class="aktionen"><button class="knopf" data-auf="${e.id}">${auf ? "Weniger" : "Ganz lesen"}</button>
+    <div class="aktionen"><button class="knopf" data-lesen="${e.id}">📖 Ganz lesen</button>
       <button class="knopf rot" data-tun="loeschen" data-id="${e.id}">🗑 Löschen</button></div></div>`;
 }
 function neuFormular(an) {
@@ -204,6 +204,30 @@ document.addEventListener("click", async ev => {
     b.textContent = "…"; const r = await aktion({ was: "kontakt_jetzt" }).catch(() => null); b.textContent = "↻";
     if (r && r.ok) { daten = r; zeichnen(); } else neuLaden();
     return;
+  }
+  if (b.dataset.lesen) {
+    const id = b.dataset.lesen, e = [...daten.eingang, ...daten.gesendet, ...(daten.papierkorb || [])].find(x => x.id === id) || {};
+    const alt = b.textContent; b.textContent = "⏳ lade …"; b.disabled = true;
+    try {
+      let html = "", ab = 0, ende = false;
+      while (!ende) {
+        const a = await aktion({ was: "html", id, ab });
+        if (!a.ok) throw new Error(a.fehler || "ging nicht");
+        html += a.html; ab += 150000; ende = a.ende || !a.html;
+      }
+      anhangAktuell = null;
+      document.getElementById("anzeigeName").textContent = e.betreff || "Mail";
+      document.getElementById("anzeigeTelegram").style.display = "none";
+      document.getElementById("anzeigeLaden").style.display = "none";
+      const inh = document.getElementById("anzeigeInhalt"); inh.classList.remove("seiten"); inh.innerHTML = "";
+      const f = document.createElement("iframe");
+      f.setAttribute("sandbox", "allow-popups allow-popups-to-escape-sandbox");   // keine Skripte aus fremden Mails
+      f.srcdoc = html; inh.appendChild(f);
+      document.getElementById("anzeige").classList.add("offen");
+    } catch (err) {   // z. B. Mail nicht mehr im Postfach → Text aufklappen
+      offen[id] = true; zeichnen(); melden("Original nicht abrufbar (" + (err.message || err) + ") – Text wird gezeigt.", true);
+    }
+    b.textContent = alt; b.disabled = false; return;
   }
   if (b.id === "anzeigeTelegram" && anhangAktuell) {
     b.textContent = "⏳ …"; const r = await aktion({ was: "anhang_telegram", id: anhangAktuell.id, nr: anhangAktuell.nr }).catch(e => ({ ok: false, fehler: e.message }));
@@ -226,6 +250,7 @@ document.addEventListener("click", async ev => {
       const l = document.getElementById("anzeigeLaden"); l.href = url; l.download = info.name;
       const inh = document.getElementById("anzeigeInhalt"); inh.classList.remove("seiten"); inh.innerHTML = "";
       anhangAktuell = { id: b.dataset.anh, nr: +b.dataset.nr };
+      document.getElementById("anzeigeTelegram").style.display = ""; document.getElementById("anzeigeLaden").style.display = "";
       document.getElementById("anzeige").classList.add("offen");
       const blob = new Blob(teile, { type: info.typ }), endung = (info.name.split(".").pop() || "").toLowerCase();
       if (info.typ === "application/pdf" || endung === "pdf") {
