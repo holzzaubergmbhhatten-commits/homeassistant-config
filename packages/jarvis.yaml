@@ -802,9 +802,12 @@ script:
           items: "{{ inhalt[liste]['items'] if inhalt is defined and liste in inhalt else [] }}"
           such: "{{ aufgabe | lower | trim }}"
           treffer: >-
-            {%- set genau = items | selectattr('summary', 'match', '(?i)^\\W*' ~ (such | regex_escape) ~ '\\W*$') | list -%}
-            {%- set ns = namespace(l=genau) -%}
-            {%- if not genau -%}
+            {%- set kern = such | regex_replace('\\W+', '') -%}
+            {%- set ns = namespace(l=[]) -%}
+            {%- for x in items if (x.summary | lower | regex_replace('\\W+', '')) == kern -%}
+              {%- set ns.l = ns.l + [x] -%}
+            {%- endfor -%}
+            {%- if not ns.l -%}
               {%- for x in items -%}
                 {%- set name = x.summary | lower -%}
                 {%- if such in name or (such.split() | select('in', name) | list | count == such.split() | count) -%}
