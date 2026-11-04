@@ -431,12 +431,18 @@ def mail_html(auftrag):
         return {"ok": False, "fehler": "ungültig"}
     os.makedirs(HTML_DIR, exist_ok=True)
     pfad = os.path.join(HTML_DIR, i + ".html")
-    if not os.path.exists(pfad):
+    if not os.path.exists(pfad) or os.path.getsize(pfad) == 0:
         msg = mail_roh(i, auftrag)
         if msg is None:
             return {"ok": False, "fehler": "nicht im Postfach gefunden"}
+        try:
+            inhalt = html_aus(msg)
+        except Exception as fehler:  # noqa: BLE001
+            import traceback
+            akte.logbuch(f"Mail-Anzeige {i}: {traceback.format_exc()[-300:]}", "fehler")
+            return {"ok": False, "fehler": f"Anzeige: {str(fehler)[:120]}"}
         with open(pfad, "w", encoding="utf-8") as f:
-            f.write(html_aus(msg))
+            f.write(inhalt)
     t = open(pfad, encoding="utf-8").read()
     return {"ok": True, "html": t[ab:ab + 150_000], "ende": ab + 150_000 >= len(t)}
 
