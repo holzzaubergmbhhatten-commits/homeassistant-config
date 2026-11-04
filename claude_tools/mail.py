@@ -389,6 +389,24 @@ def html_aus(msg):
                 summe += len(daten)
                 bilder[cid] = f"data:{x.get_content_type()};base64," + base64.b64encode(daten).decode("ascii")
     t = re.sub(r"cid:([^\"'\s>)]+)", lambda m: bilder.get(m.group(1), "about:blank"), t)
+    # iPhone/Outlook-Antworten: <img src="blob:…" alt="image001.jpg"> – Bild hängt nur als Datei an → über den Namen zuordnen
+    namen = {}
+    for x in msg.walk():
+        if x.get_content_maintype() == "image" and x.get_filename():
+            daten = x.get_payload(decode=True) or b""
+            if len(daten) < 400_000 and summe + len(daten) < 1_500_000:
+                summe += len(daten)
+                namen[x.get_filename()] = f"data:{x.get_content_type()};base64," + base64.b64encode(daten).decode("ascii")
+
+    def bild_tausch(m):
+        tag = m.group(0)
+        if re.search(r'src="(?:https?:|data:)', tag, re.I):
+            return tag
+        alt = re.search(r'alt="([^"]+)"', tag)
+        if alt and alt.group(1) in namen:
+            return re.sub(r'src="[^"]*"', f'src="{namen[alt.group(1)]}"', tag)
+        return tag
+    t = re.sub(r"<img\b[^>]*>", bild_tausch, t, flags=re.I)
     return '<base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1">' \
            '<style>body{margin:12px;font-family:-apple-system,Arial,sans-serif;word-wrap:break-word}img{max-width:100%;height:auto}</style>' + t
 
