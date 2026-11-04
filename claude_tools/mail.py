@@ -410,6 +410,20 @@ def seite(auftrag):
         if r.get("fehler") == "kein_passwort":
             r["fehler"] = "Das Mail-Passwort fehlt (Helfer „Familien-Mail Passwort“ bzw. „Kontakt-Mail Passwort“)."
         return r
+    if was == "pruefen":   # nur anmelden (IMAP), nichts lesen, nichts senden
+        r = {}
+        for k, v in KONTEN.items():
+            pw = auftrag.get(v["pw"]) or ""
+            if len(pw) < 4:
+                r[k] = "kein Passwort"
+                continue
+            try:
+                with imaplib.IMAP4_SSL(*IMAP, timeout=30) as im:
+                    im.login(v["adresse"], pw)
+                r[k] = "ok"
+            except Exception as fehler:  # noqa: BLE001
+                r[k] = str(fehler)[:120]
+        return {"ok": all(x == "ok" for x in r.values()), "konten": r}
     if was == "kontakt_jetzt":   # Knopf ↻ auf der Seite: kontakt@ sofort neu lesen
         if len(auftrag.get("passwort_kontakt") or "") < 4:
             return {"ok": False, "fehler": "Das Kontakt-Mail Passwort fehlt noch (Helfer „Kontakt-Mail Passwort“)."}
