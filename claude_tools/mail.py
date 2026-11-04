@@ -286,6 +286,41 @@ def bezug_laden(i):
     return laden(KONTAKT_DATEI, {}).get("ein", {}).get(i)
 
 
+def ordner_finden(im, art):
+    """Name des Ordners „Gesendet“ (art=sent) bzw. „Papierkorb“ (art=trash) im Postfach."""
+    muster = {"sent": (r"\\Sent", r"gesendet|sent"), "trash": (r"\\Trash", r"papierkorb|trash|gelöscht|deleted")}[art]
+    for z in im.list()[1] or []:
+        z = z.decode(errors="replace")
+        name = z.rsplit(' "/" ', 1)[-1].rsplit(' "." ', 1)[-1].strip().strip('"')
+        if re.search(muster[0], z) or re.search(muster[1], name, re.I):
+            return name
+    return None
+
+
+def endgueltig_loeschen(e, pw):
+    """Mail bei Strato in den Papierkorb-Ordner verschieben (dort kann man sie im Webmail noch eine Weile zurückholen)."""
+    k = KONTEN[konto_von(e.get("konto"))]
+    mid = (e.get("message_id") or "").strip()
+    if not mid:
+        return "keine Kennung"
+    with imaplib.IMAP4_SSL(*IMAP, timeout=60) as im:
+        im.login(k["adresse"], pw)
+        papierkorb = ordner_finden(im, "trash")
+        ordner = ["INBOX"] if e.get("ordner") == "eingang" else [ordner_finden(im, "sent") or "Sent"]
+        for o in ordner:
+            if im.select(f'"{o}"')[0] != "OK":
+                continue
+            _, uids = im.uid("search", None, "HEADER", "Message-ID", f'"{mid}"')
+            for uid in (uids[0].split() if uids and uids[0] else []):
+                if papierkorb and o != papierkorb:
+                    im.uid("copy", uid, f'"{papierkorb}"')
+                im.uid("store", uid, "+FLAGS", "(\\Deleted)")
+            im.expunge()
+            if uids and uids[0]:
+                return "ok"
+    return "nicht mehr im Postfach"
+
+
 def kontakt_holen(pw):
     """kontakt@ nur lesen (EXAMINE + BODY.PEEK): Mails bleiben im Mailprogramm ungelesen. Neue werden zwischengespeichert."""
     k = KONTEN["kontakt"]
@@ -310,7 +345,7 @@ def kontakt_holen(pw):
             _, uids = im.uid("search", None, "ALL")
             for uid in (uids[0].split() if uids and uids[0] else [])[-60:]:
                 schluessel = f"k{art[0]}{uid.decode()}"
-                if schluessel in d[art]:
+                if schluessel in d[art] or schluessel in d.get("weg", []):
                     continue
                 _, roh = im.uid("fetch", uid, "(BODY.PEEK[])")
                 teile = [x for x in roh if isinstance(x, tuple)]
@@ -411,6 +446,32 @@ def seite(auftrag):
         if r.get("fehler") == "kein_passwort":
             r["fehler"] = "Das Mail-Passwort fehlt (Helfer „Familien-Mail Passwort“ bzw. „Kontakt-Mail Passwort“)."
         return r
+    if was == "endgueltig":
+        korb = {e["id"]: e for e in seite(dict(auftrag, was="liste")).get("papierkorb", [])}
+        e = korb.get(i)
+        if not e:
+            return {"ok": False, "fehler": "Nicht im Papierkorb"}
+        voll = (bezug_laden(i) or {}) if e.get("ordner") == "eingang" else {}
+        if not voll:
+            voll = next((x for x in laden(VERLAUF, []) if x.get("id") == i), None) or laden(KONTAKT_DATEI, {}).get("aus", {}).get(i) or {}
+        e = dict(voll, **{k: v for k, v in e.items() if v is not None}, message_id=voll.get("message_id"))
+        pw = auftrag.get(KONTEN[konto_von(e.get("konto"))]["pw"]) or ""
+        if len(pw) < 4:
+            return {"ok": False, "fehler": "Passwort für dieses Postfach fehlt"}
+        r = endgueltig_loeschen(e, pw)
+        if r not in ("ok", "nicht mehr im Postfach", "keine Kennung"):
+            return {"ok": False, "fehler": f"Bei Strato nicht gelöscht: {r}"}
+        # aus allen Zwischenspeichern entfernen
+        d = laden(EINGANG, {}); d.pop(i, None); speichern(EINGANG, d)
+        speichern(VERLAUF, [x for x in laden(VERLAUF, []) if x.get("id") != i])
+        kd = laden(KONTAKT_DATEI, {})
+        for art in ("ein", "aus"):
+            kd.get(art, {}).pop(i, None)
+        kd.setdefault("weg", []).append(i)
+        speichern(KONTAKT_DATEI, kd)
+        g = laden(GELOESCHT, {}); g.pop(i, None); speichern(GELOESCHT, g)
+        auftrag = dict(auftrag, was="liste")
+        was = "liste"
     if was in ("loeschen", "wiederherstellen"):
         g = laden(GELOESCHT, {})
         if was == "loeschen":

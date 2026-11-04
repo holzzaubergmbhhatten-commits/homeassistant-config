@@ -155,7 +155,8 @@ function karte(e) {
       <div class="wer">${marke(e)}${ein ? "Von: " + esc(e.von) : "An: " + esc(e.an)} · aus ${ein ? "Posteingang" : "Gesendet"}</div>
       <div class="${textCls}" data-auf="${e.id}">${esc(e.text)}</div>
       <div class="aktionen"><button class="knopf" data-auf="${e.id}">${auf ? "Weniger" : "Ganz lesen"}</button>
-        <button class="knopf gruen" data-tun="wiederherstellen" data-id="${e.id}">↩ Wiederherstellen</button></div></div>`;
+        <button class="knopf gruen" data-tun="wiederherstellen" data-id="${e.id}">↩ Wiederherstellen</button>
+        <button class="knopf rot" data-tun="endgueltig" data-id="${e.id}">✖ Endgültig löschen</button></div></div>`;
   }
   return `<div class="eintrag"><div class="zeile"><b>${esc(e.betreff)}</b><span class="wer">${zeit(e.zeit)}</span></div>
     <div class="wer">${marke(e)}An: ${esc(e.an)}${e.von && e.konto !== "kontakt" ? " · von " + esc(e.von) : ""}</div>
@@ -204,6 +205,11 @@ document.addEventListener("click", async ev => {
     if (!confirm(`Mail jetzt an ${e ? e.an : "?"} senden?`)) return;
   }
   if (tun === "verwerfen" && !confirm("Entwurf wirklich verwerfen?")) return;
+  if (tun === "endgueltig") {
+    const e = (daten.papierkorb || []).find(x => x.id === id) || {};
+    if (!confirm("Mail endgültig löschen? Sie wird auch bei Strato entfernt (liegt dort noch eine Weile im Papierkorb des Webmails)."
+      + (e.konto === "kontakt" ? "\n\nAchtung Ferienwohnung: Die Verwaltung der Webseite sieht diese Mail danach auch nicht mehr." : ""))) return;
+  }
   let text = "";
   if (tun === "aendern" || tun === "antworten") {
     text = (document.getElementById(`t_${tun}_${id}`) || {}).value || "";
@@ -215,6 +221,7 @@ document.addEventListener("click", async ev => {
   delete offen["ae_" + id]; delete offen["an_" + id]; delete eingabe[`${tun}_${id}`];
   if (tun === "senden") melden(`✅ Gesendet an ${r.an}`);
   if (tun === "verwerfen") melden("🗑 Entwurf verworfen");
+  if (tun === "endgueltig") { melden("✖ Endgültig gelöscht"); if (r.eingang) { daten = r; zeichnen(); return; } }
   if (tun === "loeschen" || tun === "wiederherstellen") {
     melden(tun === "loeschen" ? "🗑 In den Papierkorb gelegt (im Postfach bei Strato bleibt sie)" : "↩ Wiederhergestellt");
     if (r.eingang) { daten = r; zeichnen(); return; }
