@@ -2,7 +2,8 @@
 # Jeder offene Eintrag ist ein Knopf unter der Nachricht: antippen = erledigt, die Nachricht aktualisiert sich sofort.
 # Der zuletzt abgehakte Eintrag bekommt einen Knopf „↩ zurück“ (aus Versehen abgehakt).
 # Auslöser: „Liste“ / „Aufgaben“ im Chat (packages/telegram.yaml ruft dieses Skript auf) und feste Zeiten (unten).
-# Knopf-Kennung: /hk_<e|a>_<uid> = abhaken, /hz_<e|a>_<uid> = zurück, /hn_<e|a> = neu laden.
+# Liste „marco“ (todo.marco) = Marcos eigene To-dos, geht nur an seinen Chat.
+# Knopf-Kennung: /hk_<e|a|m>_<uid> = abhaken, /hz_<e|a>_<uid> = zurück, /hn_<e|a> = neu laden.
 
 script:
   liste_abhaken_senden:
@@ -21,8 +22,8 @@ script:
         description: Name des zuletzt abgehakten Eintrags
     sequence:
       - variables:
-          l: "{{ 'a' if liste | default('einkauf') == 'aufgaben' else 'e' }}"
-          entity: "{{ 'todo.aufgaben' if l == 'a' else 'todo.einkaufsliste' }}"
+          l: "{{ {'aufgaben': 'a', 'marco': 'm'}.get(liste | default('einkauf'), 'e') }}"
+          entity: "{{ {'a': 'todo.aufgaben', 'm': 'todo.marco'}.get(l, 'todo.einkaufsliste') }}"
       - action: todo.get_items
         continue_on_error: true
         target:
@@ -34,7 +35,7 @@ script:
           eintraege: "{{ (roh[entity]['items'] if roh is defined and entity in roh else []) }}"
           kopf: >-
             {% set n = eintraege | count %}
-            {% if l == 'a' %}✅ <b>Aufgaben</b>{% else %}🛒 <b>Einkaufsliste</b>{% endif %}
+            {% if l == 'a' %}✅ <b>Aufgaben</b>{% elif l == 'm' %}📋 <b>Marcos To-dos</b>{% else %}🛒 <b>Einkaufsliste</b>{% endif %}
             {%- if n == 0 %} – alles erledigt 🎉{% else %} – {{ n }} offen. Zum Abhaken antippen:{% endif %}
             {%- if eintraege | count > 40 %}{{ '\n' }}(die ersten 40 sind als Knopf da){% endif %}
           knoepfe: >-
@@ -94,14 +95,14 @@ automation:
         event_type: telegram_callback
     conditions:
       - condition: template
-        value_template: "{{ (trigger.event.data.data | default('')) is match('^/h[kzn]_[ea]') }}"
+        value_template: "{{ (trigger.event.data.data | default('')) is match('^/h[kzn]_[eam]') }}"
     actions:
       - variables:
           cmd: "{{ trigger.event.data.data }}"
           art: "{{ cmd[2] }}"
           l: "{{ cmd[4] }}"
           uid: "{{ cmd[6:] }}"
-          entity: "{{ 'todo.aufgaben' if l == 'a' else 'todo.einkaufsliste' }}"
+          entity: "{{ {'a': 'todo.aufgaben', 'm': 'todo.marco'}.get(l, 'todo.einkaufsliste') }}"
       # Namen des Eintrags für die Rückmeldung
       - action: todo.get_items
         continue_on_error: true
@@ -141,7 +142,7 @@ automation:
                else 'Aktualisiert' if art == 'n' else 'Schon erledigt' }}
       - action: script.liste_abhaken_senden
         data:
-          liste: "{{ 'aufgaben' if l == 'a' else 'einkauf' }}"
+          liste: "{{ {'a': 'aufgaben', 'm': 'marco'}.get(l, 'einkauf') }}"
           chat: "{{ trigger.event.data.chat_id }}"
           message_id: "{{ trigger.event.data.message.message_id }}"
           zurueck_uid: "{{ uid if art == 'k' and name else '' }}"
