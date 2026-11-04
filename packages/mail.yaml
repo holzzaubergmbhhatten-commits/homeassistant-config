@@ -14,6 +14,12 @@ input_text:
     mode: password
     max: 255
     icon: mdi:email-lock
+  # Postfach der Ferienwohnung/Webseite – nur zum Anzeigen auf der Mail-Seite und für Antworten mit „Senden“-Knopf
+  kontakt_mail_passwort:
+    name: Kontakt-Mail Passwort (Ferienwohnung)
+    mode: password
+    max: 255
+    icon: mdi:email-lock-outline
 
 shell_command:
   mail: python3 /config/claude_tools/mail.py {{ wert }}
