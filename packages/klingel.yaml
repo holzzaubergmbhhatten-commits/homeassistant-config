@@ -11,6 +11,8 @@
 # dann camera.snapshot; gibt es gar kein neues Foto, kommt die Nachricht ohne Bild.
 # mode single: Die Klingel meldet ein Klingeln oft über mehrere Entitäten → nur EINE Nachricht pro Klingeln.
 shell_command:
+  # Gong-Ton aus dem Repository in den Medien-Ordner (dort finden ihn die HomePods über Music Assistant)
+  klingel_gong_bereit: cp -u /config/claude_tools/klingel_gong.mp3 /media/klingel_gong.mp3
   klingel_foto_loeschen: rm -f /media/klingel.jpg
   klingel_foto_pruefen: sh -c 'test -s /media/klingel.jpg && echo ok || echo fehlt'
 
@@ -53,6 +55,14 @@ automation:
           chats: >-
             {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
           uhrzeit: "{{ now().strftime('%H:%M') }}"
+      # Gong + Ansage auf allen HomePods/Lautsprechern – läuft nebenher, damit Monitor und Telegram nicht warten
+      - action: script.turn_on
+        continue_on_error: true
+        target:
+          entity_id: script.klingel_gong
+        data:
+          variables:
+            ort: "{{ ort }}"
       # Bildschirm wecken (nachts bleibt die 1-Minuten-Abschaltung, aber erst nach 3 Minuten)
       - action: script.monitor_an
         continue_on_error: true
@@ -125,3 +135,40 @@ automation:
         continue_on_error: true
         data:
           timeout: "{{ 60 if is_state('binary_sensor.monitor_nachtmodus', 'on') else 0 }}"
+
+input_boolean:
+  # Einschalten = Gong auf den HomePods aus (z. B. wenn das Baby schläft). Telegram und Monitor laufen weiter.
+  klingel_gong_pause:
+    name: Klingel-Gong auf den HomePods pausieren
+    icon: mdi:bell-sleep
+
+script:
+  klingel_gong:
+    alias: "Klingel: Gong und Ansage auf allen Lautsprechern"
+    mode: single
+    max_exceeded: silent
+    fields:
+      ort:
+        description: z. B. „am Hoftor“ oder „an der Haustür“
+    sequence:
+      - condition: state
+        entity_id: input_boolean.klingel_gong_pause
+        state: "off"
+      - variables:
+          ziel: "{{ integration_entities('music_assistant') | select('match', 'media_player\\.') | reject('is_state', 'unavailable') | list }}"
+      - action: shell_command.klingel_gong_bereit
+        continue_on_error: true
+      - action: media_player.play_media
+        continue_on_error: true
+        target:
+          entity_id: "{{ ziel }}"
+        data:
+          media_content_id: media-source://media_source/local/klingel_gong.mp3
+          media_content_type: music
+          announce: true
+      - delay: "00:00:04"
+      - action: script.jarvis_durchsage
+        continue_on_error: true
+        data:
+          text: "Es klingelt {{ ort | default('an der Tür', true) }}."
+          lautstaerke: 50
