@@ -114,8 +114,14 @@ function zeichnen() {
   const passt = e => !q || JSON.stringify(e).toLowerCase().includes(q);
   const liste = (daten[reiter] || []).filter(imFach).filter(passt);
   const el = document.getElementById("liste");
-  if (!liste.length) { el.innerHTML = `<div class="leer">${q ? "Nichts gefunden." : reiter === "entwuerfe" ? "Keine offenen Entwürfe." : reiter === "papierkorb" ? "Papierkorb ist leer." : "Noch keine Mails."}</div>`; return; }
-  el.innerHTML = liste.map(e => karte(e)).join("");
+  if (!liste.length && reiter !== "papierkorb") { el.innerHTML = `<div class="leer">${q ? "Nichts gefunden." : reiter === "entwuerfe" ? "Keine offenen Entwürfe." : reiter === "papierkorb" ? "Papierkorb ist leer." : "Noch keine Mails."}</div>`; return; }
+  if (reiter === "papierkorb") {   // zwei getrennte Papierkörbe: Familie und Ferienwohnung
+    el.innerHTML = [["familie", "👪 Papierkorb Familie (familie@)"], ["kontakt", "🏡 Papierkorb Ferienwohnung (kontakt@)"]]
+      .filter(([k]) => postfach === "alle" || postfach === k)
+      .map(([k, t]) => { const l = liste.filter(e => (e.konto || "familie") === k);
+        return `<h3 style="margin:10px 2px 2px;font-size:16px">${t} · ${l.length}</h3>` + (l.length ? l.map(e => karte(e)).join("") : `<div class="leer" style="padding:6px 4px">leer</div>`); })
+      .join("");
+  } else el.innerHTML = liste.map(e => karte(e)).join("");
   for (const [k, v] of Object.entries(eingabe)) { const t = document.getElementById("t_" + k); if (t) t.value = v; }
 }
 function karte(e) {
