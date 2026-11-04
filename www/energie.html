@@ -62,6 +62,9 @@
   .hinweis { background: #FFF4E5; color: #8A5300; border-radius: 12px; padding: 9px 12px; font-size: 13.5px; margin: 8px 0; line-height: 1.4; }
   .dunkel .hinweis { background: rgba(255,159,10,.16); color: #FFD08A; }
   table.werte { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.kosten td { text-align: right; white-space: nowrap; } table.kosten td:first-child { text-align: left; white-space: normal; }
+  table.kosten tr:first-child td { font-size: 12px; color: var(--grau); }
+  .kostenleiste { margin: 0 0 12px; padding: 10px 14px; border-radius: 14px; background: var(--karte, rgba(255,255,255,.6)); font-size: 15px; cursor: pointer; }
   table.werte td { padding: 6px 2px; border-bottom: 1px solid var(--linie); }
   table.werte.raum td { text-align: left; font-weight: 400; } table.werte.raum td:nth-child(2), table.werte.raum td:nth-child(3) { text-align: right; font-weight: 600; }
   table.werte td:last-child { text-align: right; font-weight: 600; white-space: nowrap; }
@@ -233,6 +236,9 @@ async function finden() {
     const name = (GERAETE[g.device] || st(g.leistung).attributes.friendly_name || "Gerät").replace(/\s*(steckdose|plug|shelly)\s*/ig, " ").trim();
     return Object.assign(g, { name, typ: typenschild(name) });
   }).sort((a, b) => a.name.localeCompare(b.name, "de"));
+  // Eigener Stromzähler für die Wärmepumpe (z. B. Shelly Pro 3EM, Gerät in der Shelly-App „Wärmepumpe“ nennen):
+  // dann rechnet die Seite mit gemessenen Werten statt mit der Schätzung
+  if (!E.wpTag) { const wpz = GER.find(g => g.zaehler && /w(ä|ae)rme\s*pumpe/i.test(g.name)); if (wpz) { E.wpTag = wpz.zaehler; E.wpGemessen = true; } }
   // Warmwasser: es gibt mehrere Speicherfühler (oben/unten) – den wärmsten nehmen, so zeigt es auch die ViCare-App
   const ww = REG.filter(e => /dhw_storage|hotwater_out|dhw.*temperature/.test((e.translation_key || "") + " " + (e.unique_id || ""))
     && !/target|soll|hysteresis|min|max/i.test((e.translation_key || "") + (e.unique_id || "")) && zahl(e.entity_id) != null);
@@ -815,6 +821,65 @@ function importKarte() {
 }
 document.addEventListener("change", ev => { if (ev.target && ev.target.id === "csvdatei" && ev.target.files[0]) importDatei(ev.target.files[0]); });
 
+/* ---------- Energiekosten auf einen Blick (feste Zeiträume, unabhängig vom Blättern) ---------- */
+let KOSTEN = null;
+async function ladeKosten() {
+  if (!E.bezug) return;
+  const jetzt = new Date(), heute = new Date(jetzt); heute.setHours(0, 0, 0, 0);
+  const wo = new Date(heute); wo.setDate(wo.getDate() - (wo.getDay() + 6) % 7);
+  const woVor = new Date(wo); woVor.setDate(woVor.getDate() - 7);
+  const mo = new Date(heute.getFullYear(), heute.getMonth(), 1), moVor = new Date(heute.getFullYear(), heute.getMonth() - 1, 1);
+  const ab = new Date(Math.min(+moVor, ERSTER ? +ERSTER : +moVor, ERSTER_W ? +ERSTER_W : +moVor));
+  const ids = [E.bezug, E.einsp, E.wpTag, EW.gesamt].filter(Boolean);
+  try {
+    const r = await stats(ab, jetzt, "day", ids, ["change"]);
+    const tage = {};   // Tag (Zeitstempel) → Werte
+    const merke = (id, k, max) => ((id && r[id]) || []).forEach(x => { const v = Math.max(0, x.change || 0); if (max && v > max) return;
+      const t = zeit(x.start); (tage[t] = tage[t] || {})[k] = (tage[t][k] || 0) + v; });
+    merke(E.bezug, "bezug"); merke(E.einsp, "einsp"); merke(E.wpTag, "wp");
+    merke(EW.gesamt, "wasser", 10000);   // Sprung vom Zählerstand beim Einrichten (kein echter Verbrauch) weglassen
+    const stromAb = Math.min(...Object.keys(tage).filter(t => tage[t].bezug != null).map(Number)),
+      wasserAb = Math.min(...Object.keys(tage).filter(t => tage[t].wasser != null).map(Number));
+    const fenster = (name, von, bis) => {
+      const z = { name, von, bis, bezug: 0, einsp: 0, wp: 0, wasser: 0 };
+      Object.entries(tage).forEach(([t, w]) => { if (+t >= +von && +t < +bis) ["bezug", "einsp", "wp", "wasser"].forEach(k => { z[k] += w[k] || 0; }); });
+      const tg = a => Math.max(0, (Math.min(+bis, Date.now()) - Math.max(+von, isFinite(a) ? a : +von)) / 864e5);
+      z.tageStrom = tg(stromAb); z.tageWasser = isFinite(wasserAb) ? tg(wasserAb) : 0;
+      z.teilweise = isFinite(stromAb) && stromAb > +von;
+      return z;
+    };
+    const morgen = new Date(heute); morgen.setDate(morgen.getDate() + 1);
+    KOSTEN = { liste: [fenster("Diese Woche", wo, morgen), fenster("Letzte Woche", woVor, wo), fenster("Dieser Monat", mo, morgen),
+      fenster("Letzter Monat", moVor, mo), fenster("Seit Aufzeichnung", new Date(isFinite(stromAb) ? stromAb : +ab), morgen)],
+      seit: isFinite(stromAb) ? new Date(stromAb) : null };
+  } catch (e) { KOSTEN = { fehler: String(e.message || e) }; }
+}
+function kostenRechnen(z) {
+  const P = preise();
+  const strom = z.bezug * P.strom, grund = z.tageStrom * P.grund / 365, verg = z.einsp * P.einsp;
+  const wasser = z.wasser / 1000 * P.wasser + z.tageWasser * P.wasserGrund * 12 / 365;
+  return { strom, grund, verg, wasser, wp: z.wp * P.strom, summe: strom + grund + wasser - verg };
+}
+function kostenBlick() {
+  if (!KOSTEN) return `<div class="karte"><h2>💶 Energiekosten auf einen Blick</h2><div class="klein">Lade …</div></div>`;
+  if (KOSTEN.fehler) return `<div class="karte"><h2>💶 Energiekosten auf einen Blick</h2><div class="hinweis">${esc(KOSTEN.fehler)}</div></div>`;
+  const wp = !!E.wpTag, kopf = `<tr><td></td><td>Strom gekauft</td><td>Grundpreis</td><td>Einspeisung</td><td>Wasser</td>${wp ? "<td>davon Wärmepumpe</td>" : ""}<td><b>Zusammen</b></td></tr>`;
+  const zeilen = KOSTEN.liste.map(z => { const k = kostenRechnen(z);
+    return `<tr><td><b>${esc(z.name)}</b>${z.teilweise ? " *" : ""}<div class="klein">${fmt(z.bezug, 0)} kWh · ${fmt(z.einsp, 0)} kWh eingespeist · ${fmt(z.wasser / 1000, 2)} m³</div></td>
+      <td>${euroT(k.strom)}</td><td>${euroT(k.grund)}</td><td style="color:var(--pv)">− ${euroT(k.verg)}</td><td>${euroT(k.wasser)}</td>
+      ${wp ? `<td>${euroT(k.wp)}</td>` : ""}<td><b style="font-size:1.1em">${euroT(k.summe)}</b></td></tr>`; }).join("");
+  return `<div class="karte"><h2>💶 Energiekosten auf einen Blick</h2>
+    <div style="overflow-x:auto"><table class="werte kosten">${kopf}${zeilen}</table></div>
+    <div class="klein" style="margin-top:6px">Zusammen = Strom gekauft + Grundpreis + Wasser − Einspeisevergütung. Strom ${fmt(preise().strom * 100, 2)} ct/kWh,
+      Einspeisung ${fmt(preise().einsp * 100, 2)} ct/kWh, Wasser ${fmt(preise().wasser, 2)} €/m³ (aus der Akte).
+      ${KOSTEN.seit ? `* = Home Assistant zeichnet erst seit ${esc(KOSTEN.seit.toLocaleDateString("de-DE"))} auf, der Zeitraum ist nur teilweise erfasst.` : ""}</div></div>`;
+}
+function kostenLeiste() {      // kurze Zeile oben auf jeder Seite
+  if (!KOSTEN || !KOSTEN.liste) return "";
+  const z = KOSTEN.liste[2], k = kostenRechnen(z);
+  return `<div class="kostenleiste" data-reiter="uebersicht">💶 <b>${esc(MONATE_LANG[new Date().getMonth()])} bisher:</b> Strom ${euroT(k.strom + k.grund)} · Wasser ${euroT(k.wasser)}
+    · Einspeisung <span style="color:var(--pv)">− ${euroT(k.verg)}</span> → <b>${euroT(k.summe)}</b></div>`;
+}
 function uebersicht() {
   const b = bereich();
   let unten = `<div class="leer">Lade Verlauf …</div>`;
@@ -842,7 +907,7 @@ function uebersicht() {
         ${vz.ww != null ? kachel(kwhT(vz.ww), "davon Warmwasser") : ""}</div>` : ""}`;
   }
   const stand = zahl(E.akkuStand), pvT = kwh(E.pvTag), wpT = kwh(E.wpTag);
-  return `<div class="zwei">
+  return `${kostenBlick()}<div class="zwei">
       <div class="karte fluss"><h2>${ic("pv")} Energiefluss jetzt</h2><div id="fluss">${fluss()}</div>
         <div class="klein">Viessmann meldet alle paar Minuten neue Werte.</div></div>
       <div class="karte"><h2>${ic("haus")} Heute auf einen Blick</h2><div class="kacheln" id="heute">
@@ -875,7 +940,7 @@ function kostenStrom(s, b) {
 let WOCHE7 = null, GRUNDLAST = 8;
 try { GRUNDLAST = parseFloat(localStorage.getItem("grundlast")) || 8; } catch (e) { /* egal */ }
 async function ladeWoche7() {
-  const ids = { pv: E.pvGesamt || E.pvTag, bezug: E.bezug, einsp: E.einsp, laden: E.laden, entladen: E.entladen };
+  const ids = { pv: E.pvGesamt || E.pvTag, bezug: E.bezug, einsp: E.einsp, laden: E.laden, entladen: E.entladen, wp: E.wpTag };
   if (!ids.bezug) return;
   const bis = new Date(); bis.setHours(0, 0, 0, 0); const von = new Date(bis); von.setDate(von.getDate() - 7);
   try {
@@ -883,7 +948,7 @@ async function ladeWoche7() {
     const summe = id => ((id && r[id]) || []).reduce((x, y) => x + Math.max(0, y.change || 0), 0);
     const tage = ((r[ids.bezug] || []).length) || 0;
     const v = summe(ids.pv) + summe(ids.bezug) + summe(ids.entladen) - summe(ids.einsp) - summe(ids.laden);
-    WOCHE7 = tage ? { tag: Math.max(0, v) / tage, tage } : null;
+    WOCHE7 = tage ? { tag: Math.max(0, v) / tage, tage, wp: ids.wp ? summe(ids.wp) / tage : null } : null;
   } catch (e) { WOCHE7 = null; }
 }
 function einGradMehr() {
@@ -891,6 +956,7 @@ function einGradMehr() {
   // Heizstrom ≈ Hausverbrauch der letzten 7 Tage minus Grundverbrauch (Licht, Kochen, Geräte …), den man selbst einstellen kann.
   const P = preise(), heiz7 = kwh(E.heizen7);
   let basis = heiz7 != null && heiz7 > 0 ? heiz7 / 7 : null, herkunft = "laut Viessmann";
+  if (basis == null && WOCHE7 && WOCHE7.wp > 0) { basis = WOCHE7.wp; herkunft = "gemessen"; }
   if (basis == null && WOCHE7) { basis = Math.max(0, WOCHE7.tag - GRUNDLAST); herkunft = "geschätzt"; }
   if (basis == null) return `<div class="karte"><h2>🌡️ Was kostet 1 Grad mehr?</h2><div class="klein">Lade Verbrauch der letzten Tage …</div></div>`;
   const zeile = g => { const kwhTag = basis * 0.06 * g; return `<tr><td>+${g} °C</td><td>≈ ${fmt(kwhTag, 1)} kWh/Tag</td><td><b>≈ ${euroT(kwhTag * P.strom)}</b> am Tag</td><td><b>≈ ${euroT(kwhTag * 30 * P.strom)}</b> im Monat</td></tr>`; };
@@ -899,10 +965,11 @@ function einGradMehr() {
     <div class="klein">${herkunft === "geschätzt"
       ? `Das Haus hat in den letzten ${WOCHE7.tage} Tagen im Schnitt <b>${fmt(WOCHE7.tag, 1)} kWh am Tag</b> verbraucht. Ohne den Grundverbrauch von ${feld} kWh/Tag
          (Licht, Kochen, Kühlschrank …) bleiben für die Wärmepumpe ca. <b>${fmt(basis, 1)} kWh am Tag</b> (≈ ${euroT(basis * P.strom)}).`
+      : herkunft === "gemessen" ? `Die Wärmepumpe hat in den letzten ${WOCHE7.tage} Tagen <b>gemessen ${fmt(basis, 1)} kWh am Tag</b> gebraucht (≈ ${euroT(basis * P.strom)} am Tag, Heizen und Warmwasser zusammen).`
       : `Die Wärmepumpe hat in den letzten 7 Tagen <b>${kwhT(heiz7)}</b> Strom fürs Heizen gebraucht (≈ ${fmt(basis, 1)} kWh am Tag ≈ ${euroT(basis * P.strom)}).`}
       Faustregel: Jedes Grad mehr im Haus braucht etwa <b>6 % mehr</b> Heizenergie.</div>
     <table class="werte" style="margin-top:8px">${[1, 2, 3].map(zeile).join("")}</table>
-    <div class="klein" style="margin-top:6px">Grobe Schätzung zum vollen Netzpreis (${fmt(P.strom * 100, 2)} ct/kWh) – mit Sonnenstrom ist es weniger.
+    <div class="klein" style="margin-top:6px">${herkunft === "geschätzt" ? "Grobe Schätzung – genau wird es mit einem eigenen Stromzähler für die Wärmepumpe. " : ""}Gerechnet zum vollen Netzpreis (${fmt(P.strom * 100, 2)} ct/kWh) – mit Sonnenstrom ist es weniger.
       Wird es draußen kälter, steigt der Heizverbrauch und damit auch der Aufpreis pro Grad. Am genauesten: ein paar Tage höher stellen und in „Energie“ die Wochen vergleichen.</div></div>`;
 }
 document.addEventListener("change", ev => {
@@ -1169,6 +1236,7 @@ function zeichnenInnen() {
   $("inhalt").innerHTML = `<div class="kopf"><h1>Klima &amp; Energie</h1>
     <div class="reiter">${[["raeume", "Räume"], ["uebersicht", "Energie"], ["geraete", "Geräte"], ["waermepumpe", "Wärmepumpe"], ["wasser", "Wasser"], ["alle", "Alle Werte"]].map(([k, n]) =>
       `<button data-reiter="${k}" class="${reiter === k ? "an" : ""}">${n}</button>`).join("")}</div></div>
+    ${kostenLeiste()}
     ${Object.keys(E).length || REG.length ? "" : `<div class="hinweis">Keine Viessmann-Werte gefunden. Ist die Viessmann-Integration eingerichtet?</div>`}
     ${inhalt}`;
 }
@@ -1205,6 +1273,8 @@ async function start() {
   await Promise.all([vorzeichen().catch(() => {}), ersterTag(), ersterWasser()]);
   ladeStat();
   ladeWoche7().then(zeichnen);
+  ladeKosten().then(zeichnen);
+  setInterval(() => ladeKosten(), 15 * 60e3);
   setInterval(() => { design(); live(); }, 5000);
   setInterval(() => { if (istJetzt(bereich())) ladeStat(); }, 5 * 60e3);
   setInterval(() => ladeWoche7(), 60 * 60e3);
