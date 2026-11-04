@@ -476,6 +476,70 @@ views:
       grid_options:
         columns: 4
         rows: 2
+    - type: heading
+      heading: Heizung & Kamin
+      icon: mdi:fireplace
+      grid_options:
+        columns: full
+    - type: tile
+      entity: input_boolean.kamin_modus
+      name: Kamin-Modus
+      icon: mdi:fireplace
+      color: deep-orange
+      tap_action:
+        action: toggle
+      grid_options:
+        columns: 6
+        rows: 1
+    - type: tile
+      entity: binary_sensor.kamin_heizt
+      name: Kamin heizt
+      icon: mdi:fire
+      color: orange
+      grid_options:
+        columns: 6
+        rows: 1
+    - type: tile
+      entity: input_boolean.pv_warmwasser
+      name: Sonnen-Warmwasser
+      icon: mdi:solar-power-variant
+      color: amber
+      tap_action:
+        action: toggle
+      grid_options:
+        columns: 6
+        rows: 1
+    - type: tile
+      entity: input_boolean.kamin_waerme_abladen
+      name: Kamin-Wärme ins Haus
+      icon: mdi:heat-wave
+      color: red
+      tap_action:
+        action: toggle
+      grid_options:
+        columns: 6
+        rows: 1
+    - type: tile
+      entity: sensor.hwr_warmepumpe_puffertemperatur_oben
+      name: Puffer
+      icon: mdi:water-thermometer
+      grid_options:
+        columns: 6
+        rows: 1
+    - type: tile
+      entity: button.hwr_warmepumpe_einmalige_ladung_aktivieren
+      name: Warmwasser jetzt aufheizen
+      icon: mdi:water-boiler
+      tap_action:
+        action: perform-action
+        perform_action: button.press
+        target:
+          entity_id: button.hwr_warmepumpe_einmalige_ladung_aktivieren
+        confirmation:
+          text: Warmwasser jetzt einmal mit der Wärmepumpe aufheizen?
+      grid_options:
+        columns: 6
+        rows: 1
     - type: tile
       entity: input_boolean.hausalarm
       name: Hausalarm
