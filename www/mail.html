@@ -52,12 +52,17 @@
   .konto.familie { background: #536b4522; color: var(--gruen); }
   .konto.kontakt { background: #b8902f22; color: #8a6a1f; }
   select.feld { width: auto; }
-  .anzeige { position: fixed; inset: 0; background: rgba(0,0,0,.75); display: none; flex-direction: column; z-index: 50; }
+  .anzeige { position: fixed; inset: 0; background: rgba(0,0,0,.92); display: none; flex-direction: column; z-index: 50; }
   .anzeige.offen { display: flex; }
-  .anzeige .leiste { display: flex; gap: 8px; align-items: center; padding: 10px 12px; color: #fff; }
-  .anzeige .leiste b { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .anzeige .leiste { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: max(10px, env(safe-area-inset-top)) 12px 10px; color: #fff; }
+  .anzeige .leiste b { flex: 1 1 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
+  .anzeige .leiste .knopf { text-decoration: none; color: var(--text); white-space: nowrap; }
+  .anzeige .leiste #anzeigeZu { margin-left: auto; }
   .anzeige .inhalt { flex: 1; background: #fff; margin: 0 10px 10px; border-radius: 12px; overflow: auto; display: flex; align-items: flex-start; justify-content: center; }
   .anzeige img { max-width: 100%; height: auto; }
+  .anzeige .inhalt.seiten { flex-direction: column; align-items: center; gap: 8px; padding: 8px 0; background: #e5e5ea; }
+  .anzeige canvas { background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.2); max-width: 100%; }
+  .anzeige pre { white-space: pre-wrap; padding: 14px; margin: 0; font-size: 14px; }
   .anzeige iframe { width: 100%; height: 100%; border: 0; }
   .neu { background: var(--karte); border-radius: 14px; padding: 14px; display: grid; gap: 8px; margin-bottom: 12px; box-shadow: 0 0 0 2px var(--gruen); }
 </style>
@@ -77,11 +82,20 @@
   <input class="suche" id="suche" placeholder="Suchen (Name, Adresse, Betreff, Text) …">
   <div class="liste" id="liste"><div class="leer">Lade …</div></div>
 </main>
-<div class="anzeige" id="anzeige"><div class="leiste"><b id="anzeigeName"></b><a class="knopf" id="anzeigeLaden" download>⬇ Speichern</a><button class="knopf" id="anzeigeZu">✕</button></div><div class="inhalt" id="anzeigeInhalt"></div></div>
+<div class="anzeige" id="anzeige"><div class="leiste"><b id="anzeigeName"></b><button class="knopf" id="anzeigeTelegram">📲 Per Telegram</button><a class="knopf" id="anzeigeLaden" download>⬇ Speichern</a><button class="knopf" id="anzeigeZu">✕</button></div><div class="inhalt" id="anzeigeInhalt"></div></div>
 <script>
 let daten = { eingang: [], gesendet: [], entwuerfe: [], papierkorb: [] }, reiter = "eingang", offen = {}, eingabe = {}, postfach = "alle";
 const KONTO = { familie: "Familie", kontakt: "Ferienwohnung" };
 const marke = e => `<span class="konto ${e.konto === "kontakt" ? "kontakt" : "familie"}">${KONTO[e.konto] || "Familie"}</span>`;
+let anhangAktuell = null;
+function pdfjsLaden() {   // wie in der Akte: PDF.js liegt lokal in www/pdfjs
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  return new Promise((ok, fehler) => {
+    const sk = document.createElement("script"); sk.src = "pdfjs/pdf.min.js?v=3.11.174";
+    sk.onload = () => { pdfjsLib.GlobalWorkerOptions.workerSrc = "pdfjs/pdf.worker.min.js?v=3.11.174"; ok(pdfjsLib); };
+    sk.onerror = fehler; document.head.appendChild(sk);
+  });
+}
 function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
 function wer() { const h = hass(); return (h && h.user && h.user.name) || ""; }
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -191,6 +205,10 @@ document.addEventListener("click", async ev => {
     if (r && r.ok) { daten = r; zeichnen(); } else neuLaden();
     return;
   }
+  if (b.id === "anzeigeTelegram" && anhangAktuell) {
+    b.textContent = "⏳ …"; const r = await aktion({ was: "anhang_telegram", id: anhangAktuell.id, nr: anhangAktuell.nr }).catch(e => ({ ok: false, fehler: e.message }));
+    b.textContent = "📲 Per Telegram"; melden(r.ok ? "📲 Ist in deinem Telegram-Chat" : "Telegram: " + (r.fehler || "ging nicht"), !r.ok); return;
+  }
   if (b.id === "anzeigeZu") { document.getElementById("anzeige").classList.remove("offen"); document.getElementById("anzeigeInhalt").innerHTML = ""; return; }
   if (b.dataset.anh) {
     const alt = b.textContent; b.textContent = "⏳ lade …"; b.disabled = true;
@@ -206,9 +224,29 @@ document.addEventListener("click", async ev => {
       const url = URL.createObjectURL(new Blob(teile, { type: info.typ }));
       document.getElementById("anzeigeName").textContent = info.name;
       const l = document.getElementById("anzeigeLaden"); l.href = url; l.download = info.name;
-      document.getElementById("anzeigeInhalt").innerHTML = info.typ.startsWith("image/") ? `<img src="${url}" alt="">`
-        : /pdf|text/.test(info.typ) ? `<iframe src="${url}"></iframe>` : `<div class="leer">Vorschau geht für diese Datei nicht – bitte „⬇ Speichern“.</div>`;
+      const inh = document.getElementById("anzeigeInhalt"); inh.classList.remove("seiten"); inh.innerHTML = "";
+      anhangAktuell = { id: b.dataset.anh, nr: +b.dataset.nr };
       document.getElementById("anzeige").classList.add("offen");
+      const blob = new Blob(teile, { type: info.typ }), endung = (info.name.split(".").pop() || "").toLowerCase();
+      if (info.typ === "application/pdf" || endung === "pdf") {
+        inh.classList.add("seiten"); inh.innerHTML = `<div class="leer">PDF wird gezeichnet …</div>`;
+        const lib = await pdfjsLaden();
+        const doc = await lib.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
+        inh.innerHTML = "";
+        const breite = Math.min(inh.clientWidth - 16, 1000), dpr = Math.min(window.devicePixelRatio || 1, 2);
+        for (let n = 1; n <= doc.numPages && document.getElementById("anzeige").classList.contains("offen"); n++) {
+          const seite = await doc.getPage(n), v1 = seite.getViewport({ scale: 1 }), vp = seite.getViewport({ scale: breite / v1.width * dpr });
+          const c = document.createElement("canvas"); c.width = vp.width; c.height = vp.height; c.style.width = (vp.width / dpr) + "px";
+          inh.appendChild(c); await seite.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+        }
+      } else if (info.typ.startsWith("image/") || /^(jpe?g|png|gif|webp|heic)$/.test(endung)) {
+        inh.innerHTML = `<img src="${url}" alt="">`;
+      } else if (info.typ.startsWith("text/") || /^(txt|csv|ics|vcf)$/.test(endung)) {
+        inh.innerHTML = `<pre>${esc(await blob.text())}</pre>`;
+      } else {
+        inh.innerHTML = `<div class="leer" style="padding:30px 20px;text-align:center">Diese Datei (${esc(endung.toUpperCase() || "unbekannt")}) kann die Seite nicht anzeigen.<br><br>
+          Tipp oben auf <b>„📲 Per Telegram“</b> – am Handy öffnet sie sich dann mit der passenden App.</div>`;
+      }
     } catch (err) { melden("Anhang: " + (err.message || err), true); }
     b.textContent = alt; b.disabled = false; return;
   }

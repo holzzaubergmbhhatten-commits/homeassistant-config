@@ -357,6 +357,8 @@ def anhang(auftrag):
             name = "Anhang"
     if not os.path.exists(pfad):
         return {"ok": False, "fehler": "Anhang nicht da"}
+    if auftrag.get("_nur_pfad"):
+        return {"ok": True, "pfad": pfad, "name": name}
     gesamt = os.path.getsize(pfad)
     with open(pfad, "rb") as f:
         f.seek(ab)
@@ -517,6 +519,21 @@ def seite(auftrag):
         return r
     if was == "anhang":
         return anhang(auftrag)
+    if was == "anhang_telegram":   # Anhang an den eigenen Telegram-Chat (öffnet am Handy jede Art Datei)
+        r = anhang(dict(auftrag, _nur_pfad=True))
+        if not r.get("ok"):
+            return r
+        namen = laden(akte.NAMEN, {})
+        wer = (auftrag.get("wer") or "").lower()
+        chat = next((k[5:] for k, v in namen.items() if k.startswith("fest:") and wer and str(v).lower() in wer), None) \
+            or next((k for k, v in namen.items() if not k.startswith("fest:") and wer and str(v).lower() in wer), None) or auftrag.get("chat")
+        ziel = r["pfad"]
+        if not os.path.basename(ziel).endswith(os.path.splitext(r["name"])[1] or "§"):   # Dateiname mit Endung für Telegram
+            import shutil
+            ziel = os.path.join(ANHANG_DIR, re.sub(r"[^\w.\- ]", "_", r["name"])[:80])
+            shutil.copyfile(r["pfad"], ziel)
+        akte.datei_senden(chat, ziel, f"📎 {r['name']}")
+        return {"ok": True, "hinweis": "📲 Per Telegram geschickt"}
     if was == "endgueltig":
         korb = {e["id"]: e for e in seite(dict(auftrag, was="liste")).get("papierkorb", [])}
         e = korb.get(i)
