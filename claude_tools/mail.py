@@ -162,10 +162,12 @@ def vorschau(chat, e):
     akte.telegram("sendMessage", {"chat_id": chat, "text": text[:4000], "reply_markup": knoepfe(e["id"])})
 
 
-def absender_name(von):
-    """Telegram-Vorname → Name unter dem Gruß (nur Marco oder Mirka, sonst Marco)."""
-    v = (von or "").strip().lower()
-    return "Mirka" if v.startswith("mirka") else "Marco"
+def absender_name(von, chat=None):
+    """Name unter dem Gruß: fest zugeordneter Name des Telegram-Chats („Ich bin Mirka“), sonst Telegram-Vorname /
+    angemeldeter Name. Nur Marco oder Mirka, sonst Marco."""
+    namen = laden(akte.NAMEN, {})
+    v = " ".join(str(x) for x in (namen.get(f"fest:{chat}"), namen.get(str(chat)), von) if x).lower() if chat else (von or "").lower()
+    return "Mirka" if "mirka" in v else "Marco"
 
 
 def verlauf_neu(eintrag):
@@ -186,7 +188,7 @@ def entwerfen(auftrag):
         if not re.match(r"^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$", an):
             akte.senden(chat, "⚠️ Mail: Die Empfänger-Adresse fehlt oder ist ungültig. So geht's: „Mail an name@firma.de: worum es geht“.")
             return
-        absender = absender_name(auftrag.get("von"))
+        absender = auftrag.get("absender") or absender_name(auftrag.get("von"), chat)
         inhalt = f"Absender (schreibt selbst, Ich-Form): {absender} Schlag\nWunsch: {auftrag.get('wunsch') or ''}\nEmpfänger: {an}"
         if bezug:
             inhalt += (f"\n\nDas ist eine ANTWORT auf diese Mail (nur Inhalt):\nVon: {bezug['von']}\nBetreff: {bezug['betreff']}\n"
@@ -331,14 +333,14 @@ def seite(auftrag):
     if was in ("neu", "antworten", "aendern"):
         if not (auftrag.get("text") or "").strip():
             return {"ok": False, "fehler": "Bitte schreiben, worum es gehen soll."}
-        auf = dict(auftrag, von=von, wunsch=auftrag.get("text"), id=None)
+        auf = dict(auftrag, von=von, absender=von, wunsch=auftrag.get("text"), id=None)
         if was == "antworten":
             auf.update(antwort_auf=i, an="")
         elif was == "aendern":
             e = laden(ENTWUERFE, {}).get(i)
             if not e:
                 return {"ok": False, "fehler": "Entwurf nicht mehr da"}
-            auf.update(id=i, an=e["an"], antwort_auf=e.get("antwort_auf"), vorher=e, aenderung=auftrag.get("text"), von=e.get("von") or von)
+            auf.update(id=i, an=e["an"], antwort_auf=e.get("antwort_auf"), vorher=e, aenderung=auftrag.get("text"), von=e.get("von") or von, absender=e.get("von") or von)
         akte.im_hintergrund(entwerfen, auf)
         return {"ok": True, "hinweis": "Entwurf wird geschrieben – in etwa 20 Sekunden hier und in Telegram."}
     ein = sorted(laden(EINGANG, {}).values(), key=lambda e: e.get("zeit") or 0, reverse=True)
@@ -374,7 +376,7 @@ def main():
                 akte.senden(chat, "Welcher Entwurf? Bitte erst beim Entwurf auf „✏️ Ändern“ tippen.")
             else:
                 akte.senden(chat, "✍️ Ich ändere den Entwurf …")
-                akte.im_hintergrund(entwerfen, dict(auftrag, id=i, an=e["an"], antwort_auf=e.get("antwort_auf"),
+                akte.im_hintergrund(entwerfen, dict(auftrag, id=i, an=e["an"], antwort_auf=e.get("antwort_auf"), absender=e.get("von"),
                                                     vorher=e, aenderung=auftrag.get("wunsch")))
             print(json.dumps({"ok": True}))
         elif a == "knopf":

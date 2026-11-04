@@ -180,7 +180,7 @@ automation:
       - condition: template
         value_template: >-
           {{ not ((trigger.event.data.text | default('') | string)
-             is match('(?is)^\s*(?:bitte\s+)?(?:(?:schreib|schick|send)\w*\s+(?:bitte\s+)?(?:eine?\s+)?)?(?:e-?mail|mail)\s+an\s+\S+@\S+|^\s*(?:antwort|ändern|aendern)\s*:')) }}
+             is match('(?is)^\W*(?:[\wäöüß-]+\s+){0,7}?(?:e-?mail|mail)\w*\s+(?:[\wäöüß-]+\s+){0,4}?an\s+<?[^\s@<>]+@[^\s@<>]+\.[a-z]{2,}|^\W*(?:[\wäöüß-]+\s+){0,5}?an\s+<?[^\s@<>]+@[^\s@<>]+\.[a-z]{2,}.{0,40}\\b(?:e-?mail|mail)\\b|^\s*(?:antwort|ändern|aendern)\s*:')) }}
       - condition: template
         # auch "Die gehören alle zusammen, bitte Kosten addieren …" (mehrere Belege → ein Vorgang mit Kostenaufstellung)
         value_template: >-

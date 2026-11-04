@@ -78,12 +78,13 @@ automation:
       - condition: template
         value_template: >-
           {{ (trigger.event.data.text | default('') | string)
-             is match('(?is)^\s*(?:bitte\s+)?(?:(?:schreib|schick|send)\w*\s+(?:bitte\s+)?(?:eine?\s+)?)?(?:e-?mail|mail)\s+an\s+\S+@\S+|^\s*(?:antwort|ändern|aendern)\s*:') }}
+             is match('(?is)^\W*(?:[\wäöüß-]+\s+){0,7}?(?:e-?mail|mail)\w*\s+(?:[\wäöüß-]+\s+){0,4}?an\s+<?[^\s@<>]+@[^\s@<>]+\.[a-z]{2,}|^\W*(?:[\wäöüß-]+\s+){0,5}?an\s+<?[^\s@<>]+@[^\s@<>]+\.[a-z]{2,}.{0,40}\\b(?:e-?mail|mail)\\b|^\s*(?:antwort|ändern|aendern)\s*:') }}
     actions:
       - variables:
           t: "{{ trigger.event.data.text | string }}"
+          # erste Mail-Adresse im Text; den ganzen Text als Wunsch mitgeben (Claude versteht auch „Verfasse bitte eine Mail an …“)
           mail_an: >-
-            {{ (t | regex_findall('(?is)(?:e-?mail|mail)\s+an\s+<?([^\s<>:,;]+@[^\s<>:,;]+?)>?\s*[:,;]?\s+(.+)$') | first | default(['', ''], true)) }}
+            {{ t | regex_findall('[^\s<>:,;()]+@[^\s<>:,;()]+\.[A-Za-z]{2,}') | first | default('', true) }}
           art: >-
             {{ 'antwort' if t is match('(?i)^\s*antwort\s*:') else ('aendern' if t is match('(?i)^\s*(ändern|aendern)\s*:') else 'entwurf') }}
       - action: shell_command.mail
@@ -91,8 +92,8 @@ automation:
         data:
           wert: >-
             {{ {'aktion': art, 'chat': trigger.event.data.chat_id, 'von': trigger.event.data.from_first | default('', true),
-                'an': mail_an[0] if art == 'entwurf' else '',
-                'wunsch': (mail_an[1] if art == 'entwurf' else t.split(':', 1)[1]) | trim} | to_json | base64_encode }}
+                'an': mail_an if art == 'entwurf' else '',
+                'wunsch': (t if art == 'entwurf' else t.split(':', 1)[1]) | trim} | to_json | base64_encode }}
 
   - id: familie_mail_knoepfe
     alias: "Familien-Mail: Knöpfe (Senden, Ändern, Verwerfen, Antworten)"
