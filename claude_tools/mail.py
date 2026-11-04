@@ -40,7 +40,63 @@ ENTWUERFE = "/config/mail_entwuerfe.json"
 EINGANG = "/config/mail_eingang.json"
 EINGANG_DIR = "/config/mail_eingang"
 STATUS = "/config/mail_status.json"      # je Chat: worauf gerade „Antwort:“ / „Ändern:“ wartet
-SIGNATUR = "Viele Grüße\nMarco Schlag\nFünfhauser Weg 7 · 26939 Ovelgönne"
+SIGNATUR_DATEI = "/config/mail_signatur.json"   # Telefonnummern usw. – nur lokal, nicht im (öffentlichen) Repository
+WAPPEN = "/config/akte_wappen.jpg"                # dasselbe Wappen wie im Briefkopf der Akte
+GRUSS = "Viele Grüße"
+
+
+def signatur():
+    s = {"name": "Familie Schlag", "personen": "Marco & Mirka", "adresse": "Fünfhauser Weg 7 · 26939 Ovelgönne",
+         "telefon": [], "mail": ADRESSE}
+    s.update(laden(SIGNATUR_DATEI, {}))
+    return s
+
+
+def signatur_text():
+    s = signatur()
+    z = [GRUSS, "", s["name"], s["personen"], s["adresse"]]
+    z += [f"{wer}: {nr}" for wer, nr in s["telefon"]]
+    z.append(s["mail"])
+    return "\n".join(z)
+
+
+def signatur_html(cid):
+    import html as h
+    s = signatur()
+    tel = "".join(f'<div>{h.escape(wer)}: <a href="tel:{h.escape(nr.replace(" ", ""))}" style="color:#26301f;text-decoration:none">'
+                  f'{h.escape(nr)}</a></div>' for wer, nr in s["telefon"])
+    bild = (f'<td style="padding:0 16px 0 0;vertical-align:middle"><img src="cid:{cid[1:-1]}" alt="Wappen" width="72" '
+            f'style="display:block;width:72px;height:auto;border:0"></td>') if cid else ""
+    return (f'<p style="margin:18px 0 10px">{GRUSS}</p>'
+            '<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;'
+            'font-size:13px;line-height:1.45;color:#26301f"><tr>' + bild +
+            '<td style="border-left:2px solid #8a9a5b;padding:2px 0 2px 14px;vertical-align:middle">'
+            f'<div style="font-size:16px;font-weight:bold;letter-spacing:.02em">{h.escape(s["name"])}</div>'
+            f'<div style="color:#5b6656">{h.escape(s["personen"])}</div>'
+            f'<div style="margin-top:6px">{h.escape(s["adresse"])}</div>{tel}'
+            f'<div><a href="mailto:{h.escape(s["mail"])}" style="color:#4a6b2f;text-decoration:none">{h.escape(s["mail"])}</a></div>'
+            '</td></tr></table>')
+
+
+def mail_bauen(an, betreff, text):
+    """Mail mit Text- und HTML-Teil; das Wappen hängt als eingebettetes Bild an (keine externen Bilder)."""
+    import html as h
+    m = EmailMessage()
+    m["From"] = email.utils.formataddr((NAME, ADRESSE))
+    m["To"] = an
+    m["Subject"] = betreff
+    m["Date"] = email.utils.formatdate(localtime=True)
+    m["Message-ID"] = email.utils.make_msgid(domain="urlaub-wie-zuhause.eu")
+    m.set_content(f"{text}\n\n{signatur_text()}\n")
+    cid = email.utils.make_msgid(domain="urlaub-wie-zuhause.eu") if os.path.exists(WAPPEN) else ""
+    koerper = "".join(f'<p style="margin:0 0 12px">{h.escape(a).replace(chr(10), "<br>")}</p>' for a in re.split(r"\n\s*\n", text.strip()))
+    m.add_alternative('<!doctype html><html><body style="margin:0;padding:0">'
+                      '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#222">'
+                      f'{koerper}{signatur_html(cid)}</div></body></html>', subtype="html")
+    if cid:
+        with open(WAPPEN, "rb") as f:
+            m.get_payload()[1].add_related(f.read(), "image", "jpeg", cid=cid, filename="wappen.jpg")
+    return m
 
 SCHREIBEN = """Du schreibst E-Mails für die Familie Schlag (Marco und Mirka, Ovelgönne). Schreibe auf Deutsch, höflich,
 klar und kurz, wie ein freundlicher Mensch, nicht wie eine Werbeagentur. Standard ist „Sie“, außer der Wunsch sagt „du“.
@@ -67,7 +123,7 @@ def knoepfe(i):
 
 def vorschau(chat, e):
     anh = f"\n📎 {len(e.get('anhaenge') or [])} Anhang/Anhänge" if e.get("anhaenge") else ""
-    text = (f"✉️ Entwurf an {e['an']}\nBetreff: {e['betreff']}\n\n{e['text']}\n\n{SIGNATUR}{anh}\n\n"
+    text = (f"✉️ Entwurf an {e['an']}\nBetreff: {e['betreff']}\n\n{e['text']}\n\n{signatur_text()}{anh}\n\n"
             "Tippe „Senden“ – oder „Ändern“ und schreib dann, was anders sein soll.")
     akte.telegram("sendMessage", {"chat_id": chat, "text": text[:4000], "reply_markup": knoepfe(e["id"])})
 
@@ -113,16 +169,10 @@ def senden(auftrag):
         return {"ok": False, "fehler": "Entwurf nicht mehr da"}
     if len(pw) < 4:
         return {"ok": False, "fehler": "kein_passwort"}
-    m = EmailMessage()
-    m["From"] = email.utils.formataddr((NAME, ADRESSE))
-    m["To"] = e["an"]
-    m["Subject"] = e["betreff"]
-    m["Date"] = email.utils.formatdate(localtime=True)
-    m["Message-ID"] = email.utils.make_msgid(domain="urlaub-wie-zuhause.eu")
+    m = mail_bauen(e["an"], e["betreff"], e["text"])
     if e.get("message_id"):
         m["In-Reply-To"] = e["message_id"]
         m["References"] = e["message_id"]
-    m.set_content(f"{e['text']}\n\n{SIGNATUR}\n")
     with smtplib.SMTP_SSL(*SMTP, context=ssl.create_default_context(), timeout=60) as s:
         s.login(ADRESSE, pw)
         s.send_message(m)
@@ -208,13 +258,8 @@ def test(auftrag):
     pw = auftrag.get("passwort") or ""
     if len(pw) < 4:
         return {"ok": False, "fehler": "kein_passwort"}
-    m = EmailMessage()
-    m["From"] = email.utils.formataddr((NAME, ADRESSE))
-    m["To"] = auftrag.get("an") or ADRESSE
-    m["Subject"] = "Test: Familien-Mail über Home Assistant"
-    m["Date"] = email.utils.formatdate(localtime=True)
-    m["Message-ID"] = email.utils.make_msgid(domain="urlaub-wie-zuhause.eu")
-    m.set_content("Hallo,\n\ndas ist eine Test-Mail. Senden über Home Assistant funktioniert.\n\n" + SIGNATUR + "\n")
+    m = mail_bauen(auftrag.get("an") or ADRESSE, "Test: Familien-Mail über Home Assistant",
+                   auftrag.get("text") or "Hallo,\n\ndas ist eine Test-Mail. Senden über Home Assistant funktioniert.")
     with smtplib.SMTP_SSL(*SMTP, context=ssl.create_default_context(), timeout=60) as s:
         s.login(ADRESSE, pw)
         s.send_message(m)
@@ -282,6 +327,11 @@ def main():
                 print(json.dumps({"ok": False, "fehler": "unbekannter Knopf"}))
         elif a == "abholen":
             print(json.dumps(abholen(auftrag)))
+        elif a == "signatur":   # Signatur-Angaben setzen (Telefonnummern bleiben so aus dem Repository)
+            d = laden(SIGNATUR_DATEI, {})
+            d.update({k: v for k, v in auftrag.items() if k in ("name", "personen", "adresse", "telefon", "mail")})
+            speichern(SIGNATUR_DATEI, d)
+            print(json.dumps({"ok": True, "signatur": signatur_text()}, ensure_ascii=False))
         elif a == "test":
             print(json.dumps(test(auftrag)))
         else:
