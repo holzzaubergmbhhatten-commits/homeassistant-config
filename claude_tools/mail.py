@@ -56,26 +56,44 @@ def signatur_text():
     s = signatur()
     z = [GRUSS, "", s["name"], s["personen"], s["adresse"]]
     z += [f"{wer}: {nr}" for wer, nr in s["telefon"]]
-    z.append(s["mail"])
+    z += [s["mail"], "", "Urlaub wie Zuhause – Stellplätze in Loyermoor & Ferienwohnung in Oldenburg", WEBSEITE]
     return "\n".join(z)
 
 
-def signatur_html(cid):
+WEBSEITE = "https://urlaub-wie-zuhause.eu/"
+QR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mail_qr.png")
+# Farben wie urlaub-wie-zuhause.eu: Gold, Sand, Creme, Dunkelgrün
+GOLD, SAND, CREME, DUNKEL = "#e3a857", "#d8c7a3", "#f4ead9", "#2d3329"
+
+
+def signatur_html(cid_wappen, cid_qr):
     import html as h
     s = signatur()
-    tel = "".join(f'<div>{h.escape(wer)}: <a href="tel:{h.escape(nr.replace(" ", ""))}" style="color:#26301f;text-decoration:none">'
+    a = f"color:{DUNKEL};text-decoration:none"
+    tel = "".join(f'<div><span style="color:#9a7a3c">{h.escape(wer)}</span>&nbsp; <a href="tel:{h.escape(nr.replace(" ", ""))}" style="{a}">'
                   f'{h.escape(nr)}</a></div>' for wer, nr in s["telefon"])
-    bild = (f'<td style="padding:0 16px 0 0;vertical-align:middle"><img src="cid:{cid[1:-1]}" alt="Wappen" width="72" '
-            f'style="display:block;width:72px;height:auto;border:0"></td>') if cid else ""
-    return (f'<p style="margin:18px 0 10px">{GRUSS}</p>'
-            '<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;'
-            'font-size:13px;line-height:1.45;color:#26301f"><tr>' + bild +
-            '<td style="border-left:2px solid #8a9a5b;padding:2px 0 2px 14px;vertical-align:middle">'
-            f'<div style="font-size:16px;font-weight:bold;letter-spacing:.02em">{h.escape(s["name"])}</div>'
-            f'<div style="color:#5b6656">{h.escape(s["personen"])}</div>'
-            f'<div style="margin-top:6px">{h.escape(s["adresse"])}</div>{tel}'
-            f'<div><a href="mailto:{h.escape(s["mail"])}" style="color:#4a6b2f;text-decoration:none">{h.escape(s["mail"])}</a></div>'
-            '</td></tr></table>')
+    bild = (f'<td width="88" style="padding:14px 14px 14px 14px;vertical-align:middle"><img src="cid:{cid_wappen[1:-1]}" alt="Wappen" width="80" '
+            f'style="display:block;width:80px;height:auto;border:0"></td>') if cid_wappen else ""
+    qr = (f'<td width="84" style="padding:10px 12px 10px 12px;vertical-align:middle"><a href="{WEBSEITE}">'
+          f'<img src="cid:{cid_qr[1:-1]}" alt="QR-Code urlaub-wie-zuhause.eu" width="72" style="display:block;width:72px;height:72px;border:0"></a></td>'
+          ) if cid_qr else ""
+    return (f'<p style="margin:18px 0 12px">{GRUSS}</p>'
+            '<table cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:520px;border-collapse:collapse;'
+            f'font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5;color:{DUNKEL}">'
+            f'<tr><td colspan="2" style="height:4px;line-height:4px;font-size:0;background:{GOLD}">&nbsp;</td></tr>'
+            f'<tr>{bild}<td style="padding:14px 8px 14px 4px;vertical-align:middle">'
+            f'<div style="font-size:17px;font-weight:bold;letter-spacing:.03em;color:{DUNKEL}">{h.escape(s["name"])}</div>'
+            f'<div style="color:#9a7a3c;font-weight:bold;margin-bottom:6px">{h.escape(s["personen"])}</div>'
+            f'<div>{h.escape(s["adresse"])}</div>{tel}'
+            f'<div><a href="mailto:{h.escape(s["mail"])}" style="{a}">{h.escape(s["mail"])}</a></div>'
+            '</td></tr>'
+            f'<tr><td colspan="2" style="padding:0;background:{CREME};border-top:1px solid {SAND};border-bottom:4px solid {GOLD}">'
+            '<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse"><tr>' + qr +
+            f'<td style="padding:10px 12px 10px 4px;vertical-align:middle;font-size:13px;color:{DUNKEL}">'
+            f'<div style="font-weight:bold;font-size:14px">Urlaub wie Zuhause</div>'
+            '<div>Stellplätze in Loyermoor &amp; Ferienwohnung in Oldenburg</div>'
+            f'<div><a href="{WEBSEITE}" style="color:#9a7a3c;font-weight:bold;text-decoration:none">urlaub-wie-zuhause.eu</a></div>'
+            '</td></tr></table></td></tr></table>')
 
 
 def mail_bauen(an, betreff, text):
@@ -88,14 +106,19 @@ def mail_bauen(an, betreff, text):
     m["Date"] = email.utils.formatdate(localtime=True)
     m["Message-ID"] = email.utils.make_msgid(domain="urlaub-wie-zuhause.eu")
     m.set_content(f"{text}\n\n{signatur_text()}\n")
-    cid = email.utils.make_msgid(domain="urlaub-wie-zuhause.eu") if os.path.exists(WAPPEN) else ""
+    cid_w = email.utils.make_msgid(domain="urlaub-wie-zuhause.eu") if os.path.exists(WAPPEN) else ""
+    cid_q = email.utils.make_msgid(domain="urlaub-wie-zuhause.eu") if os.path.exists(QR) else ""
     koerper = "".join(f'<p style="margin:0 0 12px">{h.escape(a).replace(chr(10), "<br>")}</p>' for a in re.split(r"\n\s*\n", text.strip()))
     m.add_alternative('<!doctype html><html><body style="margin:0;padding:0">'
-                      '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#222">'
-                      f'{koerper}{signatur_html(cid)}</div></body></html>', subtype="html")
-    if cid:
+                      '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#222;padding:8px 14px">'
+                      f'{koerper}{signatur_html(cid_w, cid_q)}</div></body></html>', subtype="html")
+    html_teil = m.get_payload()[1]
+    if cid_w:
         with open(WAPPEN, "rb") as f:
-            m.get_payload()[1].add_related(f.read(), "image", "jpeg", cid=cid, filename="wappen.jpg")
+            html_teil.add_related(f.read(), "image", "jpeg", cid=cid_w, filename="wappen.jpg")
+    if cid_q:
+        with open(QR, "rb") as f:
+            html_teil.add_related(f.read(), "image", "png", cid=cid_q, filename="urlaub-wie-zuhause.png")
     return m
 
 SCHREIBEN = """Du schreibst E-Mails für die Familie Schlag (Marco und Mirka, Ovelgönne). Schreibe auf Deutsch, höflich,
