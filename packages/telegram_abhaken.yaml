@@ -1,0 +1,179 @@
+# Einkaufsliste und Aufgaben per Telegram zum Abhaken.
+# Jeder offene Eintrag ist ein Knopf unter der Nachricht: antippen = erledigt, die Nachricht aktualisiert sich sofort.
+# Der zuletzt abgehakte Eintrag bekommt einen Knopf „↩ zurück“ (aus Versehen abgehakt).
+# Auslöser: „Liste“ / „Aufgaben“ im Chat (packages/telegram.yaml ruft dieses Skript auf) und feste Zeiten (unten).
+# Knopf-Kennung: /hk_<e|a>_<uid> = abhaken, /hz_<e|a>_<uid> = zurück, /hn_<e|a> = neu laden.
+
+script:
+  liste_abhaken_senden:
+    alias: Liste zum Abhaken per Telegram
+    mode: queued
+    fields:
+      liste:
+        description: "einkauf oder aufgaben"
+      chat:
+        description: Telegram-Chat-ID
+      message_id:
+        description: "leer = neue Nachricht, sonst diese Nachricht aktualisieren"
+      zurueck_uid:
+        description: zuletzt abgehakter Eintrag (für „zurück“-Knopf)
+      zurueck_text:
+        description: Name des zuletzt abgehakten Eintrags
+    sequence:
+      - variables:
+          l: "{{ 'a' if liste | default('einkauf') == 'aufgaben' else 'e' }}"
+          entity: "{{ 'todo.aufgaben' if l == 'a' else 'todo.einkaufsliste' }}"
+      - action: todo.get_items
+        continue_on_error: true
+        target:
+          entity_id: "{{ entity }}"
+        data:
+          status: needs_action
+        response_variable: roh
+      - variables:
+          eintraege: "{{ (roh[entity]['items'] if roh is defined and entity in roh else []) }}"
+          kopf: >-
+            {% set n = eintraege | count %}
+            {% if l == 'a' %}✅ <b>Aufgaben</b>{% else %}🛒 <b>Einkaufsliste</b>{% endif %}
+            {%- if n == 0 %} – alles erledigt 🎉{% else %} – {{ n }} offen. Zum Abhaken antippen:{% endif %}
+            {%- if eintraege | count > 40 %}{{ '\n' }}(die ersten 40 sind als Knopf da){% endif %}
+          knoepfe: >-
+            {% set ns = namespace(r=[]) %}
+            {% if zurueck_uid | default('') %}
+              {% set ns.r = ns.r + [[['↩ ' ~ (zurueck_text | default('zurück'))[:28] ~ ' zurück', '/hz_' ~ l ~ '_' ~ zurueck_uid]]] %}
+            {% endif %}
+            {% for i in eintraege[:40] %}
+              {% set ns.r = ns.r + [[['☐ ' ~ (i.summary | replace('\n', ' '))[:48], '/hk_' ~ l ~ '_' ~ i.uid]]] %}
+            {% endfor %}
+            {% set ns.r = ns.r + [[['🔄 Aktualisieren', '/hn_' ~ l]]] %}
+            {{ ns.r }}
+      - if: "{{ message_id | default('') | string | length > 0 }}"
+        then:
+          - action: telegram_bot.edit_message
+            continue_on_error: true
+            data:
+              config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
+              chat_id: "{{ chat | int }}"
+              message_id: "{{ message_id | int }}"
+              parse_mode: html
+              message: "{{ kopf }}"
+              inline_keyboard: "{{ knoepfe }}"
+        else:
+          - action: telegram_bot.send_message
+            continue_on_error: true
+            data:
+              config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
+              chat_id: "{{ chat | int }}"
+              parse_mode: html
+              message: "{{ kopf }}"
+              inline_keyboard: "{{ knoepfe }}"
+
+  liste_abhaken_an_alle:
+    alias: Liste zum Abhaken an Marco und Mirka
+    mode: queued
+    fields:
+      liste:
+        description: "einkauf oder aufgaben"
+    sequence:
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+          sequence:
+            - action: script.liste_abhaken_senden
+              data:
+                liste: "{{ liste }}"
+                chat: "{{ repeat.item }}"
+
+automation:
+  - id: liste_abhaken_knopf
+    alias: "Telegram: Liste abhaken (Knopf)"
+    mode: queued
+    max: 30
+    triggers:
+      - trigger: event
+        event_type: telegram_callback
+    conditions:
+      - condition: template
+        value_template: "{{ (trigger.event.data.data | default('')) is match('^/h[kzn]_[ea]') }}"
+    actions:
+      - variables:
+          cmd: "{{ trigger.event.data.data }}"
+          art: "{{ cmd[2] }}"
+          l: "{{ cmd[4] }}"
+          uid: "{{ cmd[6:] }}"
+          entity: "{{ 'todo.aufgaben' if l == 'a' else 'todo.einkaufsliste' }}"
+      # Namen des Eintrags für die Rückmeldung
+      - action: todo.get_items
+        continue_on_error: true
+        target:
+          entity_id: "{{ entity }}"
+        response_variable: alle
+      - variables:
+          name: >-
+            {% set t = (alle[entity]['items'] if alle is defined and entity in alle else []) | selectattr('uid', 'eq', uid) | list %}
+            {{ t[0].summary if t else '' }}
+      - choose:
+          - conditions: "{{ art == 'k' and name != '' }}"
+            sequence:
+              - action: todo.update_item
+                continue_on_error: true
+                target:
+                  entity_id: "{{ entity }}"
+                data:
+                  item: "{{ uid }}"
+                  status: completed
+          - conditions: "{{ art == 'z' and name != '' }}"
+            sequence:
+              - action: todo.update_item
+                continue_on_error: true
+                target:
+                  entity_id: "{{ entity }}"
+                data:
+                  item: "{{ uid }}"
+                  status: needs_action
+      - action: telegram_bot.answer_callback_query
+        continue_on_error: true
+        data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
+          callback_query_id: "{{ trigger.event.data.id }}"
+          message: >-
+            {{ ('✔ ' ~ name[:150]) if art == 'k' and name else ('↩ wieder offen: ' ~ name[:140]) if art == 'z' and name
+               else 'Aktualisiert' if art == 'n' else 'Schon erledigt' }}
+      - action: script.liste_abhaken_senden
+        data:
+          liste: "{{ 'aufgaben' if l == 'a' else 'einkauf' }}"
+          chat: "{{ trigger.event.data.chat_id }}"
+          message_id: "{{ trigger.event.data.message.message_id }}"
+          zurueck_uid: "{{ uid if art == 'k' and name else '' }}"
+          zurueck_text: "{{ name if art == 'k' else '' }}"
+
+  # Regelmäßig: Aufgaben Montag und Donnerstag abends, Einkaufsliste Freitag nachmittags – nur wenn etwas offen ist
+  - id: liste_abhaken_aufgaben_regelmaessig
+    alias: "Telegram: Aufgaben zum Abhaken (Mo + Do)"
+    triggers:
+      - trigger: time
+        at: "18:07:00"
+    conditions:
+      - condition: time
+        weekday: [mon, thu]
+      - condition: template
+        value_template: "{{ states('todo.aufgaben') | int(0) > 0 }}"
+    actions:
+      - action: script.liste_abhaken_an_alle
+        data:
+          liste: aufgaben
+
+  - id: liste_abhaken_einkauf_regelmaessig
+    alias: "Telegram: Einkaufsliste zum Abhaken (Fr)"
+    triggers:
+      - trigger: time
+        at: "15:37:00"
+    conditions:
+      - condition: time
+        weekday: [fri]
+      - condition: template
+        value_template: "{{ states('todo.einkaufsliste') | int(0) > 0 }}"
+    actions:
+      - action: script.liste_abhaken_an_alle
+        data:
+          liste: einkauf

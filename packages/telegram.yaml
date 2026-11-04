@@ -668,7 +668,7 @@ automation:
         parse_mode: html
 - id: telegram_einkaufsliste
   alias: 'Telegram: Einkaufsliste schicken'
-  description: Auf "Liste" oder "Einkaufsliste" antwortet der Bot mit allen offenen Einträgen.
+  description: Auf "Liste" oder "Einkaufsliste" schickt der Bot die offenen Einträge als Knöpfe zum Abhaken (packages/telegram_abhaken.yaml).
   mode: queued
   triggers:
   - trigger: event
@@ -678,27 +678,13 @@ automation:
     value_template: '{{ (trigger.event.data.text | default('''') | string) is match(''^\s*/?(liste|einkaufsliste|einkauf)\s*\??\s*$'',
       ignorecase=True) }}'
   actions:
-  - action: todo.get_items
-    target:
-      entity_id: todo.einkaufsliste
+  - action: script.liste_abhaken_senden
     data:
-      status: needs_action
-    response_variable: liste
-  - action: telegram_bot.send_message
-    data:
-      config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
-      chat_id: '{{ trigger.event.data.chat_id }}'
-      parse_mode: html
-      message: '{% set items = liste[''todo.einkaufsliste''][''items''] %}{% set t %}🛒 Einkaufsliste{% if items
-        | count == 0 %}: alles erledigt ✅{% else %} ({{ items | count }}):
-
-        {% for i in items %}• {{ i.summary }}
-
-        {% endfor %}{% endif %}{% endset %}{{ t | replace(''&'',''&amp;'') | replace(''<'',''&lt;'') | replace(''>'',''&gt;'')
-        }}'
+      liste: einkauf
+      chat: '{{ trigger.event.data.chat_id }}'
 - id: telegram_aufgaben
   alias: 'Telegram: Aufgaben schicken'
-  description: Auf "Aufgaben" antwortet der Bot mit allen offenen Aufgaben.
+  description: Auf "Aufgaben" schickt der Bot die offenen Aufgaben als Knöpfe zum Abhaken (packages/telegram_abhaken.yaml).
   mode: queued
   triggers:
   - trigger: event
@@ -709,23 +695,10 @@ automation:
       {{ (trigger.event.data.text | default('') | string)
          is match('^\s*/?(aufgaben|todo)\s*\??\s*$', ignorecase=True) }}
   actions:
-  - action: todo.get_items
-    continue_on_error: true
-    target:
-      entity_id: todo.aufgaben
+  - action: script.liste_abhaken_senden
     data:
-      status: needs_action
-    response_variable: liste
-  - action: telegram_bot.send_message
-    data:
-      config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
-      chat_id: '{{ trigger.event.data.chat_id }}'
-      parse_mode: html
-      message: |-
-        {% if liste is not defined or 'todo.aufgaben' not in liste %}⚠️ Die Liste „Aufgaben“ gibt es noch nicht.
-        {%- else %}{% set items = liste['todo.aufgaben']['items'] %}{% set t %}✅ Aufgaben
-        {%- if items | count == 0 %}: alles erledigt 🎉{% else %} ({{ items | count }}):{% for i in items %}
-        • {{ i.summary }}{% endfor %}{% endif %}{% endset %}{{ t | replace('&','&amp;') | replace('<','&lt;') | replace('>','&gt;') }}{% endif %}
+      liste: aufgaben
+      chat: '{{ trigger.event.data.chat_id }}'
 - id: telegram_monitor_zurueck
   alias: 'Telegram: Monitor zurück zum Dashboard'
   description: Auf "Monitor", "Start" oder "Zurück" springt der Touchmonitor sofort zum Dashboard.
