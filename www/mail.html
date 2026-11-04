@@ -45,25 +45,35 @@
   .hinweis { background: #536b451A; color: var(--gruen); border-radius: 10px; padding: 8px 11px; font-size: 14px; font-weight: 600; }
   .fehler { background: #C4281C1A; color: var(--rot); border-radius: 10px; padding: 8px 11px; font-size: 14px; }
   .leer { color: var(--grau); padding: 20px 4px; }
+  .postfach { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 8px; }
+  .postfach button { padding: 6px 12px; border-radius: 14px; background: var(--feld); font-size: 13px; font-weight: 600; }
+  .postfach button.an { background: var(--text); color: var(--karte); }
+  .konto { font-size: 11px; font-weight: 700; border-radius: 7px; padding: 1px 7px; margin-right: 6px; vertical-align: 1px; }
+  .konto.familie { background: #536b4522; color: var(--gruen); }
+  .konto.kontakt { background: #b8902f22; color: #8a6a1f; }
+  select.feld { width: auto; }
   .neu { background: var(--karte); border-radius: 14px; padding: 14px; display: grid; gap: 8px; margin-bottom: 12px; box-shadow: 0 0 0 2px var(--gruen); }
 </style>
 </head>
 <body>
 <main>
   <div class="kopf">
-    <h1>✉️ Familien-Mail</h1>
-    <div class="klein" id="adresse">familie@urlaub-wie-zuhause.eu · Posteingang wird alle 5 Minuten abgeholt</div>
+    <h1>✉️ Mail</h1>
+    <div class="klein" id="adresse">familie@ und kontakt@urlaub-wie-zuhause.eu · wird alle 5 Minuten abgeholt</div>
     <button class="knopf gruen" id="neuKnopf">✍️ Neue Mail</button>
     <button class="knopf" id="laden">↻</button>
   </div>
   <div id="meldung"></div>
   <div id="neuBox"></div>
   <div class="reiter" id="reiter"></div>
+  <div class="postfach" id="postfach"></div>
   <input class="suche" id="suche" placeholder="Suchen (Name, Adresse, Betreff, Text) …">
   <div class="liste" id="liste"><div class="leer">Lade …</div></div>
 </main>
 <script>
-let daten = { eingang: [], gesendet: [], entwuerfe: [] }, reiter = "eingang", offen = {}, eingabe = {};
+let daten = { eingang: [], gesendet: [], entwuerfe: [] }, reiter = "eingang", offen = {}, eingabe = {}, postfach = "alle";
+const KONTO = { familie: "Familie", kontakt: "Ferienwohnung" };
+const marke = e => `<span class="konto ${e.konto === "kontakt" ? "kontakt" : "familie"}">${KONTO[e.konto] || "Familie"}</span>`;
 function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
 function wer() { const h = hass(); return (h && h.user && h.user.name) || ""; }
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -92,12 +102,17 @@ async function neuLaden() {
   } catch (e) { melden("Fehler beim Laden: " + (e.message || e), true); }
 }
 function zeichnen() {
-  const n = { entwuerfe: daten.entwuerfe.length, eingang: daten.eingang.length, gesendet: daten.gesendet.length };
+  const imFach = e => postfach === "alle" || (e.konto || "familie") === postfach;
+  const n = { entwuerfe: daten.entwuerfe.filter(imFach).length, eingang: daten.eingang.filter(imFach).length, gesendet: daten.gesendet.filter(imFach).length };
+  document.getElementById("postfach").innerHTML = [["alle", "Alle Postfächer"], ["familie", "👪 Familie"], ["kontakt", "🏡 Ferienwohnung"]]
+    .map(([k, t]) => `<button data-fach="${k}" class="${postfach === k ? "an" : ""}">${t}</button>`).join("")
+    + (daten.kontakt_fehler ? ` <span class="klein" style="color:var(--rot)">kontakt@: ${esc(daten.kontakt_fehler)}</span>`
+       : !daten.kontakt_stand ? ` <span class="klein">kontakt@: Passwort im Helfer „Kontakt-Mail Passwort“ eintragen</span>` : "");
   document.getElementById("reiter").innerHTML = [["entwuerfe", "📝 Entwürfe"], ["eingang", "📥 Posteingang"], ["gesendet", "📤 Gesendet"]]
     .map(([k, t]) => `<button data-reiter="${k}" class="${reiter === k ? "an" : ""}">${t} (${n[k]})</button>`).join("");
   const q = document.getElementById("suche").value.trim().toLowerCase();
   const passt = e => !q || JSON.stringify(e).toLowerCase().includes(q);
-  const liste = (daten[reiter] || []).filter(passt);
+  const liste = (daten[reiter] || []).filter(imFach).filter(passt);
   const el = document.getElementById("liste");
   if (!liste.length) { el.innerHTML = `<div class="leer">${q ? "Nichts gefunden." : reiter === "entwuerfe" ? "Keine offenen Entwürfe." : "Noch keine Mails."}</div>`; return; }
   el.innerHTML = liste.map(e => karte(e)).join("");
@@ -111,7 +126,7 @@ function karte(e) {
      <button class="knopf" data-zu="${e.id}">Abbrechen</button></div>`;
   if (reiter === "entwuerfe") {
     return `<div class="eintrag entwurf"><div class="zeile"><b>${esc(e.betreff)}</b><span class="wer">${zeit(e.zeit)}</span></div>
-      <div class="wer">An: ${esc(e.an)}${e.von ? " · von " + esc(e.von) : ""}${e.antwort_auf ? " · Antwort" : ""}</div>
+      <div class="wer">${marke(e)}An: ${esc(e.an)}${e.von ? " · von " + esc(e.von) : ""}${e.antwort_auf ? " · Antwort" : ""}</div>
       <div class="text">${esc(e.text)}</div>
       ${offen["ae_" + e.id] ? feld("aendern", "Was soll anders sein? z. B. kürzer, lockerer, Termin Freitag erwähnen …") :
       `<div class="aktionen"><button class="knopf gruen" data-tun="senden" data-id="${e.id}">✅ Senden</button>
@@ -120,15 +135,15 @@ function karte(e) {
   }
   if (reiter === "eingang") {
     return `<div class="eintrag ein"><div class="zeile"><b>${esc(e.betreff)}</b><span class="wer">${zeit(e.zeit, e.datum)}</span></div>
-      <div class="wer">Von: ${esc(e.von)}</div>
+      <div class="wer">${marke(e)}Von: ${esc(e.von)}</div>
       <div class="${textCls}" data-auf="${e.id}">${esc(e.text)}</div>
-      ${(e.anhaenge || []).length ? `<div class="anh">📎 ${e.anhaenge.map(esc).join(", ")} <span class="klein">(kamen per Telegram)</span></div>` : ""}
+      ${(e.anhaenge || []).length ? `<div class="anh">📎 ${e.anhaenge.map(esc).join(", ")} <span class="klein">${e.konto === "kontakt" ? "(im Mailprogramm öffnen)" : "(kamen per Telegram)"}</span></div>` : ""}
       ${offen["an_" + e.id] ? feld("antworten", "Was soll ich antworten? In eigenen Worten, z. B. „Danke, Freitag passt“") :
       `<div class="aktionen"><button class="knopf" data-auf="${e.id}">${auf ? "Weniger" : "Ganz lesen"}</button>
         <button class="knopf gruen" data-auf="an_${e.id}">↩ Antworten</button></div>`}</div>`;
   }
   return `<div class="eintrag"><div class="zeile"><b>${esc(e.betreff)}</b><span class="wer">${zeit(e.zeit)}</span></div>
-    <div class="wer">An: ${esc(e.an)}${e.von ? " · von " + esc(e.von) : ""}</div>
+    <div class="wer">${marke(e)}An: ${esc(e.an)}${e.von && e.konto !== "kontakt" ? " · von " + esc(e.von) : ""}</div>
     <div class="${textCls}" data-auf="${e.id}">${esc(e.text)}</div>
     <div class="aktionen"><button class="knopf" data-auf="${e.id}">${auf ? "Weniger" : "Ganz lesen"}</button></div></div>`;
 }
@@ -136,6 +151,7 @@ function neuFormular(an) {
   const b = document.getElementById("neuBox");
   if (an === false) { b.innerHTML = ""; return; }
   b.innerHTML = `<div class="neu"><b>Neue Mail</b>
+    <label class="klein">Von: <select class="feld" id="neuKonto"><option value="familie">👪 familie@ (Familie)</option><option value="kontakt"${postfach === "kontakt" ? " selected" : ""}>🏡 kontakt@ (Ferienwohnung)</option></select></label>
     <input class="feld" id="neuAn" type="email" placeholder="An (z. B. info@firma.de)" value="${esc(an || "")}">
     <textarea id="neuText" placeholder="Worum geht es? In eigenen Worten – Claude schreibt daraus die Mail (in deinem Namen, Ich-Form)."></textarea>
     <div class="aktionen"><button class="knopf gruen" id="neuLos">Entwurf schreiben lassen</button><button class="knopf" id="neuZu">Abbrechen</button></div>
@@ -145,7 +161,12 @@ function neuFormular(an) {
 document.addEventListener("input", ev => { if (ev.target.id && ev.target.id.startsWith("t_")) eingabe[ev.target.id.slice(2)] = ev.target.value; if (ev.target.id === "suche") zeichnen(); });
 document.addEventListener("click", async ev => {
   const b = ev.target.closest("button, [data-auf]"); if (!b) return;
-  if (b.id === "laden") { neuLaden(); return; }
+  if (b.id === "laden") {
+    b.textContent = "…"; const r = await aktion({ was: "kontakt_jetzt" }).catch(() => null); b.textContent = "↻";
+    if (r && r.ok) { daten = r; zeichnen(); } else neuLaden();
+    return;
+  }
+  if (b.dataset.fach) { postfach = b.dataset.fach; zeichnen(); return; }
   if (b.id === "neuKnopf") { neuFormular(""); return; }
   if (b.id === "neuZu") { neuFormular(false); return; }
   if (b.id === "neuLos") {
@@ -153,7 +174,7 @@ document.addEventListener("click", async ev => {
     if (!/^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/.test(an)) { melden("Bitte eine gültige Empfänger-Adresse eintragen.", true); return; }
     if (!text) { melden("Bitte kurz schreiben, worum es gehen soll.", true); return; }
     b.disabled = true; b.textContent = "Schreibe …";
-    const r = await aktion({ was: "neu", an, text });
+    const r = await aktion({ was: "neu", an, text, konto: document.getElementById("neuKonto").value });
     if (r.ok) { neuFormular(false); reiter = "entwuerfe"; melden(r.hinweis || "Entwurf wird geschrieben …"); later(); }
     else { melden(r.fehler, true); b.disabled = false; b.textContent = "Entwurf schreiben lassen"; }
     return;

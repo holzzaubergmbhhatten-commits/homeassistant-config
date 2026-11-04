@@ -60,14 +60,18 @@ script:
         description: Wunsch / Änderung / Antwort in eigenen Worten
       wer:
         description: Name der angemeldeten Person (Marco oder Mirka – steht unter dem Gruß)
+      konto:
+        description: familie oder kontakt (Absender bei neuer Mail)
     sequence:
       - action: shell_command.mail
         data:
           wert: >-
-            {{ {'aktion': 'seite', 'was': was if was in ['liste', 'senden', 'verwerfen', 'neu', 'antworten', 'aendern'] else 'liste',
+            {{ {'aktion': 'seite', 'was': was if was in ['liste', 'senden', 'verwerfen', 'neu', 'antworten', 'aendern', 'kontakt_jetzt'] else 'liste',
                 'id': id | default('', true), 'an': an | default('', true), 'text': text | default('', true), 'wer': wer | default('', true),
+                'konto': konto | default('familie', true),
                 'chat': (states('input_text.telegram_empfaenger') | string).split(';') | first | trim,
-                'passwort': states('input_text.familie_mail_passwort') | string if was == 'senden' else ''} | to_json | base64_encode }}
+                'passwort': states('input_text.familie_mail_passwort') | string if was == 'senden' else '',
+                'passwort_kontakt': states('input_text.kontakt_mail_passwort') | string if was in ['senden', 'kontakt_jetzt'] else ''} | to_json | base64_encode }}
         response_variable: ergebnis
       - stop: fertig
         response_variable: ergebnis
@@ -134,7 +138,8 @@ automation:
           wert: >-
             {{ {'aktion': 'knopf', 'data': trigger.event.data.data, 'chat': trigger.event.data.chat_id,
                 'id': trigger.event.data.data.split('_', 1)[1],
-                'passwort': states('input_text.familie_mail_passwort') | string} | to_json | base64_encode }}
+                'passwort': states('input_text.familie_mail_passwort') | string,
+                'passwort_kontakt': states('input_text.kontakt_mail_passwort') | string} | to_json | base64_encode }}
 
   - id: familie_mail_abholen
     alias: "Familien-Mail: Posteingang alle 5 Minuten prüfen"
@@ -144,11 +149,14 @@ automation:
         minutes: /5
     conditions:
       - condition: template
-        value_template: "{{ (states('input_text.familie_mail_passwort') | string | length) >= 4 and states('input_text.familie_mail_passwort') not in ['unknown', 'unavailable'] }}"
+        value_template: >-
+          {{ (states('input_text.familie_mail_passwort') | string | length) >= 4 and states('input_text.familie_mail_passwort') not in ['unknown', 'unavailable']
+             or (states('input_text.kontakt_mail_passwort') | string | length) >= 4 and states('input_text.kontakt_mail_passwort') not in ['unknown', 'unavailable'] }}
     actions:
       - action: shell_command.mail
         continue_on_error: true
         data:
           wert: >-
             {{ {'aktion': 'abholen', 'passwort': states('input_text.familie_mail_passwort') | string,
+                'passwort_kontakt': states('input_text.kontakt_mail_passwort') | string,
                 'chats': (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list} | to_json | base64_encode }}

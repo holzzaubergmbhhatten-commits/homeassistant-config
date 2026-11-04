@@ -44,9 +44,22 @@ STATUS = "/config/mail_status.json"      # je Chat: worauf gerade „Antwort:“
 SIGNATUR_DATEI = "/config/mail_signatur.json"   # Telefonnummern usw. – nur lokal, nicht im (öffentlichen) Repository
 WAPPEN = "/config/akte_wappen.jpg"                # dasselbe Wappen wie im Briefkopf der Akte
 GRUSS = "Viele Grüße"
+KONTAKT_DATEI = "/config/mail_kontakt.json"     # kontakt@: zuletzt gesehene Mails (Eingang + Gesendet), nur zum Anzeigen
+# Zwei Postfächer: familie@ (Telegram + Seite) und kontakt@ der Ferienwohnung (nur Seite, wird NUR gelesen – nichts als gelesen markiert)
+KONTEN = {
+    "familie": {"adresse": ADRESSE, "name": NAME, "pw": "passwort", "titel": "Familie"},
+    "kontakt": {"adresse": "kontakt@urlaub-wie-zuhause.eu", "name": "Urlaub wie Zuhause", "pw": "passwort_kontakt", "titel": "Ferienwohnung"},
+}
 
 
-def signatur():
+def konto_von(k):
+    return k if k in KONTEN else "familie"
+
+
+def signatur(konto="familie"):
+    if konto_von(konto) == "kontakt":   # Ferienwohnung/Stellplätze: öffentliche Buchungsnummer wie auf der Webseite
+        return {"name": "Urlaub wie Zuhause", "personen": "Familie Schlag · Marco & Mirka", "adresse": "Fünfhauser Weg 7 · 26939 Ovelgönne",
+                "telefon": [["Telefon & WhatsApp", "0155 67596635"]], "mail": KONTEN["kontakt"]["adresse"]}
     s = {"name": "Familie Schlag", "personen": "Marco & Mirka", "adresse": "Fünfhauser Weg 7 · 26939 Ovelgönne",
          "telefon": [], "mail": ADRESSE}
     s.update(laden(SIGNATUR_DATEI, {}))
@@ -57,8 +70,8 @@ def gruss(von=""):
     return f"{GRUSS}\n{von}" if von else GRUSS
 
 
-def signatur_text(von=""):
-    s = signatur()
+def signatur_text(von="", konto="familie"):
+    s = signatur(konto)
     z = [gruss(von), "", s["name"], s["personen"], s["adresse"]]
     z += [f"{wer}: {nr}" for wer, nr in s["telefon"]]
     z += [s["mail"], "", "Urlaub wie Zuhause – Stellplätze in Loyermoor & Ferienwohnung in Oldenburg", WEBSEITE]
@@ -72,9 +85,9 @@ GOLD, SAND, CREME, DUNKEL = "#e3a857", "#d8c7a3", "#f4ead9", "#2d3329"
 GRUEN = "#536b45"   # Grün wie in Home Assistant / Haus-Handbuch – für die Trennlinien
 
 
-def signatur_html(cid_wappen, cid_qr, von=""):
+def signatur_html(cid_wappen, cid_qr, von="", konto="familie"):
     import html as h
-    s = signatur()
+    s = signatur(konto)
     a = f"color:{DUNKEL};text-decoration:none"
     tel = "".join(f'<div><span style="color:#9a7a3c">{h.escape(wer)}</span>&nbsp; <a href="tel:{h.escape(nr.replace(" ", ""))}" style="{a}">'
                   f'{h.escape(nr)}</a></div>' for wer, nr in s["telefon"])
@@ -102,22 +115,23 @@ def signatur_html(cid_wappen, cid_qr, von=""):
             '</td></tr></table></td></tr></table>')
 
 
-def mail_bauen(an, betreff, text, von=""):
+def mail_bauen(an, betreff, text, von="", konto="familie"):
     """Mail mit Text- und HTML-Teil; das Wappen hängt als eingebettetes Bild an (keine externen Bilder)."""
     import html as h
     m = EmailMessage()
-    m["From"] = email.utils.formataddr((NAME, ADRESSE))
+    k = KONTEN[konto_von(konto)]
+    m["From"] = email.utils.formataddr((k["name"], k["adresse"]))
     m["To"] = an
     m["Subject"] = betreff
     m["Date"] = email.utils.formatdate(localtime=True)
     m["Message-ID"] = email.utils.make_msgid(domain="urlaub-wie-zuhause.eu")
-    m.set_content(f"{text}\n\n{signatur_text(von)}\n")
+    m.set_content(f"{text}\n\n{signatur_text(von, konto)}\n")
     cid_w = email.utils.make_msgid(domain="urlaub-wie-zuhause.eu") if os.path.exists(WAPPEN) else ""
     cid_q = email.utils.make_msgid(domain="urlaub-wie-zuhause.eu") if os.path.exists(QR) else ""
     koerper = "".join(f'<p style="margin:0 0 12px">{h.escape(a).replace(chr(10), "<br>")}</p>' for a in re.split(r"\n\s*\n", text.strip()))
     m.add_alternative('<!doctype html><html><body style="margin:0;padding:0">'
                       '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#222;padding:8px 14px">'
-                      f'{koerper}{signatur_html(cid_w, cid_q, von)}</div></body></html>', subtype="html")
+                      f'{koerper}{signatur_html(cid_w, cid_q, von, konto)}</div></body></html>', subtype="html")
     html_teil = m.get_payload()[1]
     if cid_w:
         with open(WAPPEN, "rb") as f:
@@ -157,7 +171,8 @@ def knoepfe(i):
 
 def vorschau(chat, e):
     anh = f"\n📎 {len(e.get('anhaenge') or [])} Anhang/Anhänge" if e.get("anhaenge") else ""
-    text = (f"✉️ Entwurf an {e['an']}\nBetreff: {e['betreff']}\n\n{e['text']}\n\n{signatur_text(e.get('von', ''))}{anh}\n\n"
+    k = KONTEN[konto_von(e.get("konto"))]
+    text = (f"✉️ Entwurf von {k['adresse']} an {e['an']}\nBetreff: {e['betreff']}\n\n{e['text']}\n\n{signatur_text(e.get('von', ''), e.get('konto'))}{anh}\n\n"
             "Tippe „Senden“ – oder „Ändern“ und schreib dann, was anders sein soll.")
     akte.telegram("sendMessage", {"chat_id": chat, "text": text[:4000], "reply_markup": knoepfe(e["id"])})
 
@@ -182,14 +197,19 @@ def entwerfen(auftrag):
         an = (auftrag.get("an") or "").strip()
         bezug = None
         if auftrag.get("antwort_auf"):
-            bezug = laden(EINGANG, {}).get(auftrag["antwort_auf"])
+            bezug = bezug_laden(auftrag["antwort_auf"])
             if bezug:
                 an = an or bezug["von_adresse"]
         if not re.match(r"^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$", an):
             akte.senden(chat, "⚠️ Mail: Die Empfänger-Adresse fehlt oder ist ungültig. So geht's: „Mail an name@firma.de: worum es geht“.")
             return
         absender = auftrag.get("absender") or absender_name(auftrag.get("von"), chat)
+        konto = konto_von((bezug or {}).get("konto") or auftrag.get("konto"))
         inhalt = f"Absender (schreibt selbst, Ich-Form): {absender} Schlag\nWunsch: {auftrag.get('wunsch') or ''}\nEmpfänger: {an}"
+        if konto == "kontakt":
+            inhalt += ("\nPostfach: kontakt@ von „Urlaub wie Zuhause“ (Ferienwohnung in Oldenburg, Wohnmobil-Stellplätze in Loyermoor). "
+                       "Gäste werden wie auf der Webseite geduzt („du“), herzlich und persönlich, außer der Wunsch sagt „Sie“. "
+                       "Keine Preise, Termine oder Zusagen erfinden.")
         if bezug:
             inhalt += (f"\n\nDas ist eine ANTWORT auf diese Mail (nur Inhalt):\nVon: {bezug['von']}\nBetreff: {bezug['betreff']}\n"
                        f"---\n{bezug['text'][:6000]}\n---")
@@ -201,7 +221,7 @@ def entwerfen(auftrag):
             betreff = "Re: " + bezug["betreff"]
         e = {"id": auftrag.get("id") or uuid.uuid4().hex[:10], "an": an, "betreff": betreff[:200],
              "text": (a.get("text") or a.get("antwort") or "").strip(), "chat": chat, "zeit": time.time(),
-             "antwort_auf": auftrag.get("antwort_auf") or "", "von": absender, "message_id": bezug.get("message_id", "") if bezug else ""}
+             "antwort_auf": auftrag.get("antwort_auf") or "", "von": absender, "konto": konto, "message_id": bezug.get("message_id", "") if bezug else ""}
         d = laden(ENTWUERFE, {})
         d[e["id"]] = e
         speichern(ENTWUERFE, d)
@@ -211,23 +231,25 @@ def entwerfen(auftrag):
 
 
 def senden(auftrag):
-    chat, i, pw = auftrag.get("chat"), auftrag.get("id"), auftrag.get("passwort") or ""
+    chat, i = auftrag.get("chat"), auftrag.get("id")
     d = laden(ENTWUERFE, {})
     e = d.get(i)
     if not e:
         return {"ok": False, "fehler": "Entwurf nicht mehr da"}
+    k = KONTEN[konto_von(e.get("konto"))]
+    pw = auftrag.get(k["pw"]) or ""
     if len(pw) < 4:
         return {"ok": False, "fehler": "kein_passwort"}
-    m = mail_bauen(e["an"], e["betreff"], e["text"], e.get("von", ""))
+    m = mail_bauen(e["an"], e["betreff"], e["text"], e.get("von", ""), e.get("konto"))
     if e.get("message_id"):
         m["In-Reply-To"] = e["message_id"]
         m["References"] = e["message_id"]
     with smtplib.SMTP_SSL(*SMTP, context=ssl.create_default_context(), timeout=60) as s:
-        s.login(ADRESSE, pw)
+        s.login(k["adresse"], pw)
         s.send_message(m)
     try:   # Kopie in „Gesendet“, damit sie auch im Mailprogramm auftaucht
         with imaplib.IMAP4_SSL(*IMAP, timeout=60) as im:
-            im.login(ADRESSE, pw)
+            im.login(k["adresse"], pw)
             for ordner in ("Gesendete Objekte", "Sent", "INBOX.Sent"):
                 if im.append(f'"{ordner}"', "\\Seen", imaplib.Time2Internaldate(time.time()), m.as_bytes())[0] == "OK":
                     break
@@ -237,8 +259,8 @@ def senden(auftrag):
     speichern(ENTWUERFE, d)
     akte.logbuch(f"Mail gesendet an {e['an']}: {e['betreff']}")
     verlauf_neu({"id": e["id"], "an": e["an"], "betreff": e["betreff"], "text": e["text"], "von": e.get("von", ""),
-                 "antwort_auf": e.get("antwort_auf", "")})
-    return {"ok": True, "an": e["an"], "betreff": e["betreff"]}
+                 "antwort_auf": e.get("antwort_auf", ""), "konto": konto_von(e.get("konto")), "message_id": m["Message-ID"]})
+    return {"ok": True, "an": e["an"], "betreff": e["betreff"], "fehler": ""}
 
 
 def text_aus(nachricht):
@@ -256,9 +278,72 @@ def text_aus(nachricht):
     return re.sub(r"\n\s*\n\s*\n+", "\n\n", t).strip()
 
 
+def bezug_laden(i):
+    e = laden(EINGANG, {}).get(i)
+    if e:
+        return dict(e, konto="familie")
+    return laden(KONTAKT_DATEI, {}).get("ein", {}).get(i)
+
+
+def kontakt_holen(pw):
+    """kontakt@ nur lesen (EXAMINE + BODY.PEEK): Mails bleiben im Mailprogramm ungelesen. Neue werden zwischengespeichert."""
+    k = KONTEN["kontakt"]
+    d = laden(KONTAKT_DATEI, {})
+    for art in ("ein", "aus"):
+        d.setdefault(art, {})
+    with imaplib.IMAP4_SSL(*IMAP, timeout=60) as im:
+        im.login(k["adresse"], pw)
+        ordner = {"ein": "INBOX"}
+        try:
+            for z in im.list()[1] or []:
+                z = z.decode(errors="replace")
+                name = z.rsplit(' "/" ', 1)[-1].rsplit(' "." ', 1)[-1].strip().strip('"')
+                if "\\Sent" in z or re.search(r"gesendet|sent", name, re.I):
+                    ordner["aus"] = name
+                    break
+        except Exception:  # noqa: BLE001
+            pass
+        for art, name in ordner.items():
+            if im.select(f'"{name}"', readonly=True)[0] != "OK":
+                continue
+            _, uids = im.uid("search", None, "ALL")
+            for uid in (uids[0].split() if uids and uids[0] else [])[-60:]:
+                schluessel = f"k{art[0]}{uid.decode()}"
+                if schluessel in d[art]:
+                    continue
+                _, roh = im.uid("fetch", uid, "(BODY.PEEK[])")
+                teile = [x for x in roh if isinstance(x, tuple)]
+                if not teile:
+                    continue
+                msg = email.message_from_bytes(teile[0][1], policy=email.policy.default)
+                try:
+                    zeit = email.utils.parsedate_to_datetime(str(msg.get("Date"))).timestamp()
+                except Exception:  # noqa: BLE001
+                    zeit = time.time()
+                von_name, von_adr = email.utils.parseaddr(str(msg.get("From", "")))
+                d[art][schluessel] = {"id": schluessel, "konto": "kontakt", "von": str(msg.get("From", "")), "von_adresse": von_adr,
+                                      "an": str(msg.get("To", "")), "betreff": str(msg.get("Subject", "(ohne Betreff)")),
+                                      "message_id": str(msg.get("Message-ID", "")), "datum": str(msg.get("Date", "")), "zeit": zeit,
+                                      "text": text_aus(msg)[:20000], "anhaenge": [teil.get_filename() or "Anhang" for teil in msg.iter_attachments()]}
+            if len(d[art]) > 200:
+                for x in sorted(d[art], key=lambda x: d[art][x].get("zeit") or 0)[:len(d[art]) - 200]:
+                    d[art].pop(x, None)
+    d["stand"] = time.time()
+    d.pop("fehler", None)
+    speichern(KONTAKT_DATEI, d)
+    return {"ok": True}
+
+
 def abholen(auftrag):
     pw = auftrag.get("passwort") or ""
     chats = [c for c in auftrag.get("chats") or [] if str(c).lstrip("-").isdigit()]
+    if len(auftrag.get("passwort_kontakt") or "") >= 4:
+        try:
+            kontakt_holen(auftrag["passwort_kontakt"])
+        except Exception as fehler:  # noqa: BLE001
+            d = laden(KONTAKT_DATEI, {})
+            d["fehler"] = str(fehler)[:150]
+            speichern(KONTAKT_DATEI, d)
     if len(pw) < 4:
         return {"ok": False, "fehler": "kein_passwort"}
     neu = 0
@@ -323,8 +408,12 @@ def seite(auftrag):
     if was == "senden":
         r = senden(dict(auftrag, id=i))
         if r.get("fehler") == "kein_passwort":
-            r["fehler"] = "Das Mail-Passwort fehlt (Helfer „Familien-Mail Passwort“)."
+            r["fehler"] = "Das Mail-Passwort fehlt (Helfer „Familien-Mail Passwort“ bzw. „Kontakt-Mail Passwort“)."
         return r
+    if was == "kontakt_jetzt":   # Knopf ↻ auf der Seite: kontakt@ sofort neu lesen
+        if len(auftrag.get("passwort_kontakt") or "") < 4:
+            return {"ok": False, "fehler": "Das Kontakt-Mail Passwort fehlt noch (Helfer „Kontakt-Mail Passwort“)."}
+        kontakt_holen(auftrag["passwort_kontakt"])
     if was == "verwerfen":
         d = laden(ENTWUERFE, {})
         d.pop(i, None)
@@ -333,7 +422,7 @@ def seite(auftrag):
     if was in ("neu", "antworten", "aendern"):
         if not (auftrag.get("text") or "").strip():
             return {"ok": False, "fehler": "Bitte schreiben, worum es gehen soll."}
-        auf = dict(auftrag, von=von, absender=von, wunsch=auftrag.get("text"), id=None)
+        auf = dict(auftrag, von=von, absender=von, wunsch=auftrag.get("text"), id=None, konto=konto_von(auftrag.get("konto")))
         if was == "antworten":
             auf.update(antwort_auf=i, an="")
         elif was == "aendern":
@@ -343,12 +432,19 @@ def seite(auftrag):
             auf.update(id=i, an=e["an"], antwort_auf=e.get("antwort_auf"), vorher=e, aenderung=auftrag.get("text"), von=e.get("von") or von, absender=e.get("von") or von)
         akte.im_hintergrund(entwerfen, auf)
         return {"ok": True, "hinweis": "Entwurf wird geschrieben – in etwa 20 Sekunden hier und in Telegram."}
-    ein = sorted(laden(EINGANG, {}).values(), key=lambda e: e.get("zeit") or 0, reverse=True)
-    return {"ok": True, "adresse": ADRESSE,
-            "eingang": [{k: e.get(k) for k in ("id", "von", "von_adresse", "betreff", "datum", "zeit")} |
-                        {"text": (e.get("text") or "")[:6000], "anhaenge": [os.path.basename(x) for x in e.get("anhaenge") or []]} for e in ein[:150]],
-            "gesendet": list(reversed(laden(VERLAUF, [])))[:150],
-            "entwuerfe": sorted(laden(ENTWUERFE, {}).values(), key=lambda e: e.get("zeit") or 0, reverse=True)}
+    kd = laden(KONTAKT_DATEI, {})
+    ein = [dict(e, konto="familie") for e in laden(EINGANG, {}).values()] + list(kd.get("ein", {}).values())
+    ein.sort(key=lambda e: e.get("zeit") or 0, reverse=True)
+    aus = [dict(e, konto=e.get("konto") or "familie") for e in laden(VERLAUF, [])]
+    bekannt = {e.get("message_id") for e in aus if e.get("message_id")}
+    aus += [e for e in kd.get("aus", {}).values() if e.get("message_id") not in bekannt]
+    aus.sort(key=lambda e: e.get("zeit") or 0, reverse=True)
+    kurz = lambda e: {k: e.get(k) for k in ("id", "konto", "von", "von_adresse", "an", "betreff", "datum", "zeit", "antwort_auf")} | {
+        "text": (e.get("text") or "")[:6000], "anhaenge": [os.path.basename(x) for x in e.get("anhaenge") or []]}
+    return {"ok": True, "konten": {k: v["adresse"] for k, v in KONTEN.items()},
+            "kontakt_stand": kd.get("stand"), "kontakt_fehler": kd.get("fehler", ""),
+            "eingang": [kurz(e) for e in ein[:250]], "gesendet": [kurz(e) for e in aus[:250]],
+            "entwuerfe": [dict(e, konto=konto_von(e.get("konto"))) for e in sorted(laden(ENTWUERFE, {}).values(), key=lambda e: e.get("zeit") or 0, reverse=True)]}
 
 
 def main():
@@ -388,7 +484,7 @@ def main():
                 if r.get("ok"):
                     akte.senden(chat, f"✅ Gesendet an {r['an']}: {r['betreff']}")
                 elif r.get("fehler") == "kein_passwort":
-                    akte.senden(chat, "🔑 Das Mail-Passwort fehlt noch: Einstellungen → Geräte & Dienste → Helfer → „Familien-Mail Passwort“.")
+                    akte.senden(chat, "🔑 Das Mail-Passwort fehlt noch: Einstellungen → Geräte & Dienste → Helfer → „Familien-Mail Passwort“ bzw. „Kontakt-Mail Passwort“.")
                 else:
                     akte.senden(chat, f"⚠️ Nicht gesendet: {r.get('fehler')}")
                 print(json.dumps(r))
