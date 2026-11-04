@@ -38,7 +38,7 @@ script:
         data:
           wert: >-
             {{ {'aktion': 'test', 'an': an | default('', true),
-                'passwort': states('input_text.familie_mail_passwort') | string} | to_json | base64_encode }}
+                'passwort': (states('input_text.familie_mail_passwort') | string | replace('unknown', '') | replace('unavailable', ''))} | to_json | base64_encode }}
         response_variable: ergebnis
       - action: persistent_notification.create
         data:
@@ -70,8 +70,8 @@ script:
                 'id': id | default('', true), 'an': an | default('', true), 'text': text | default('', true), 'wer': wer | default('', true),
                 'konto': konto | default('familie', true),
                 'chat': (states('input_text.telegram_empfaenger') | string).split(';') | first | trim,
-                'passwort': states('input_text.familie_mail_passwort') | string if was == 'senden' else '',
-                'passwort_kontakt': states('input_text.kontakt_mail_passwort') | string if was in ['senden', 'kontakt_jetzt'] else ''} | to_json | base64_encode }}
+                'passwort': (states('input_text.familie_mail_passwort') | string | replace('unknown', '') | replace('unavailable', '')) if was == 'senden' else '',
+                'passwort_kontakt': (states('input_text.kontakt_mail_passwort') | string | replace('unknown', '') | replace('unavailable', '')) if was in ['senden', 'kontakt_jetzt'] else ''} | to_json | base64_encode }}
         response_variable: ergebnis
       - stop: fertig
         response_variable: ergebnis
@@ -138,8 +138,8 @@ automation:
           wert: >-
             {{ {'aktion': 'knopf', 'data': trigger.event.data.data, 'chat': trigger.event.data.chat_id,
                 'id': trigger.event.data.data.split('_', 1)[1],
-                'passwort': states('input_text.familie_mail_passwort') | string,
-                'passwort_kontakt': states('input_text.kontakt_mail_passwort') | string} | to_json | base64_encode }}
+                'passwort': (states('input_text.familie_mail_passwort') | string | replace('unknown', '') | replace('unavailable', '')),
+                'passwort_kontakt': (states('input_text.kontakt_mail_passwort') | string | replace('unknown', '') | replace('unavailable', ''))} | to_json | base64_encode }}
 
   - id: familie_mail_abholen
     alias: "Familien-Mail: Posteingang alle 5 Minuten prüfen"
@@ -157,6 +157,6 @@ automation:
         continue_on_error: true
         data:
           wert: >-
-            {{ {'aktion': 'abholen', 'passwort': states('input_text.familie_mail_passwort') | string,
-                'passwort_kontakt': states('input_text.kontakt_mail_passwort') | string,
+            {{ {'aktion': 'abholen', 'passwort': (states('input_text.familie_mail_passwort') | string | replace('unknown', '') | replace('unavailable', '')),
+                'passwort_kontakt': (states('input_text.kontakt_mail_passwort') | string | replace('unknown', '') | replace('unavailable', '')),
                 'chats': (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list} | to_json | base64_encode }}
