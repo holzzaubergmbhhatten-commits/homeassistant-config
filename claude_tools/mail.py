@@ -448,7 +448,7 @@ def mail_html(auftrag):
     if not re.match(r"^[\w-]+$", i):
         return {"ok": False, "fehler": "ungültig"}
     os.makedirs(HTML_DIR, exist_ok=True)
-    pfad = os.path.join(HTML_DIR, i + ".html")
+    pfad = os.path.join(HTML_DIR, i + ".v2.html")   # Versionsnummer hochzählen, wenn sich die Aufbereitung ändert
     if not os.path.exists(pfad) or os.path.getsize(pfad) == 0:
         msg = mail_roh(i, auftrag)
         if msg is None:
