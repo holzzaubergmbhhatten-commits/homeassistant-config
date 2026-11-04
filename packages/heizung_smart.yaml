@@ -1,0 +1,272 @@
+# Heizung smarter (Vitocal 200-A + wasserführender Kamin Spartherm Varia 1V H2O XL am Pufferspeicher)
+#
+# 1) Sonnen-Warmwasser: Bei Sonnenüberschuss (Einspeisung, Speicher voll) heizt die Wärmepumpe das Warmwasser auf 60 °C
+#    („Einmalige Ladung“), statt den Strom für 7,9 ct einzuspeisen. Abends geht die Solltemperatur wieder zurück.
+#    Wärmepumpe zuerst, weil sie aus 1 kWh Strom ca. 3,3 kWh Wärme macht (Heizstab nur 1 kWh).
+# 2) Kamin erkennen: Puffer wird schnell wärmer, obwohl der Kompressor aus ist → der Kamin heizt (geschätzt).
+#    Später genauer über ein Relais der Kamin-Steuerung S-Thermatik NEO (Funktion „Combustion“/„Abbrand“) an einem Shelly-Eingang.
+# 3) Wärme abladen: Ist der Puffer durch den Kamin sehr heiß, wird die Raum-Solltemperatur des Fußbodenheizkreises (Heizkreis 2)
+#    der Vitocal für eine Weile angehoben, damit die Wärme ins Haus geht statt im Puffer zu stehen. Danach zurück.
+#    Wirkt erst voll, wenn die Berker-Raumregler die Ventile nicht schließen (dafür später Shellys parallel an der Regelbasis).
+#
+# Alles abschaltbar über die Schalter „Sonnen-Warmwasser“ und „Kamin-Wärme ins Haus“.
+
+input_boolean:
+  pv_warmwasser:
+    name: Sonnen-Warmwasser
+    icon: mdi:solar-power-variant
+  pv_warmwasser_laeuft:
+    name: Sonnen-Warmwasser läuft gerade
+    icon: mdi:water-boiler
+  kamin_waerme_abladen:
+    name: Kamin-Wärme ins Haus
+    icon: mdi:fireplace
+  kamin_waerme_laeuft:
+    name: Kamin-Wärme wird gerade abgegeben
+    icon: mdi:heat-wave
+
+input_number:
+  ww_soll_gemerkt:
+    name: Warmwasser-Soll vorher (gemerkt)
+    min: 10
+    max: 60
+    step: 1
+    unit_of_measurement: °C
+    mode: box
+  hk2_soll_gemerkt:
+    name: Heizkreis 2 Raum-Soll vorher (gemerkt)
+    min: 10
+    max: 30
+    step: 1
+    unit_of_measurement: °C
+    mode: box
+
+sensor:
+  # wie schnell sich der Puffer gerade ändert (K pro Stunde)
+  - platform: derivative
+    name: Puffer Änderung
+    unique_id: puffer_aenderung
+    source: sensor.hwr_warmepumpe_puffertemperatur_oben
+    unit_time: h
+    time_window: "00:30:00"
+    round: 1
+
+template:
+  - binary_sensor:
+      - name: Kamin heizt
+        unique_id: kamin_heizt
+        icon: mdi:fireplace
+        # Puffer steigt deutlich, Kompressor aus → Wärme kommt vom Kamin
+        state: >-
+          {{ states('sensor.puffer_anderung') | float(0) > 2
+             and is_state('binary_sensor.hwr_warmepumpe_kompressor', 'off') }}
+        delay_on: "00:10:00"
+        delay_off: "00:45:00"
+        attributes:
+          hinweis: geschätzt aus Pufferanstieg bei ausgeschaltetem Kompressor
+  - sensor:
+      - name: Sonnenüberschuss
+        unique_id: sonnen_ueberschuss
+        unit_of_measurement: W
+        device_class: power
+        state_class: measurement
+        # Einspeisung als positive Zahl (der Zähler zeigt Einspeisung mit Minus)
+        state: "{{ [0, -(states('sensor.dachboden_wechselrichter_mit_speicher_netzbezug_und_einspeisung') | float(0))] | max | round(0) }}"
+
+automation:
+  # ---------- 1) Sonnen-Warmwasser ----------
+  - id: pv_warmwasser_start
+    alias: "Heizung: Sonnen-Warmwasser starten"
+    mode: single
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.sonnenuberschuss
+        above: 2000
+        for: "00:10:00"
+      - trigger: time_pattern
+        minutes: "/15"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.pv_warmwasser
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.pv_warmwasser_laeuft
+        state: "off"
+      - condition: time
+        after: "09:00:00"
+        before: "16:30:00"
+      - condition: numeric_state
+        entity_id: sensor.sonnenuberschuss
+        above: 2000
+      - condition: numeric_state
+        entity_id: sensor.dachboden_wechselrichter_mit_speicher_batterie
+        above: 89
+      # Warmwasser noch nicht heiß (z. B. vom Kamin)
+      - condition: numeric_state
+        entity_id: sensor.hwr_warmepumpe_ww_speichertemperatur
+        below: 56
+      - condition: state
+        entity_id: binary_sensor.hwr_warmepumpe_kompressor
+        state: "off"
+    actions:
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.ww_soll_gemerkt
+        data:
+          value: "{{ [states('number.hwr_warmepumpe_ww_temperatur') | float(50), 59] | min }}"
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.pv_warmwasser_laeuft
+      - action: number.set_value
+        continue_on_error: true
+        target:
+          entity_id: number.hwr_warmepumpe_ww_temperatur
+        data:
+          value: 60
+      - delay: "00:00:20"
+      - action: button.press
+        continue_on_error: true
+        target:
+          entity_id: button.hwr_warmepumpe_einmalige_ladung_aktivieren
+      - action: logbook.log
+        data:
+          name: Sonnen-Warmwasser
+          message: >-
+            gestartet: {{ states('sensor.sonnenuberschuss') }} W Überschuss, Speicher {{ states('sensor.dachboden_wechselrichter_mit_speicher_batterie') }} %,
+            Warmwasser {{ states('sensor.hwr_warmepumpe_ww_speichertemperatur') }} °C → Ziel 60 °C
+
+  - id: pv_warmwasser_ende
+    alias: "Heizung: Sonnen-Warmwasser beenden"
+    mode: single
+    triggers:
+      - trigger: time
+        at: "17:30:00"
+      - trigger: numeric_state
+        entity_id: sensor.hwr_warmepumpe_ww_speichertemperatur
+        above: 58.5
+        for: "00:05:00"
+      - trigger: homeassistant
+        event: start
+    conditions:
+      - condition: state
+        entity_id: input_boolean.pv_warmwasser_laeuft
+        state: "on"
+    actions:
+      - action: number.set_value
+        continue_on_error: true
+        target:
+          entity_id: number.hwr_warmepumpe_ww_temperatur
+        data:
+          value: "{{ states('input_number.ww_soll_gemerkt') | int(50) if states('input_number.ww_soll_gemerkt') | int(0) >= 40 else 50 }}"
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.pv_warmwasser_laeuft
+      - action: logbook.log
+        data:
+          name: Sonnen-Warmwasser
+          message: "beendet, Warmwasser {{ states('sensor.hwr_warmepumpe_ww_speichertemperatur') }} °C, Soll wieder {{ states('input_number.ww_soll_gemerkt') | int(50) }} °C"
+
+  # ---------- 3) Kamin-Wärme ins Haus ----------
+  - id: kamin_waerme_start
+    alias: "Heizung: Kamin-Wärme ins Haus abgeben"
+    mode: single
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.hwr_warmepumpe_puffertemperatur_oben
+        above: 62
+        for: "00:10:00"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.kamin_waerme_abladen
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.kamin_waerme_laeuft
+        state: "off"
+      - condition: state
+        entity_id: binary_sensor.hwr_warmepumpe_kompressor
+        state: "off"
+      # nur in der Heizzeit und nicht, wenn es draußen warm ist
+      - condition: numeric_state
+        entity_id: sensor.hwr_warmepumpe_aussentemperatur
+        below: 15
+    actions:
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.hk2_soll_gemerkt
+        data:
+          value: "{{ states('number.hwr_warmepumpe_normaltemperatur_2') | float(22) }}"
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.kamin_waerme_laeuft
+      - action: number.set_value
+        continue_on_error: true
+        target:
+          entity_id: number.hwr_warmepumpe_normaltemperatur_2
+        data:
+          value: "{{ [states('number.hwr_warmepumpe_normaltemperatur_2') | int(22) + 2, 25] | min }}"
+      - action: logbook.log
+        data:
+          name: Kamin-Wärme
+          message: "Puffer {{ states('sensor.hwr_warmepumpe_puffertemperatur_oben') }} °C – Fußbodenheizung kurz 2 °C höher, damit die Wärme ins Haus geht"
+
+  - id: kamin_waerme_ende
+    alias: "Heizung: Kamin-Wärme abgegeben, zurückstellen"
+    mode: single
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.hwr_warmepumpe_puffertemperatur_oben
+        below: 50
+        for: "00:10:00"
+      - trigger: state
+        entity_id: binary_sensor.hwr_warmepumpe_kompressor
+        to: "on"
+        for: "00:05:00"
+      - trigger: state
+        entity_id: input_boolean.kamin_waerme_abladen
+        to: "off"
+      - trigger: homeassistant
+        event: start
+    conditions:
+      - condition: state
+        entity_id: input_boolean.kamin_waerme_laeuft
+        state: "on"
+    actions:
+      - action: number.set_value
+        continue_on_error: true
+        target:
+          entity_id: number.hwr_warmepumpe_normaltemperatur_2
+        data:
+          value: "{{ states('input_number.hk2_soll_gemerkt') | int(22) if states('input_number.hk2_soll_gemerkt') | int(0) >= 15 else 22 }}"
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.kamin_waerme_laeuft
+      - action: logbook.log
+        data:
+          name: Kamin-Wärme
+          message: "zurückgestellt auf {{ states('input_number.hk2_soll_gemerkt') | int(22) }} °C (Puffer {{ states('sensor.hwr_warmepumpe_puffertemperatur_oben') }} °C)"
+
+  # Schalter beim ersten Einrichten einmal einschalten (danach bestimmt Marco)
+  - id: heizung_smart_einrichten
+    alias: "Heizung: smarte Funktionen einmalig einschalten"
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: event
+        event_type: automation_reloaded
+    conditions:
+      - condition: template
+        value_template: "{{ states('input_number.ww_soll_gemerkt') | int(0) < 40 and is_state('input_boolean.pv_warmwasser_laeuft', 'off') }}"
+    actions:
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.ww_soll_gemerkt
+        data:
+          value: "{{ states('number.hwr_warmepumpe_ww_temperatur') | int(50) if states('number.hwr_warmepumpe_ww_temperatur') | int(0) >= 40 else 50 }}"
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.hk2_soll_gemerkt
+        data:
+          value: "{{ states('number.hwr_warmepumpe_normaltemperatur_2') | int(22) }}"
+      - action: input_boolean.turn_on
+        target:
+          entity_id: [input_boolean.pv_warmwasser, input_boolean.kamin_waerme_abladen]
