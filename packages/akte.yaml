@@ -331,6 +331,40 @@ script:
       - stop: fertig
         response_variable: ergebnis
 
+  # Knopf „📖 Ins Haus-Handbuch“ auf der Akte-Seite (gleicher Weg wie der Telegram-Knopf oben).
+  # Klappt es, wird eine offene Rückfrage als beantwortet vermerkt.
+  akte_ins_handbuch:
+    alias: "Akte: Dokument ins Haus-Handbuch (Akte-Seite)"
+    mode: queued
+    fields:
+      id:
+        description: Kennung des Akte-Eintrags
+    sequence:
+      - variables:
+          schluessel: "{{ states('input_text.github_handbuch_schluessel') | string }}"
+      - action: shell_command.anleitung_handbuch
+        continue_on_error: true
+        data:
+          wert: >-
+            {{ {'id': id | default('', true) | regex_replace('[^A-Za-z0-9_-]', ''),
+                'schluessel': schluessel if schluessel not in ['unknown', 'unavailable'] else '',
+                'von': 'der Akte-Seite'} | to_json | base64_encode }}
+        response_variable: roh
+      - variables:
+          a: >-
+            {% set t = roh.stdout | default('') if roh is defined and roh is mapping else '' %}
+            {{ t | from_json if (t | string).startswith('{') else {'ok': false, 'fehler': t or 'keine Antwort'} }}
+      - if: "{{ a.ok | default(false) }}"
+        then:
+          - action: script.akte_aktion
+            continue_on_error: true
+            data:
+              was: antwort
+              id: "{{ id }}"
+              text: "📖 ins Haus-Handbuch übernommen"
+      - stop: fertig
+        response_variable: a
+
   akte_hochladen:
     alias: "Akte: Datei von der Akte-Seite hochladen (in Stücken)"
     mode: queued
