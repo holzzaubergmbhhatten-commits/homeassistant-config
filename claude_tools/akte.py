@@ -347,7 +347,10 @@ def zeile(nr, e):
 
 def telegram_token():
     with open("/config/.storage/core.config_entries", encoding="utf-8") as f:
-        for e in json.load(f)["data"]["entries"]:
+        eintraege = json.load(f)["data"]["entries"]
+        # Bot „Zuhause“ zuerst (ein zweiter Bot-Eintrag hatte früher alles durcheinandergebracht)
+        eintraege.sort(key=lambda e: e.get("entry_id") != "01M3HM1R6DDKSC07MG87X4YEVB")
+        for e in eintraege:
             if e.get("domain") == "telegram_bot" and not e.get("disabled_by"):
                 t = (e.get("data") or {}).get("api_key")
                 if t:

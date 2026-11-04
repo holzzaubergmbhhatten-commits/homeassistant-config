@@ -1,0 +1,120 @@
+# Familien-Mail familie@urlaub-wie-zuhause.eu (Strato) per Telegram – Programm: claude_tools/mail.py
+#
+#  „Mail an name@firma.de: Bitte um Rückruf wegen …“  → Claude schreibt einen Entwurf → Vorschau mit
+#      ✅ Senden · ✏️ Ändern · 🗑 Verwerfen. Es geht NICHTS raus ohne Tipp auf „Senden“.
+#  „Ändern: kürzer, per Du“      → nach Tipp auf ✏️ Ändern
+#  Neue Mails im Postfach        → alle 5 Minuten per Telegram an alle aus input_text.telegram_empfaenger, mit ↩ Antworten
+#  „Antwort: Danke, passt …“     → nach Tipp auf ↩ Antworten
+#
+# Das Passwort steht NUR im Helfer input_text.familie_mail_passwort (nicht im Repository – das ist öffentlich).
+
+input_text:
+  familie_mail_passwort:
+    name: Familien-Mail Passwort
+    mode: password
+    max: 255
+    icon: mdi:email-lock
+
+shell_command:
+  mail: python3 /config/claude_tools/mail.py {{ wert }}
+
+script:
+  familie_mail_test:
+    alias: "Familien-Mail: Test-Mail schicken"
+    icon: mdi:email-check
+    fields:
+      an:
+        name: An (leer = an das Postfach selbst)
+        selector:
+          text:
+    sequence:
+      - action: shell_command.mail
+        data:
+          wert: >-
+            {{ {'aktion': 'test', 'an': an | default('', true),
+                'passwort': states('input_text.familie_mail_passwort') | string} | to_json | base64_encode }}
+        response_variable: ergebnis
+      - action: persistent_notification.create
+        data:
+          title: Familien-Mail Test
+          message: "{{ ergebnis.stdout | default(ergebnis) }}"
+
+automation:
+  - id: familie_mail_telegram_text
+    alias: "Familien-Mail: Telegram-Befehle (Mail an / Antwort / Ändern)"
+    mode: queued
+    max: 10
+    triggers:
+      - trigger: event
+        event_type: telegram_text
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ (trigger.event.data.text | default('') | string)
+             is match('(?is)^\s*(?:bitte\s+)?(?:(?:schreib|schick|send)\w*\s+(?:bitte\s+)?(?:eine?\s+)?)?(?:e-?mail|mail)\s+an\s+\S+@\S+|^\s*(?:antwort|ändern|aendern)\s*:') }}
+    actions:
+      - variables:
+          t: "{{ trigger.event.data.text | string }}"
+          mail_an: >-
+            {{ (t | regex_findall('(?is)(?:e-?mail|mail)\s+an\s+<?([^\s<>:,;]+@[^\s<>:,;]+?)>?\s*[:,;]?\s+(.+)$') | first | default(['', ''], true)) }}
+          art: >-
+            {{ 'antwort' if t is match('(?i)^\s*antwort\s*:') else ('aendern' if t is match('(?i)^\s*(ändern|aendern)\s*:') else 'entwurf') }}
+      - action: shell_command.mail
+        continue_on_error: true
+        data:
+          wert: >-
+            {{ {'aktion': art, 'chat': trigger.event.data.chat_id, 'von': trigger.event.data.from_first | default('', true),
+                'an': mail_an[0] if art == 'entwurf' else '',
+                'wunsch': (mail_an[1] if art == 'entwurf' else t.split(':', 1)[1]) | trim} | to_json | base64_encode }}
+
+  - id: familie_mail_knoepfe
+    alias: "Familien-Mail: Knöpfe (Senden, Ändern, Verwerfen, Antworten)"
+    mode: queued
+    max: 10
+    triggers:
+      - trigger: event
+        event_type: telegram_callback
+    conditions:
+      - condition: template
+        value_template: "{{ (trigger.event.data.data | default('')) is match('^/(ms|mae|mv|mr)_\\w+$') }}"
+    actions:
+      - action: telegram_bot.answer_callback_query
+        continue_on_error: true
+        data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
+          callback_query_id: "{{ trigger.event.data.id }}"
+          message: "{{ 'Wird gesendet …' if trigger.event.data.data.startswith('/ms_') else 'OK' }}"
+      # Knöpfe unter der Nachricht weg, damit nicht zweimal gesendet wird
+      - if: "{{ trigger.event.data.data is match('^/(ms|mv)_') }}"
+        then:
+          - action: telegram_bot.edit_replymarkup
+            continue_on_error: true
+            data:
+              config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
+              chat_id: "{{ trigger.event.data.chat_id }}"
+              message_id: "{{ trigger.event.data.message.message_id }}"
+              inline_keyboard: []
+      - action: shell_command.mail
+        continue_on_error: true
+        data:
+          wert: >-
+            {{ {'aktion': 'knopf', 'data': trigger.event.data.data, 'chat': trigger.event.data.chat_id,
+                'id': trigger.event.data.data.split('_', 1)[1],
+                'passwort': states('input_text.familie_mail_passwort') | string} | to_json | base64_encode }}
+
+  - id: familie_mail_abholen
+    alias: "Familien-Mail: Posteingang alle 5 Minuten prüfen"
+    mode: single
+    triggers:
+      - trigger: time_pattern
+        minutes: /5
+    conditions:
+      - condition: template
+        value_template: "{{ (states('input_text.familie_mail_passwort') | string | length) >= 4 and states('input_text.familie_mail_passwort') not in ['unknown', 'unavailable'] }}"
+    actions:
+      - action: shell_command.mail
+        continue_on_error: true
+        data:
+          wert: >-
+            {{ {'aktion': 'abholen', 'passwort': states('input_text.familie_mail_passwort') | string,
+                'chats': (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list} | to_json | base64_encode }}

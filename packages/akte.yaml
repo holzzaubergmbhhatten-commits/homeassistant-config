@@ -176,6 +176,11 @@ automation:
       - trigger: event
         event_type: telegram_text
     conditions:
+      # Familien-Mail (Mail an … / Antwort: / Ändern:) beantwortet packages/mail.yaml
+      - condition: template
+        value_template: >-
+          {{ not ((trigger.event.data.text | default('') | string)
+             is match('(?is)^\s*(?:bitte\s+)?(?:(?:schreib|schick|send)\w*\s+(?:bitte\s+)?(?:eine?\s+)?)?(?:e-?mail|mail)\s+an\s+\S+@\S+|^\s*(?:antwort|ändern|aendern)\s*:')) }}
       - condition: template
         # auch "Die gehören alle zusammen, bitte Kosten addieren …" (mehrere Belege → ein Vorgang mit Kostenaufstellung)
         value_template: >-
