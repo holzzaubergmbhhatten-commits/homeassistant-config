@@ -44,6 +44,7 @@ STATUS = "/config/mail_status.json"      # je Chat: worauf gerade „Antwort:“
 SIGNATUR_DATEI = "/config/mail_signatur.json"   # Telefonnummern usw. – nur lokal, nicht im (öffentlichen) Repository
 WAPPEN = "/config/akte_wappen.jpg"                # dasselbe Wappen wie im Briefkopf der Akte
 GRUSS = "Viele Grüße"
+GELOESCHT = "/config/mail_geloescht.json"        # auf der Mail-Seite gelöscht (Papierkorb) – im Postfach bei Strato bleibt alles
 KONTAKT_DATEI = "/config/mail_kontakt.json"     # kontakt@: zuletzt gesehene Mails (Eingang + Gesendet), nur zum Anzeigen
 # Zwei Postfächer: familie@ (Telegram + Seite) und kontakt@ der Ferienwohnung (nur Seite, wird NUR gelesen – nichts als gelesen markiert)
 KONTEN = {
@@ -410,6 +411,14 @@ def seite(auftrag):
         if r.get("fehler") == "kein_passwort":
             r["fehler"] = "Das Mail-Passwort fehlt (Helfer „Familien-Mail Passwort“ bzw. „Kontakt-Mail Passwort“)."
         return r
+    if was in ("loeschen", "wiederherstellen"):
+        g = laden(GELOESCHT, {})
+        if was == "loeschen":
+            g[i] = time.time()
+        else:
+            g.pop(i, None)
+        speichern(GELOESCHT, dict(sorted(g.items(), key=lambda x: x[1])[-2000:]))
+        auftrag = dict(auftrag, was="liste")   # gleich die neue Liste zurückgeben
     if was == "pruefen":   # nur anmelden (IMAP), nichts lesen, nichts senden
         r = {}
         for k, v in KONTEN.items():
@@ -455,7 +464,12 @@ def seite(auftrag):
     aus.sort(key=lambda e: e.get("zeit") or 0, reverse=True)
     kurz = lambda e: {k: e.get(k) for k in ("id", "konto", "von", "von_adresse", "an", "betreff", "datum", "zeit", "antwort_auf")} | {
         "text": (e.get("text") or "")[:6000], "anhaenge": [os.path.basename(x) for x in e.get("anhaenge") or []]}
-    return {"ok": True, "konten": {k: v["adresse"] for k, v in KONTEN.items()},
+    weg = laden(GELOESCHT, {})
+    korb = [dict(kurz(e), ordner="eingang") for e in ein if e.get("id") in weg] + [dict(kurz(e), ordner="gesendet") for e in aus if e.get("id") in weg]
+    korb.sort(key=lambda e: weg.get(e["id"], 0), reverse=True)
+    ein = [e for e in ein if e.get("id") not in weg]
+    aus = [e for e in aus if e.get("id") not in weg]
+    return {"ok": True, "konten": {k: v["adresse"] for k, v in KONTEN.items()}, "papierkorb": korb[:250],
             "kontakt_stand": kd.get("stand"), "kontakt_fehler": kd.get("fehler", ""),
             "eingang": [kurz(e) for e in ein[:250]], "gesendet": [kurz(e) for e in aus[:250]],
             "entwuerfe": [dict(e, konto=konto_von(e.get("konto"))) for e in sorted(laden(ENTWUERFE, {}).values(), key=lambda e: e.get("zeit") or 0, reverse=True)]}

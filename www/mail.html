@@ -71,7 +71,7 @@
   <div class="liste" id="liste"><div class="leer">Lade …</div></div>
 </main>
 <script>
-let daten = { eingang: [], gesendet: [], entwuerfe: [] }, reiter = "eingang", offen = {}, eingabe = {}, postfach = "alle";
+let daten = { eingang: [], gesendet: [], entwuerfe: [], papierkorb: [] }, reiter = "eingang", offen = {}, eingabe = {}, postfach = "alle";
 const KONTO = { familie: "Familie", kontakt: "Ferienwohnung" };
 const marke = e => `<span class="konto ${e.konto === "kontakt" ? "kontakt" : "familie"}">${KONTO[e.konto] || "Familie"}</span>`;
 function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
@@ -103,18 +103,18 @@ async function neuLaden() {
 }
 function zeichnen() {
   const imFach = e => postfach === "alle" || (e.konto || "familie") === postfach;
-  const n = { entwuerfe: daten.entwuerfe.filter(imFach).length, eingang: daten.eingang.filter(imFach).length, gesendet: daten.gesendet.filter(imFach).length };
+  const n = { entwuerfe: daten.entwuerfe.filter(imFach).length, eingang: daten.eingang.filter(imFach).length, gesendet: daten.gesendet.filter(imFach).length, papierkorb: (daten.papierkorb || []).filter(imFach).length };
   document.getElementById("postfach").innerHTML = [["alle", "Alle Postfächer"], ["familie", "👪 Familie"], ["kontakt", "🏡 Ferienwohnung"]]
     .map(([k, t]) => `<button data-fach="${k}" class="${postfach === k ? "an" : ""}">${t}</button>`).join("")
     + (daten.kontakt_fehler ? ` <span class="klein" style="color:var(--rot)">kontakt@: ${esc(daten.kontakt_fehler)}</span>`
        : !daten.kontakt_stand ? ` <span class="klein">kontakt@: Passwort im Helfer „Kontakt-Mail Passwort“ eintragen</span>` : "");
-  document.getElementById("reiter").innerHTML = [["entwuerfe", "📝 Entwürfe"], ["eingang", "📥 Posteingang"], ["gesendet", "📤 Gesendet"]]
+  document.getElementById("reiter").innerHTML = [["entwuerfe", "📝 Entwürfe"], ["eingang", "📥 Posteingang"], ["gesendet", "📤 Gesendet"], ["papierkorb", "🗑 Papierkorb"]]
     .map(([k, t]) => `<button data-reiter="${k}" class="${reiter === k ? "an" : ""}">${t} (${n[k]})</button>`).join("");
   const q = document.getElementById("suche").value.trim().toLowerCase();
   const passt = e => !q || JSON.stringify(e).toLowerCase().includes(q);
   const liste = (daten[reiter] || []).filter(imFach).filter(passt);
   const el = document.getElementById("liste");
-  if (!liste.length) { el.innerHTML = `<div class="leer">${q ? "Nichts gefunden." : reiter === "entwuerfe" ? "Keine offenen Entwürfe." : "Noch keine Mails."}</div>`; return; }
+  if (!liste.length) { el.innerHTML = `<div class="leer">${q ? "Nichts gefunden." : reiter === "entwuerfe" ? "Keine offenen Entwürfe." : reiter === "papierkorb" ? "Papierkorb ist leer." : "Noch keine Mails."}</div>`; return; }
   el.innerHTML = liste.map(e => karte(e)).join("");
   for (const [k, v] of Object.entries(eingabe)) { const t = document.getElementById("t_" + k); if (t) t.value = v; }
 }
@@ -140,12 +140,22 @@ function karte(e) {
       ${(e.anhaenge || []).length ? `<div class="anh">📎 ${e.anhaenge.map(esc).join(", ")} <span class="klein">${e.konto === "kontakt" ? "(im Mailprogramm öffnen)" : "(kamen per Telegram)"}</span></div>` : ""}
       ${offen["an_" + e.id] ? feld("antworten", "Was soll ich antworten? In eigenen Worten, z. B. „Danke, Freitag passt“") :
       `<div class="aktionen"><button class="knopf" data-auf="${e.id}">${auf ? "Weniger" : "Ganz lesen"}</button>
-        <button class="knopf gruen" data-auf="an_${e.id}">↩ Antworten</button></div>`}</div>`;
+        <button class="knopf gruen" data-auf="an_${e.id}">↩ Antworten</button>
+        <button class="knopf rot" data-tun="loeschen" data-id="${e.id}">🗑 Löschen</button></div>`}</div>`;
+  }
+  if (reiter === "papierkorb") {
+    const ein = e.ordner === "eingang";
+    return `<div class="eintrag"><div class="zeile"><b>${esc(e.betreff)}</b><span class="wer">${zeit(e.zeit, e.datum)}</span></div>
+      <div class="wer">${marke(e)}${ein ? "Von: " + esc(e.von) : "An: " + esc(e.an)} · aus ${ein ? "Posteingang" : "Gesendet"}</div>
+      <div class="${textCls}" data-auf="${e.id}">${esc(e.text)}</div>
+      <div class="aktionen"><button class="knopf" data-auf="${e.id}">${auf ? "Weniger" : "Ganz lesen"}</button>
+        <button class="knopf gruen" data-tun="wiederherstellen" data-id="${e.id}">↩ Wiederherstellen</button></div></div>`;
   }
   return `<div class="eintrag"><div class="zeile"><b>${esc(e.betreff)}</b><span class="wer">${zeit(e.zeit)}</span></div>
     <div class="wer">${marke(e)}An: ${esc(e.an)}${e.von && e.konto !== "kontakt" ? " · von " + esc(e.von) : ""}</div>
     <div class="${textCls}" data-auf="${e.id}">${esc(e.text)}</div>
-    <div class="aktionen"><button class="knopf" data-auf="${e.id}">${auf ? "Weniger" : "Ganz lesen"}</button></div></div>`;
+    <div class="aktionen"><button class="knopf" data-auf="${e.id}">${auf ? "Weniger" : "Ganz lesen"}</button>
+      <button class="knopf rot" data-tun="loeschen" data-id="${e.id}">🗑 Löschen</button></div></div>`;
 }
 function neuFormular(an) {
   const b = document.getElementById("neuBox");
@@ -199,6 +209,10 @@ document.addEventListener("click", async ev => {
   delete offen["ae_" + id]; delete offen["an_" + id]; delete eingabe[`${tun}_${id}`];
   if (tun === "senden") melden(`✅ Gesendet an ${r.an}`);
   if (tun === "verwerfen") melden("🗑 Entwurf verworfen");
+  if (tun === "loeschen" || tun === "wiederherstellen") {
+    melden(tun === "loeschen" ? "🗑 In den Papierkorb gelegt (im Postfach bei Strato bleibt sie)" : "↩ Wiederhergestellt");
+    if (r.eingang) { daten = r; zeichnen(); return; }
+  }
   if (tun === "antworten" || tun === "aendern") { reiter = "entwuerfe"; melden(r.hinweis); later(); }
   neuLaden();
 });

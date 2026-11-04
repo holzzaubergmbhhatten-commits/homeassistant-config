@@ -66,7 +66,7 @@ script:
       - action: shell_command.mail
         data:
           wert: >-
-            {{ {'aktion': 'seite', 'was': was if was in ['liste', 'senden', 'verwerfen', 'neu', 'antworten', 'aendern', 'kontakt_jetzt', 'pruefen'] else 'liste',
+            {{ {'aktion': 'seite', 'was': was if was in ['liste', 'senden', 'verwerfen', 'neu', 'antworten', 'aendern', 'kontakt_jetzt', 'pruefen', 'loeschen', 'wiederherstellen'] else 'liste',
                 'id': id | default('', true), 'an': an | default('', true), 'text': text | default('', true), 'wer': wer | default('', true),
                 'konto': konto | default('familie', true),
                 'chat': (states('input_text.telegram_empfaenger') | string).split(';') | first | trim,
