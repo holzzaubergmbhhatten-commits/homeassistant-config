@@ -1,0 +1,47 @@
+# Preise für die Kosten auf der Seite „Klima & Energie“ (www/energie.html) – alle brutto.
+# Quelle: Akte (Fünfhauser Weg 7). Werte einmalig von Claude gesetzt (ohne „initial“, damit eigene Änderungen einen Neustart überleben);
+# bei neuer Rechnung / Preisänderung unter Einstellungen → Geräte & Dienste → Helfer anpassen. Steht ein Wert auf 0, nimmt die Seite die Zahlen unten.
+# - Strom: EWE Zuhause+ Grünstrom 12, Vertrag vom 28.01.2026 (Preisgarantie bis 28.01.2027): 27,15 ct/kWh, 233,27 €/Jahr
+# - Einspeisung: EWE Netz, PV 11,07 kWp, Inbetriebnahme 10.10.2024: 8,03 ct (bis 10 kWp) / 6,95 ct (Rest) → Mittel ca. 7,93 ct
+# - Trinkwasser: OOWV ab 01.01.2026: 1,70 €/m³, Grundpreis 8,66 €/Monat (Abwasser: Kleinkläranlage, feste Jahresgebühr, nicht je m³)
+input_number:
+  strom_arbeitspreis:
+    name: Strom Arbeitspreis
+    unit_of_measurement: €/kWh
+    min: 0
+    max: 1
+    step: 0.0001
+    mode: box
+    icon: mdi:flash
+  strom_grundpreis_jahr:
+    name: Strom Grundpreis pro Jahr
+    unit_of_measurement: €
+    min: 0
+    max: 1000
+    step: 0.01
+    mode: box
+    icon: mdi:flash-outline
+  strom_einspeiseverguetung:
+    name: Einspeisevergütung PV
+    unit_of_measurement: €/kWh
+    min: 0
+    max: 1
+    step: 0.0001
+    mode: box
+    icon: mdi:solar-power
+  wasser_preis:
+    name: Trinkwasser Preis
+    unit_of_measurement: €/m³
+    min: 0
+    max: 20
+    step: 0.01
+    mode: box
+    icon: mdi:water
+  wasser_grundpreis_monat:
+    name: Trinkwasser Grundpreis pro Monat
+    unit_of_measurement: €
+    min: 0
+    max: 100
+    step: 0.01
+    mode: box
+    icon: mdi:water-outline
