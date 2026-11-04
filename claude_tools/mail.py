@@ -275,8 +275,20 @@ def text_aus(nachricht):
         t = re.sub(r"<[^>]+>", " ", t)
         import html as h
         t = h.unescape(t)
-    t = re.sub(r"[ \t]+", " ", t)
-    return re.sub(r"\n\s*\n\s*\n+", "\n\n", t).strip()
+    return text_aufraeumen(t)
+
+
+def text_aufraeumen(t):
+    """Outlook & Co.: „<https://…> www…“-Dopplungen weg, Leerzeile nach jeder Zeile zusammenziehen."""
+    t = re.sub(r"[ \t]*<(?:https?:|mailto:)[^>\s]+>[ \t]*\n?[ \t]*", "", t)
+    t = re.sub(r"[ \t]+", " ", t).replace("\r", "")
+    t = re.sub(r"\n[ \t]+", "\n", t)
+    t = re.sub(r"\n\s*\n\s*\n+", "\n\n", t).strip()
+    zeilen = t.split("\n")
+    leer = sum(1 for z in zeilen if not z.strip())
+    if len(zeilen) > 8 and leer >= 0.35 * len(zeilen):   # fast jede zweite Zeile leer → Leerzeilen raus
+        t = re.sub(r"\n\n(?=\S)", "\n", t)
+    return t
 
 
 def bezug_laden(i):
@@ -295,6 +307,63 @@ def ordner_finden(im, art):
         if re.search(muster[0], z) or re.search(muster[1], name, re.I):
             return name
     return None
+
+
+ANHANG_DIR = "/config/mail_anhang_cache"
+
+
+def anhang(auftrag):
+    """Anhang Nr. nr der Mail id in Stücken (Base64, 150 kB je Stück) – für „📎 öffnen“ auf der Mail-Seite.
+    familie@: liegt schon in /config/mail_eingang/<id>/; kontakt@: einmal per IMAP holen (nur lesen) und zwischenspeichern."""
+    i, nr, ab = auftrag.get("id") or "", int(auftrag.get("nr") or 0), max(0, int(auftrag.get("ab") or 0))
+    if not re.match(r"^[\w-]+$", i):
+        return {"ok": False, "fehler": "ungültig"}
+    os.makedirs(ANHANG_DIR, exist_ok=True)
+    pfad, name = os.path.join(ANHANG_DIR, f"{i}_{nr}"), None
+    e = laden(EINGANG, {}).get(i)
+    if e:
+        liste = e.get("anhaenge") or []
+        if nr >= len(liste):
+            return {"ok": False, "fehler": "Anhang nicht da"}
+        pfad, name = liste[nr], os.path.basename(liste[nr])
+    elif not os.path.exists(pfad):
+        kd = laden(KONTAKT_DATEI, {})
+        art = "ein" if i.startswith("ke") else "aus"
+        if i not in kd.get(art, {}):
+            return {"ok": False, "fehler": "Mail nicht gefunden"}
+        pw = auftrag.get("passwort_kontakt") or ""
+        if len(pw) < 4:
+            return {"ok": False, "fehler": "Kontakt-Mail Passwort fehlt"}
+        with imaplib.IMAP4_SSL(*IMAP, timeout=60) as im:
+            im.login(KONTEN["kontakt"]["adresse"], pw)
+            ordner = "INBOX" if art == "ein" else (ordner_finden(im, "sent") or "Sent")
+            im.select(f'"{ordner}"', readonly=True)
+            _, roh = im.uid("fetch", i[2:], "(BODY.PEEK[])")
+            teile = [x for x in roh if isinstance(x, tuple)]
+            if not teile:
+                return {"ok": False, "fehler": "Mail nicht mehr im Postfach"}
+            msg = email.message_from_bytes(teile[0][1], policy=email.policy.default)
+            anh = list(msg.iter_attachments())
+            if nr >= len(anh):
+                return {"ok": False, "fehler": "Anhang nicht da"}
+            with open(pfad, "wb") as f:
+                f.write(anh[nr].get_payload(decode=True) or b"")
+            with open(pfad + ".name", "w", encoding="utf-8") as f:
+                f.write(anh[nr].get_filename() or "Anhang")
+    if not name:
+        try:
+            name = open(pfad + ".name", encoding="utf-8").read()
+        except OSError:
+            name = "Anhang"
+    if not os.path.exists(pfad):
+        return {"ok": False, "fehler": "Anhang nicht da"}
+    gesamt = os.path.getsize(pfad)
+    with open(pfad, "rb") as f:
+        f.seek(ab)
+        roh = f.read(150_000)
+    import mimetypes
+    return {"ok": True, "name": name, "typ": mimetypes.guess_type(name)[0] or "application/octet-stream", "gesamt": gesamt,
+            "daten": base64.b64encode(roh).decode("ascii"), "ende": ab + len(roh) >= gesamt}
 
 
 def endgueltig_loeschen(e, pw):
@@ -446,6 +515,8 @@ def seite(auftrag):
         if r.get("fehler") == "kein_passwort":
             r["fehler"] = "Das Mail-Passwort fehlt (Helfer „Familien-Mail Passwort“ bzw. „Kontakt-Mail Passwort“)."
         return r
+    if was == "anhang":
+        return anhang(auftrag)
     if was == "endgueltig":
         korb = {e["id"]: e for e in seite(dict(auftrag, was="liste")).get("papierkorb", [])}
         e = korb.get(i)
@@ -524,7 +595,7 @@ def seite(auftrag):
     aus += [e for e in kd.get("aus", {}).values() if e.get("message_id") not in bekannt]
     aus.sort(key=lambda e: e.get("zeit") or 0, reverse=True)
     kurz = lambda e: {k: e.get(k) for k in ("id", "konto", "von", "von_adresse", "an", "betreff", "datum", "zeit", "antwort_auf")} | {
-        "text": (e.get("text") or "")[:6000], "anhaenge": [os.path.basename(x) for x in e.get("anhaenge") or []]}
+        "text": text_aufraeumen(e.get("text") or "")[:6000], "anhaenge": [os.path.basename(x) for x in e.get("anhaenge") or []]}
     weg = laden(GELOESCHT, {})
     korb = [dict(kurz(e), ordner="eingang") for e in ein if e.get("id") in weg] + [dict(kurz(e), ordner="gesendet") for e in aus if e.get("id") in weg]
     korb.sort(key=lambda e: weg.get(e["id"], 0), reverse=True)

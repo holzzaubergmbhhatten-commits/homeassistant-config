@@ -52,6 +52,13 @@
   .konto.familie { background: #536b4522; color: var(--gruen); }
   .konto.kontakt { background: #b8902f22; color: #8a6a1f; }
   select.feld { width: auto; }
+  .anzeige { position: fixed; inset: 0; background: rgba(0,0,0,.75); display: none; flex-direction: column; z-index: 50; }
+  .anzeige.offen { display: flex; }
+  .anzeige .leiste { display: flex; gap: 8px; align-items: center; padding: 10px 12px; color: #fff; }
+  .anzeige .leiste b { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .anzeige .inhalt { flex: 1; background: #fff; margin: 0 10px 10px; border-radius: 12px; overflow: auto; display: flex; align-items: flex-start; justify-content: center; }
+  .anzeige img { max-width: 100%; height: auto; }
+  .anzeige iframe { width: 100%; height: 100%; border: 0; }
   .neu { background: var(--karte); border-radius: 14px; padding: 14px; display: grid; gap: 8px; margin-bottom: 12px; box-shadow: 0 0 0 2px var(--gruen); }
 </style>
 </head>
@@ -70,6 +77,7 @@
   <input class="suche" id="suche" placeholder="Suchen (Name, Adresse, Betreff, Text) …">
   <div class="liste" id="liste"><div class="leer">Lade …</div></div>
 </main>
+<div class="anzeige" id="anzeige"><div class="leiste"><b id="anzeigeName"></b><a class="knopf" id="anzeigeLaden" download>⬇ Speichern</a><button class="knopf" id="anzeigeZu">✕</button></div><div class="inhalt" id="anzeigeInhalt"></div></div>
 <script>
 let daten = { eingang: [], gesendet: [], entwuerfe: [], papierkorb: [] }, reiter = "eingang", offen = {}, eingabe = {}, postfach = "alle";
 const KONTO = { familie: "Familie", kontakt: "Ferienwohnung" };
@@ -143,7 +151,7 @@ function karte(e) {
     return `<div class="eintrag ein"><div class="zeile"><b>${esc(e.betreff)}</b><span class="wer">${zeit(e.zeit, e.datum)}</span></div>
       <div class="wer">${marke(e)}Von: ${esc(e.von)}</div>
       <div class="${textCls}" data-auf="${e.id}">${esc(e.text)}</div>
-      ${(e.anhaenge || []).length ? `<div class="anh">📎 ${e.anhaenge.map(esc).join(", ")} <span class="klein">${e.konto === "kontakt" ? "(im Mailprogramm öffnen)" : "(kamen per Telegram)"}</span></div>` : ""}
+      ${(e.anhaenge || []).length ? `<div class="aktionen">${e.anhaenge.map((a, nr) => `<button class="knopf" data-anh="${e.id}" data-nr="${nr}">📎 ${esc(a)}</button>`).join("")}</div>` : ""}
       ${offen["an_" + e.id] ? feld("antworten", "Was soll ich antworten? In eigenen Worten, z. B. „Danke, Freitag passt“") :
       `<div class="aktionen"><button class="knopf" data-auf="${e.id}">${auf ? "Weniger" : "Ganz lesen"}</button>
         <button class="knopf gruen" data-auf="an_${e.id}">↩ Antworten</button>
@@ -182,6 +190,27 @@ document.addEventListener("click", async ev => {
     b.textContent = "…"; const r = await aktion({ was: "kontakt_jetzt" }).catch(() => null); b.textContent = "↻";
     if (r && r.ok) { daten = r; zeichnen(); } else neuLaden();
     return;
+  }
+  if (b.id === "anzeigeZu") { document.getElementById("anzeige").classList.remove("offen"); document.getElementById("anzeigeInhalt").innerHTML = ""; return; }
+  if (b.dataset.anh) {
+    const alt = b.textContent; b.textContent = "⏳ lade …"; b.disabled = true;
+    try {
+      const teile = []; let ab = 0, ende = false, info = null;
+      while (!ende) {
+        const a = await aktion({ was: "anhang", id: b.dataset.anh, nr: +b.dataset.nr, ab });
+        if (!a.ok) throw new Error(a.fehler || "ging nicht");
+        info = a; const bin = atob(a.daten), bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        teile.push(bytes); ab += bytes.length; ende = a.ende || !bytes.length;
+      }
+      const url = URL.createObjectURL(new Blob(teile, { type: info.typ }));
+      document.getElementById("anzeigeName").textContent = info.name;
+      const l = document.getElementById("anzeigeLaden"); l.href = url; l.download = info.name;
+      document.getElementById("anzeigeInhalt").innerHTML = info.typ.startsWith("image/") ? `<img src="${url}" alt="">`
+        : /pdf|text/.test(info.typ) ? `<iframe src="${url}"></iframe>` : `<div class="leer">Vorschau geht für diese Datei nicht – bitte „⬇ Speichern“.</div>`;
+      document.getElementById("anzeige").classList.add("offen");
+    } catch (err) { melden("Anhang: " + (err.message || err), true); }
+    b.textContent = alt; b.disabled = false; return;
   }
   if (b.dataset.fach) { postfach = b.dataset.fach; zeichnen(); return; }
   if (b.id === "neuKnopf") { neuFormular(""); return; }
