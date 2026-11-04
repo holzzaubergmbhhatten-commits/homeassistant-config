@@ -477,6 +477,18 @@ views:
         columns: 4
         rows: 2
     - type: tile
+      entity: input_boolean.hausalarm
+      name: Hausalarm
+      icon: mdi:alarm-light
+      color: red
+      tap_action:
+        action: toggle
+        confirmation:
+          text: Hausalarm umschalten? (AN = alle Lichter an, Sirene und Ansage auf allen Lautsprechern, Telegram an alle)
+      grid_options:
+        columns: full
+        rows: 1
+    - type: tile
       entity: input_boolean.urlaubsmodus
       name: Urlaubsmodus
       icon: mdi:bag-suitcase

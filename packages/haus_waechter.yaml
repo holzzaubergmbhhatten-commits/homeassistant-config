@@ -339,11 +339,14 @@ automation:
         data:
           text: "{{ text }}"
           minuten: 240
-      - action: script.jarvis_durchsage
-        continue_on_error: true
-        data:
-          text: "{{ ansage }}"
-          lautstaerke: 60
+      # bei Rauch übernimmt der Hausalarm (hausalarm.yaml) Sirene, Ansage und Licht
+      - if: "{{ trigger.id == 'wasser' }}"
+        then:
+          - action: script.jarvis_durchsage
+            continue_on_error: true
+            data:
+              text: "{{ ansage }}"
+              lautstaerke: 60
       # alle 10 Minuten wiederholen, solange der Alarm anhält (höchstens 4-mal)
       - repeat:
           sequence:

@@ -1,0 +1,233 @@
+# Hausalarm: alle Lichter an + Sirene und Ansage auf allen Lautsprechern + Telegram.
+# Auslösen: Rauchmelder (automatisch), Knopf „Hausalarm“ auf dem Monitor, Sprachbefehl „Alarm“ / „Feueralarm“.
+# Beenden: Knopf auf dem Monitor, Sprachbefehl „Alarm aus“, Knopf in der Telegram-Nachricht.
+# Rauchmelder: jeder Melder mit device_class smoke wird über binary_sensor.rauchmelder_alarm (haus_waechter.yaml) erkannt.
+
+input_boolean:
+  hausalarm:
+    name: Hausalarm
+    icon: mdi:alarm-light
+
+input_text:
+  hausalarm_grund:
+    name: Hausalarm Grund
+    max: 255
+
+script:
+  hausalarm_ausloesen:
+    alias: Hausalarm auslösen
+    description: >-
+      Löst den Hausalarm aus: alle Lichter gehen an, auf allen Lautsprechern kommt eine Sirene mit Ansage, und
+      die Familie bekommt eine Telegram-Nachricht. NUR benutzen, wenn der Nutzer ausdrücklich „Alarm“, „Feueralarm“,
+      „Hausalarm“ oder „Alarm auslösen“ sagt – nicht für Wecker, Timer oder Erinnerungen.
+    icon: mdi:alarm-light
+    mode: single
+    fields:
+      grund:
+        name: Grund
+        description: Kurz, warum (z. B. „Feuer in der Küche“). Leer lassen, wenn nichts gesagt wurde.
+        selector:
+          text:
+    sequence:
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.hausalarm_grund
+        data:
+          value: "{{ (grund | default('', true) | string | trim)[:250] or 'von Hand ausgelöst' }}"
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.hausalarm
+      - variables:
+          ok:
+            ergebnis: Hausalarm ausgelöst
+      - stop: fertig
+        response_variable: ok
+
+  hausalarm_beenden:
+    alias: Hausalarm beenden
+    description: >-
+      Beendet den Hausalarm (Sirene und Ansagen hören auf, Lichter bleiben an). Benutzen, wenn der Nutzer
+      „Alarm aus“, „Alarm stopp“, „Alarm beenden“ oder „Fehlalarm“ sagt.
+    icon: mdi:alarm-light-off
+    mode: single
+    sequence:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.hausalarm
+      # Shelly-Rauchmelder stummschalten, falls die Integration dafür einen Knopf anbietet
+      - variables:
+          stumm: >-
+            {{ states.button | map(attribute='entity_id') | select('search', 'smoke|rauch')
+               | select('search', 'mute|stumm') | list }}
+      - if: "{{ stumm | count > 0 }}"
+        then:
+          - action: button.press
+            continue_on_error: true
+            target:
+              entity_id: "{{ stumm }}"
+      - variables:
+          ok:
+            ergebnis: Hausalarm beendet
+      - stop: fertig
+        response_variable: ok
+
+automation:
+  # Rauchmelder löst automatisch den Hausalarm aus
+  - id: hausalarm_bei_rauch
+    alias: "Hausalarm: bei Rauch auslösen"
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.rauchmelder_alarm
+        to: "on"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.hausalarm
+        state: "off"
+    actions:
+      - action: script.hausalarm_ausloesen
+        data:
+          grund: "Rauchmelder: {{ state_attr('binary_sensor.rauchmelder_alarm', 'melder') or 'unbekannt' }}"
+
+  # Sprachbefehl (Jarvis / Assist) – nur genau diese Sätze, damit „Wecker“ o. Ä. nichts auslöst
+  - id: hausalarm_sprache_an
+    alias: "Hausalarm: Sprachbefehl Alarm"
+    triggers:
+      - trigger: conversation
+        command:
+          - "[Jarvis] Alarm"
+          - "[Jarvis] Feueralarm"
+          - "[Jarvis] Hausalarm"
+          - "[Jarvis] Alarm auslösen"
+          - "[Jarvis] Löse [den] Alarm aus"
+    actions:
+      - action: script.hausalarm_ausloesen
+        data:
+          grund: per Sprachbefehl ausgelöst
+      - set_conversation_response: "Alarm ausgelöst."
+
+  - id: hausalarm_sprache_aus
+    alias: "Hausalarm: Sprachbefehl Alarm aus"
+    triggers:
+      - trigger: conversation
+        command:
+          - "[Jarvis] Alarm (aus|stopp|stop|beenden|ausschalten)"
+          - "[Jarvis] Fehlalarm"
+          - "[Jarvis] Beende [den] Alarm"
+    actions:
+      - action: script.hausalarm_beenden
+      - set_conversation_response: "Alarm beendet."
+
+  # Ablauf, sobald der Hausalarm an ist
+  - id: hausalarm_ablauf
+    alias: "Hausalarm: Licht, Sirene, Ansage, Telegram"
+    mode: restart
+    triggers:
+      - trigger: state
+        entity_id: input_boolean.hausalarm
+        to: "on"
+    actions:
+      - variables:
+          grund: "{{ states('input_text.hausalarm_grund') }}"
+          ist_rauch: "{{ grund is search('Rauch', ignorecase=True) }}"
+          ansage: >-
+            {{ 'Achtung! Feueralarm! ' ~ grund ~ '. Bitte sofort das Haus verlassen!' if ist_rauch
+               else 'Achtung! Hausalarm! Bitte sofort nachsehen!' }}
+          lichter: >-
+            {{ states.light | rejectattr('attributes.entity_id', 'defined')
+               | rejectattr('state', 'eq', 'unavailable') | map(attribute='entity_id') | list }}
+          lautsprecher: "{{ integration_entities('music_assistant') | select('match', 'media_player\\.') | list }}"
+          sirene: "http://192.168.0.191:8123/local/hausalarm.wav"
+      # 1. alle Lichter voll an
+      - action: light.turn_on
+        continue_on_error: true
+        target:
+          entity_id: "{{ lichter }}"
+        data:
+          brightness_pct: 100
+      # 2. Telegram an alle Empfänger, mit Knopf zum Beenden
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
+                chat_id: "{{ repeat.item | int }}"
+                message: "🚨 HAUSALARM – {{ grund }}. Alle Lichter sind an, Sirene läuft."
+                inline_keyboard:
+                  - "🔕 Alarm beenden:/hausalarm_aus"
+      # 3. Monitor
+      - action: script.jarvis_monitor_nachricht
+        continue_on_error: true
+        data:
+          text: "HAUSALARM: {{ grund }}"
+          minuten: 60
+      # 4. Sirene + Ansage im Wechsel, bis der Alarm beendet wird (höchstens ca. 10 Minuten)
+      - repeat:
+          sequence:
+            - action: music_assistant.play_announcement
+              continue_on_error: true
+              target:
+                entity_id: "{{ lautsprecher }}"
+              data:
+                url: "{{ sirene }}"
+                use_pre_announce: false
+                announce_volume: 90
+            - delay: "00:00:07"
+            - condition: state
+              entity_id: input_boolean.hausalarm
+              state: "on"
+            - action: script.jarvis_durchsage
+              continue_on_error: true
+              data:
+                text: "{{ ansage }}"
+                lautstaerke: 85
+          until:
+            - condition: template
+              value_template: "{{ is_state('input_boolean.hausalarm', 'off') or repeat.index >= 20 }}"
+      - if: "{{ is_state('input_boolean.hausalarm', 'on') }}"
+        then:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.hausalarm
+
+  # Ende melden
+  - id: hausalarm_ende
+    alias: "Hausalarm: beendet melden"
+    triggers:
+      - trigger: state
+        entity_id: input_boolean.hausalarm
+        from: "on"
+        to: "off"
+    actions:
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
+                chat_id: "{{ repeat.item | int }}"
+                message: "🔕 Hausalarm beendet. Die Lichter bleiben an."
+
+  # Knopf „Alarm beenden“ in Telegram
+  - id: hausalarm_telegram_knopf
+    alias: "Hausalarm: Telegram-Knopf Alarm beenden"
+    mode: queued
+    triggers:
+      - trigger: event
+        event_type: telegram_callback
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.event.data.data == '/hausalarm_aus' }}"
+    actions:
+      - action: script.hausalarm_beenden
+      - action: telegram_bot.answer_callback_query
+        continue_on_error: true
+        data:
+          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
+          callback_query_id: "{{ trigger.event.data.id }}"
+          message: Alarm beendet
