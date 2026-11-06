@@ -365,14 +365,19 @@ automation:
         continue_on_error: true
         target:
           entity_id: "{{ state_attr('sensor.haus_kennungen', 'warmwasser_einmal') }}"
-      - action: telegram_bot.send_message
-        continue_on_error: true
-        data:
-          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
-          chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
-          message: >-
-            ☀️🚿 Sonnenstrom übrig – die Wärmepumpe heizt jetzt einmal das Warmwasser auf
-            (gerade {{ states(state_attr('sensor.haus_kennungen', 'warmwasser')) | float(0) | round(0) | int }} °C).
+      # an alle Empfänger (Marco und Mirka), nicht nur den ersten
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
+                chat_id: "{{ repeat.item | int }}"
+                message: >-
+                  ☀️🚿 Sonnenstrom übrig – die Wärmepumpe heizt jetzt einmal das Warmwasser auf
+                  (gerade {{ states(state_attr('sensor.haus_kennungen', 'warmwasser')) | float(0) | round(0) | int }} °C).
 
   # ---------- Ausweise & Pässe ----------
   - id: alltag_dokument_telegram
