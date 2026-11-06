@@ -328,17 +328,24 @@ automation:
             {{ f not in [none, ''] and states(f) | float(0) > 0 }}
       - condition: template
         value_template: "{{ lichter | count > 0 or offen | count > 0 or wasser }}"
-      - action: telegram_bot.send_message
-        continue_on_error: true
-        data:
-          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
-          chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
-          message: >-
-            🏠 Alle sind aus dem Haus, aber:
-            {{ ' Licht an: ' ~ (lichter[:6] | join(', ')) ~ ('…' if lichter | count > 6 else '') ~ '.' if lichter }}
-            {{ ' Nicht abgeschlossen: ' ~ (offen | join(', ')) ~ '.' if offen }}
-            {{ ' Es läuft Wasser.' if wasser }}
-            Schreib „Alle Lichter aus“ oder „Schließ die Haustür ab“.
+      # an alle Empfänger (Marco und Mirka)
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+          sequence:
+            - variables:
+                empfaenger: "{{ repeat.item }}"
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
+                chat_id: "{{ empfaenger | int }}"
+                message: >-
+                  🏠 Alle sind aus dem Haus, aber:
+                  {{ ' Licht an: ' ~ (lichter[:6] | join(', ')) ~ ('…' if lichter | count > 6 else '') ~ '.' if lichter }}
+                  {{ ' Nicht abgeschlossen: ' ~ (offen | join(', ')) ~ '.' if offen }}
+                  {{ ' Es läuft Wasser.' if wasser }}
+                  Schreib „Alle Lichter aus“ oder „Schließ die Haustür ab“.
 
   # ---------- Sonnenstrom ins Warmwasser ----------
   - id: alltag_warmwasser_sonne
@@ -434,16 +441,25 @@ automation:
       - repeat:
           for_each: "{{ faellig }}"
           sequence:
-            - action: telegram_bot.send_message
-              continue_on_error: true
-              data:
-                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
-                chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
-                message: >-
-                  🪪 {{ repeat.item.art }} {{ repeat.item.person }} läuft
-                  {{ 'heute ab' if repeat.item.tage <= 0 else 'in ' ~ repeat.item.tage ~ ' Tagen ab' }}
-                  ({{ repeat.item.ablauf[8:10] }}.{{ repeat.item.ablauf[5:7] }}.{{ repeat.item.ablauf[:4] }}).
-                  Termin beim Bürgerbüro machen – ein neuer Pass dauert einige Wochen.
+            - variables:
+                dok: "{{ repeat.item }}"
+            # an alle Empfänger (Marco und Mirka)
+            - repeat:
+                for_each: >-
+                  {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+                sequence:
+                  - variables:
+                      empfaenger: "{{ repeat.item }}"
+                  - action: telegram_bot.send_message
+                    continue_on_error: true
+                    data:
+                      config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
+                      chat_id: "{{ empfaenger | int }}"
+                      message: >-
+                        🪪 {{ dok.art }} {{ dok.person }} läuft
+                        {{ 'heute ab' if dok.tage <= 0 else 'in ' ~ dok.tage ~ ' Tagen ab' }}
+                        ({{ dok.ablauf[8:10] }}.{{ dok.ablauf[5:7] }}.{{ dok.ablauf[:4] }}).
+                        Termin beim Bürgerbüro machen – ein neuer Pass dauert einige Wochen.
             - action: todo.add_item
               continue_on_error: true
               target:

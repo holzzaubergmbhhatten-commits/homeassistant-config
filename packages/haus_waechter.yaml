@@ -279,16 +279,23 @@ automation:
             {{ trigger.to_state.attributes.liste | default([]) | rejectattr('name', 'in', vorher) | list }}
       - condition: template
         value_template: "{{ neu | count > 0 }}"
-      - action: telegram_bot.send_message
-        continue_on_error: true
-        data:
-          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
-          chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
-          message: |-
-            🔋 Batterie tauschen:
-            {%- for b in neu %}
-            • {{ b.name }} – {{ b.wert }}
-            {%- endfor %}
+      # an alle Empfänger (Marco und Mirka)
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+          sequence:
+            - variables:
+                empfaenger: "{{ repeat.item }}"
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
+                chat_id: "{{ empfaenger | int }}"
+                message: |-
+                  🔋 Batterie tauschen:
+                  {%- for b in neu %}
+                  • {{ b.name }} – {{ b.wert }}
+                  {%- endfor %}
 
   - id: haus_batterie_wochen_erinnerung
     alias: "Haus-Wächter: Batterien samstags erinnern"
@@ -302,16 +309,23 @@ automation:
         entity_id: sensor.batterien_schwach
         above: 0
     actions:
-      - action: telegram_bot.send_message
-        continue_on_error: true
-        data:
-          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
-          chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
-          message: |-
-            🔋 Erinnerung – diese Batterien sind noch schwach:
-            {%- for b in state_attr('sensor.batterien_schwach', 'liste') or [] %}
-            • {{ b.name }} – {{ b.wert }}
-            {%- endfor %}
+      # an alle Empfänger (Marco und Mirka)
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+          sequence:
+            - variables:
+                empfaenger: "{{ repeat.item }}"
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
+                chat_id: "{{ empfaenger | int }}"
+                message: |-
+                  🔋 Erinnerung – diese Batterien sind noch schwach:
+                  {%- for b in state_attr('sensor.batterien_schwach', 'liste') or [] %}
+                  • {{ b.name }} – {{ b.wert }}
+                  {%- endfor %}
 
   # ---------- Wasser & Rauch ----------
   - id: haus_wasser_rauch_alarm
@@ -503,16 +517,23 @@ automation:
                   Jeden Abend um 19 Uhr kommt ein kurzer Bericht. Tipp: Wasser in der Conel-App auf „Abwesend“ stellen.
                   {% else %}🏡 Willkommen zurück! Urlaubsmodus ist aus, die Morgen-Ansage läuft wieder.{% endif %}
       # CO-Melder (FireAngel) hängt zu Hause am Kamin und fährt im Wohnwagen mit – Erinnerung an Marco
-      - action: telegram_bot.send_message
-        continue_on_error: true
-        data:
-          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
-          chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
-          message: >-
-            {% if trigger.to_state.state == 'on' %}🚐 Fahrt ihr mit dem Wohnwagen? Dann den CO-Melder (FireAngel) im Wohnzimmer
-            abnehmen und in den Wohnwagen stellen.
-            {% else %}🔥 Den CO-Melder (FireAngel) aus dem Wohnwagen wieder ins Wohnzimmer an den Kamin hängen – bevor der Kamin
-            das nächste Mal brennt. Kurz den Testknopf drücken.{% endif %}
+      # an alle Empfänger (Marco und Mirka)
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+          sequence:
+            - variables:
+                empfaenger: "{{ repeat.item }}"
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
+                chat_id: "{{ empfaenger | int }}"
+                message: >-
+                  {% if trigger.to_state.state == 'on' %}🚐 Fahrt ihr mit dem Wohnwagen? Dann den CO-Melder (FireAngel) im Wohnzimmer
+                  abnehmen und in den Wohnwagen stellen.
+                  {% else %}🔥 Den CO-Melder (FireAngel) aus dem Wohnwagen wieder ins Wohnzimmer an den Kamin hängen – bevor der Kamin
+                  das nächste Mal brennt. Kurz den Testknopf drücken.{% endif %}
 
   - id: haus_urlaub_licht
     alias: "Haus-Wächter: Urlaub – Licht wie bewohnt"
@@ -560,22 +581,29 @@ automation:
         entity_id: input_boolean.urlaubsmodus
         state: "on"
     actions:
-      - action: telegram_bot.send_message
-        continue_on_error: true
-        data:
-          config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
-          chat_id: "{{ (states('input_text.telegram_empfaenger') | string).split(';') | first | trim }}"
-          message: |-
-            🧳 Zuhause alles im Blick:
-            • Wasser: {{ 'ALARM – ' ~ state_attr('binary_sensor.wasser_alarm', 'grund') if is_state('binary_sensor.wasser_alarm', 'on') else 'ruhig' }}
-            • Rauchmelder: {{ 'ALARM' if is_state('binary_sensor.rauchmelder_alarm', 'on') else 'ruhig' }}
-            {%- set r = (states.sensor | selectattr('entity_id', 'match', 'sensor\\.temperatur_') | rejectattr('state', 'in', ['unknown', 'unavailable']) | list) %}
-            {%- if r %}
-            • Innen: {{ r | map(attribute='state') | map('float', 0) | min | round(1) }}–{{ r | map(attribute='state') | map('float', 0) | max | round(1) }} °C
-            {%- endif %}
-            {%- if states('sensor.batterien_schwach') | int(0) > 0 %}
-            • Batterie schwach: {{ (state_attr('sensor.batterien_schwach', 'liste') or []) | map(attribute='name') | join(', ') }}
-            {%- endif %}
+      # an alle Empfänger (Marco und Mirka)
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+          sequence:
+            - variables:
+                empfaenger: "{{ repeat.item }}"
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
+                chat_id: "{{ empfaenger | int }}"
+                message: |-
+                  🧳 Zuhause alles im Blick:
+                  • Wasser: {{ 'ALARM – ' ~ state_attr('binary_sensor.wasser_alarm', 'grund') if is_state('binary_sensor.wasser_alarm', 'on') else 'ruhig' }}
+                  • Rauchmelder: {{ 'ALARM' if is_state('binary_sensor.rauchmelder_alarm', 'on') else 'ruhig' }}
+                  {%- set r = (states.sensor | selectattr('entity_id', 'match', 'sensor\\.temperatur_') | rejectattr('state', 'in', ['unknown', 'unavailable']) | list) %}
+                  {%- if r %}
+                  • Innen: {{ r | map(attribute='state') | map('float', 0) | min | round(1) }}–{{ r | map(attribute='state') | map('float', 0) | max | round(1) }} °C
+                  {%- endif %}
+                  {%- if states('sensor.batterien_schwach') | int(0) > 0 %}
+                  • Batterie schwach: {{ (state_attr('sensor.batterien_schwach', 'liste') or []) | map(attribute='name') | join(', ') }}
+                  {%- endif %}
 
   # ---------- Einmalig: was Claude noch von Marco braucht, als Aufgaben ----------
   - id: haus_aufgaben_fuer_claude
