@@ -70,6 +70,22 @@ views:
       show_forecast: true
       grid_options:
         columns: full
+    # Lautstärke der Morgen-Ansage (packages/jarvis.yaml) – Regler schieben, aufs Symbol tippen spielt eine Probe ab
+    - type: tile
+      entity: input_number.morgen_ansage_lautstaerke
+      name: Lautstärke Morgen-Ansage
+      icon: mdi:volume-medium
+      grid_options:
+        columns: full
+      tap_action:
+        action: none
+      icon_tap_action:
+        action: perform-action
+        perform_action: script.jarvis_morgen_ansage_probe
+      features_position: bottom
+      features:
+      - type: numeric-input
+        style: slider
     - type: markdown
       grid_options:
         columns: full

@@ -21,6 +21,17 @@ input_select:
       - ElevenLabs
       - OpenAI
 
+# Lautstärke der Morgen-Ansage – Regler auf dem Startbildschirm (dashboards/flur.yaml)
+input_number:
+  morgen_ansage_lautstaerke:
+    name: Lautstärke Morgen-Ansage
+    icon: mdi:volume-medium
+    min: 5
+    max: 80
+    step: 5
+    unit_of_measurement: "%"
+    mode: slider
+
 input_boolean:
   # Einschalten = pausieren (neue Schalter starten ausgeschaltet, also ist alles zuerst aktiv)
   morgen_homepod_pause:
@@ -51,6 +62,18 @@ template:
           {{ ('x' ~ v.split('~', 1)[0]) if frisch and '~' in v else ('x' ~ erster if erster else 'keiner') }}
 
 script:
+  # Probe-Ansage für den Lautstärke-Regler auf dem Startbildschirm
+  jarvis_morgen_ansage_probe:
+    alias: Morgen-Ansage Lautstärke testen
+    icon: mdi:play-circle-outline
+    mode: single
+    sequence:
+      - action: script.jarvis_durchsage
+        continue_on_error: true
+        data:
+          text: "So laut ist die Morgen-Ansage."
+          raeume: Badezimmer, Schlafzimmer, Küche
+          lautstaerke: "{{ states('input_number.morgen_ansage_lautstaerke') | int(30) }}"
   jarvis_kamerabild:
     alias: Jarvis Kamerabild schicken
     description: >-
@@ -388,6 +411,7 @@ script:
         data:
           text: "{{ text }}"
           raeume: "{{ raeume }}"
+          lautstaerke: "{{ states('input_number.morgen_ansage_lautstaerke') | int(30) }}"
         response_variable: ergebnis
       # Kein Lautsprecher erreicht → Text wenigstens per Telegram
       - if: "{{ not (ergebnis is defined and ergebnis is mapping and ergebnis.ergebnis | default('') == 'Durchsage gemacht') }}"
