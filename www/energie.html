@@ -40,6 +40,21 @@
   .fluss .bahn { fill: none; stroke: var(--linie); stroke-width: 4; stroke-linecap: round; }
   .fluss .strom { fill: none; stroke-width: 4; stroke-linecap: round; stroke-dasharray: 2 10; animation: fliessen 0.9s linear infinite; }
   @keyframes fliessen { to { stroke-dashoffset: -12; } }
+  /* Anlage (Heizung & Kamin) */
+  .anlage svg { width: 100%; height: auto; display: block; }
+  .anlage text { font-family: inherit; fill: var(--text); }
+  .anlage .n { font-size: 13px; fill: var(--grau); }
+  .anlage .w { font-size: 17px; font-weight: 700; }
+  .anlage .ww { font-size: 22px; font-weight: 700; }
+  .anlage .rohr { fill: none; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; opacity: .35; }
+  .anlage .rohr.an { opacity: 1; }
+  .anlage .fl { fill: none; stroke: #fff; stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 3 14; opacity: .9; animation: fliessen2 1.1s linear infinite; }
+  @keyframes fliessen2 { to { stroke-dashoffset: -17; } }
+  .anlage .flamme { transform-origin: 50% 100%; transform-box: fill-box; animation: flackern .5s ease-in-out infinite alternate; }
+  .anlage .flamme.b { animation-duration: .37s; }
+  @keyframes flackern { from { transform: scaleY(.86) scaleX(1.04); } to { transform: scaleY(1.1) scaleX(.95); } }
+  .anlage .luefter { transform-origin: center; transform-box: fill-box; animation: drehen 1.2s linear infinite; }
+  @keyframes drehen { to { transform: rotate(360deg); } }
   /* Kacheln */
   .kacheln { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
   .kachel { background: var(--bg); border-radius: 14px; padding: 9px 12px; }
@@ -158,7 +173,7 @@ const KW = { gesamt: ["getvol", "getcof"], durchfluss: ["getflo", "getavo"], dru
 const EW = {};           // Wasser: Schlüssel → entity_id
 const E = {};            // Schlüssel → entity_id
 let REG = [], REG_W = [], GERAETE = {}, NETZ_VZ = 1, AKKU_VZ = 1, ERSTER = null, ERSTER_W = null;
-let reiter = "raeume", art = "tag", ref = new Date(), STAT = null, AUSWAHL = null;
+let reiter = (new URLSearchParams(location.search).get("reiter")) || "raeume", art = "tag", ref = new Date(), STAT = null, AUSWAHL = null;
 let GER = [], GSTAT = {}, GSTAT_ZEIT = 0;
 // Preise (brutto) aus den Helfern in packages/kosten.yaml – Ausweichwerte = Rechnungen aus der Akte (EWE 2026, OOWV 2026)
 const PREIS_STANDARD = { strom: 0.2715, grund: 233.27, einsp: 0.0793, wasser: 1.70, wasserGrund: 8.66 };
@@ -1225,6 +1240,108 @@ function geraeteLive() {
   if ($("ggesamt")) $("ggesamt").textContent = fmt(GER.reduce((s, g) => s + (zahl(g.leistung) || 0), 0), 0) + " W";
 }
 
+// ---------- Anlage: Puffer mit Kamin, Wärmepumpe, Fußbodenheizung und Warmwasser ----------
+const A = { kVl: "sensor.kamin_vorlauf", kRl: "sensor.kamin_rucklauf", kAn: "binary_sensor.kamin_heizt",
+  kSpr: "sensor.kamin_spreizung", kLauf: "sensor.kamin_laufzeit_heute", kW: "sensor.kamin_warme_heute", kWw: "sensor.kamin_warme_woche",
+  pOben: "sensor.hwr_warmepumpe_puffertemperatur_oben", wpAn: "binary_sensor.hwr_warmepumpe_kompressor",
+  wpVl: "sensor.hwr_warmepumpe_sekundarkreis_vorlauftemperatur", wpRl: "sensor.hwr_warmepumpe_rucklauftemperatur",
+  wpMod: "sensor.hwr_warmepumpe_verdichtermodulation", wpCop: "sensor.hwr_warmepumpe_leistungszahl", aussen: "sensor.hwr_warmepumpe_aussentemperatur",
+  ww: "sensor.hwr_warmepumpe_ww_speichertemperatur", hkVl: "sensor.hwr_warmepumpe_vorlauftemperatur_2",
+  hkPumpe: "binary_sensor.hwr_warmepumpe_heizkreisumwalzpumpe_2", wwLaden: "binary_sensor.hwr_warmepumpe_ww_aufladung" };
+function tFarbe(t) {             // 25 °C blau → 80 °C rot
+  if (t == null) return "#8E8E93";
+  const x = Math.max(0, Math.min(1, (t - 25) / 55)), a = [64, 140, 255], b = [255, 59, 48];
+  return `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * x)).join(",")})`;
+}
+const an = id => { const s = st(id); return !!s && s.state === "on"; };
+const grad = id => { const v = zahl(id); return v == null ? "–" : fmt(v, 0) + " °C"; };
+function rohr(d, farbe, aktiv) {
+  return `<path d="${d}" class="rohr ${aktiv ? "an" : ""}" stroke="${farbe}"/>${aktiv ? `<path d="${d}" class="fl"/>` : ""}`;
+}
+function anlageBild() {
+  const kAn = an(A.kAn), wpAn = an(A.wpAn), hkAn = an(A.hkPumpe) || zahl(A.hkVl) > 24;
+  const po = zahl(A.pOben), pm = zahl(A.kRl), voll = kAn && pm != null && pm > 65;
+  const rot = "#FF3B30", blau = "#0A84FF";
+  // Puffer: Füllung als Verlauf oben → Mitte → unten (unten ≈ Mitte − 8)
+  const unten = pm != null ? pm - 8 : (po != null ? po - 15 : null);
+  const flammen = kAn ? `
+      <path class="flamme" d="M128 368 q-22 -28 -6 -58 q4 16 14 20 q-4 -26 16 -44 q-2 22 14 34 q10 -12 8 -26 q20 26 4 74 z" fill="#FF9500"/>
+      <path class="flamme b" d="M138 368 q-12 -18 -2 -36 q6 12 12 12 q0 -16 10 -24 q2 16 10 24 q6 18 -4 24 z" fill="#FFD60A"/>` :
+    `<path d="M120 362 h60" stroke="#8E8E93" stroke-width="5" stroke-linecap="round"/><path d="M128 354 h44" stroke="#A2845E" stroke-width="7" stroke-linecap="round"/>`;
+  return `<svg viewBox="0 0 900 470" role="img" aria-label="Heizungsanlage mit Puffer, Kamin und Wärmepumpe">
+    <defs><linearGradient id="pufferG" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${tFarbe(po)}"/><stop offset=".55" stop-color="${tFarbe(pm != null ? pm : po)}"/><stop offset="1" stop-color="${tFarbe(unten)}"/></linearGradient></defs>
+    <!-- Kamin (im Haus) -->
+    <rect x="70" y="40" width="160" height="150" rx="14" fill="var(--karte)" stroke="${kAn ? "#FF9500" : "var(--grau)"}" stroke-width="3"/>
+    <rect x="95" y="75" width="110" height="95" rx="8" fill="${kAn ? "rgba(255,149,0,.15)" : "var(--bg)"}"/>
+    <g transform="translate(0,-200)">${flammen}</g>
+    <text x="150" y="212" class="n" text-anchor="middle">Kamin Spartherm</text>
+    <text x="150" y="234" class="w" text-anchor="middle" style="fill:${kAn ? "#FF9500" : "var(--grau)"}">${kAn ? "🔥 heizt" : "aus"}</text>
+    <!-- Kamin → Puffer: Vorlauf oben (Rohr 1), Rücklauf aus der Mitte (Rohr 3) -->
+    ${rohr("M230 95 H380", rot, kAn)}
+    ${rohr("M380 230 H340 V160 H230", blau, kAn)}
+    <text x="300" y="82" class="w" text-anchor="middle">${grad(A.kVl)}</text><text x="300" y="118" class="n" text-anchor="middle">Vorlauf</text>
+    <text x="285" y="150" class="w" text-anchor="middle">${grad(A.kRl)}</text><text x="285" y="182" class="n" text-anchor="middle">Rücklauf</text>
+    <!-- draußen: Wärmepumpe -->
+    <rect x="0" y="255" width="230" height="210" rx="16" fill="var(--bg)"/>
+    <line x1="230" y1="262" x2="230" y2="458" stroke="var(--grau)" stroke-width="3" stroke-dasharray="6 6" opacity=".5"/>
+    <text x="16" y="280" class="n">Draußen ${grad(A.aussen)}</text>
+    <rect x="40" y="295" width="150" height="110" rx="12" fill="var(--karte)" stroke="#AF52DE" stroke-width="3"/>
+    <circle cx="95" cy="350" r="34" fill="none" stroke="#AF52DE" stroke-width="2" opacity=".5"/>
+    <g class="${wpAn ? "luefter" : ""}"><path d="M95 350 l0 -28 a28 28 0 0 1 16 6 z M95 350 l24 14 a28 28 0 0 1 -12 12 z M95 350 l-24 14 a28 28 0 0 1 -4 -18 z" fill="#AF52DE" opacity=".8"/></g>
+    <text x="160" y="342" class="w" text-anchor="middle">${wpAn ? fmt(zahl(A.wpMod), 0) + " %" : "aus"}</text>
+    <text x="160" y="362" class="n" text-anchor="middle">${wpAn ? "läuft" : ""}</text>
+    <text x="115" y="430" class="n" text-anchor="middle">Wärmepumpe Vitocal</text>
+    <!-- Wärmepumpe → Puffer (Vorlauf unten-Mitte, Rücklauf unten) -->
+    ${rohr("M190 315 H380", rot, wpAn)}
+    ${rohr("M380 375 H190", blau, wpAn)}
+    <text x="305" y="303" class="n" text-anchor="middle">Vorlauf ${grad(A.wpVl)}</text>
+    <text x="305" y="397" class="n" text-anchor="middle">Rücklauf ${grad(A.wpRl)}</text>
+    <!-- Puffer -->
+    <rect x="380" y="70" width="140" height="330" rx="40" fill="url(#pufferG)" opacity=".9"/>
+    <rect x="380" y="70" width="140" height="330" rx="40" fill="none" stroke="var(--text)" stroke-opacity=".25" stroke-width="2"/>
+    <text x="450" y="58" class="n" text-anchor="middle">Puffer 600 l</text>
+    <text x="450" y="125" class="ww" text-anchor="middle" style="fill:#fff">${grad(A.pOben)}</text><text x="450" y="145" class="n" text-anchor="middle" style="fill:#fff">oben</text>
+    <text x="450" y="245" class="ww" text-anchor="middle" style="fill:#fff">${grad(A.kRl)}</text><text x="450" y="265" class="n" text-anchor="middle" style="fill:#fff">Mitte</text>
+    ${voll ? `<rect x="386" y="330" width="128" height="40" rx="10" fill="#FF3B30"/><text x="450" y="347" text-anchor="middle" style="fill:#fff;font-weight:700;font-size:13px">PUFFER VOLL</text><text x="450" y="363" text-anchor="middle" style="fill:#fff;font-size:11px">nicht nachlegen</text>` : ""}
+    <!-- Puffer → Fußbodenheizung -->
+    ${rohr("M520 210 H600 V300 H640", rot, hkAn)}
+    ${rohr("M640 360 H580 V390 H520", blau, hkAn)}
+    <rect x="640" y="280" width="230" height="110" rx="14" fill="var(--karte)" stroke="#34C759" stroke-width="3"/>
+    <path d="M660 360 q12 -16 24 0 t24 0 t24 0 t24 0 t24 0 t24 0 t24 0" fill="none" stroke="#34C759" stroke-width="3" opacity=".7"/>
+    <text x="755" y="310" class="n" text-anchor="middle">Fußbodenheizung</text>
+    <text x="755" y="340" class="ww" text-anchor="middle">${grad(A.hkVl)}</text>
+    <text x="755" y="382" class="n" text-anchor="middle">${hkAn ? "Pumpe läuft" : "Pumpe aus"}</text>
+    <!-- Puffer → Warmwasser (Frischwasser-Station) -->
+    ${rohr("M520 100 H640", rot, an(A.wwLaden))}
+    <rect x="640" y="50" width="230" height="110" rx="14" fill="var(--karte)" stroke="#FF9500" stroke-width="3"/>
+    <text x="755" y="80" class="n" text-anchor="middle">Warmwasser (Frischwasser)</text>
+    <text x="755" y="112" class="ww" text-anchor="middle">${grad(A.ww)}</text>
+    <text x="755" y="140" class="n" text-anchor="middle">${an(A.wwLaden) ? "wird geladen" : "Vitotrans 353"}</text>
+    <!-- Heizstab -->
+    <rect x="520" y="150" width="46" height="10" rx="4" fill="#8E8E93"/><text x="574" y="178" class="n">Heizstab 6 kW</text>
+  </svg>`;
+}
+function anlage() {
+  const kAn = an(A.kAn);
+  return `<div class="karte anlage"><h2>🔥 Heizung &amp; Kamin – die ganze Anlage am Puffer</h2>
+      <div id="anlage">${anlageBild()}</div>
+      <div class="legende"><span><i style="background:#FF3B30"></i>Vorlauf (heiß)</span><span><i style="background:#0A84FF"></i>Rücklauf (kühler)</span>
+        <span>Bewegte Linie = da fließt gerade Wasser</span></div></div>
+    <div class="karte"><h2>🔥 Kamin</h2><div class="kacheln">
+      <div class="kachel"><span>Kamin</span><b>${kAn ? "heizt" : "aus"}</b></div>
+      <div class="kachel"><span>Vorlauf (Rohr 1)</span><b>${grad(A.kVl)}</b></div>
+      <div class="kachel"><span>Puffer Mitte (Rohr 3)</span><b>${grad(A.kRl)}</b></div>
+      <div class="kachel"><span>Spreizung</span><b>${zahl(A.kSpr) == null ? "–" : fmt(zahl(A.kSpr), 0) + " K"}</b></div>
+      <div class="kachel"><span>Laufzeit heute</span><b>${zahl(A.kLauf) == null ? "–" : fmt(zahl(A.kLauf), 1) + " h"}</b></div>
+      <div class="kachel"><span>Wärme heute ≈</span><b>${zahl(A.kW) == null ? "–" : fmt(zahl(A.kW), 0) + " kWh"}</b></div>
+      <div class="kachel"><span>Wärme Woche ≈</span><b>${zahl(A.kWw) == null ? "–" : fmt(zahl(A.kWw), 0) + " kWh"}</b></div>
+    </div>
+    <p class="klein">„Kamin heizt“: Vorlauf über 55 °C und wärmer als der Puffer oben. Puffer Mitte über 65 °C beim Heizen = fast voll,
+      dann kommt eine Telegram-Nachricht „nicht mehr nachlegen“. Die Wärme ist geschätzt (Laufzeit × 5 kW) – genau ginge es nur mit
+      einem Wärmemengenzähler im Kamin-Kreis.</p></div>`;
+}
+
 function zeichnen() {
   const csvAlt = ($("csvtext") || {}).value;
   zeichnenInnen();
@@ -1232,9 +1349,9 @@ function zeichnen() {
 }
 function zeichnenInnen() {
   PREIS = preise().strom;
-  const inhalt = { raeume: raeumeSeite, uebersicht, geraete: geraeteSeite, waermepumpe, wasser, alle: alleWerte }[reiter]();
+  const inhalt = { raeume: raeumeSeite, uebersicht, anlage, geraete: geraeteSeite, waermepumpe, wasser, alle: alleWerte }[reiter]();
   $("inhalt").innerHTML = `<div class="kopf"><h1>Klima &amp; Energie</h1>
-    <div class="reiter">${[["raeume", "Räume"], ["uebersicht", "Energie"], ["geraete", "Geräte"], ["waermepumpe", "Wärmepumpe"], ["wasser", "Wasser"], ["alle", "Alle Werte"]].map(([k, n]) =>
+    <div class="reiter">${[["raeume", "Räume"], ["uebersicht", "Energie"], ["anlage", "Heizung & Kamin"], ["geraete", "Geräte"], ["waermepumpe", "Wärmepumpe"], ["wasser", "Wasser"], ["alle", "Alle Werte"]].map(([k, n]) =>
       `<button data-reiter="${k}" class="${reiter === k ? "an" : ""}">${n}</button>`).join("")}</div></div>
     ${kostenLeiste()}
     ${Object.keys(E).length || REG.length ? "" : `<div class="hinweis">Keine Viessmann-Werte gefunden. Ist die Viessmann-Integration eingerichtet?</div>`}
@@ -1242,6 +1359,7 @@ function zeichnenInnen() {
 }
 function live() {     // nur die Live-Teile neu, damit Antippen und Blättern nicht flackern
   if (reiter === "uebersicht" && $("fluss")) { $("fluss").innerHTML = fluss(); }
+  else if (reiter === "anlage" && $("anlage")) zeichnen();
   else if (reiter === "geraete" && $("geraete")) geraeteLive();
   // nicht neu zeichnen, während jemand gerade in der Badewannen-Rechnung tippt
   else if (reiter !== "uebersicht" && !/^(wliter|wgrad|grundlast)$/.test((document.activeElement || {}).id || "")) zeichnen();
