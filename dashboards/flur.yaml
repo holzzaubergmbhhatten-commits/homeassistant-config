@@ -1965,7 +1965,7 @@ views:
   # Reiter „Heizung & Kamin“ der Energie-Seite (Anlagenbild mit Puffer, Kamin, Wärmepumpe, Fußbodenheizung, Warmwasser)
   cards:
   - type: iframe
-    url: /local/energie.html?v=42&reiter=anlage
+    url: /local/energie.html?v=43&reiter=anlage
     aspect_ratio: 53.3%
 - title: Klima & Energie
   path: energie
@@ -1974,7 +1974,7 @@ views:
   # Räume (HomePods), Energie wie das Energiecockpit der ViCare-App, Wärmepumpe, Wasser (Conel), alle Werte – Tag/Woche/Monat/Jahr
   cards:
   - type: iframe
-    url: /local/energie.html?v=42
+    url: /local/energie.html?v=43
     aspect_ratio: 53.3%
 - title: Grundriss
   path: grundriss

@@ -448,11 +448,18 @@ automation:
           {{ trigger.id == 'knopf' or is_state('input_boolean.kamin_modus', 'on')
              or (trigger.id == 'start' and states('number.hwr_warmepumpe_ww_temperatur') | int(50) == 45 and is_state('input_boolean.kamin_modus', 'off')) }}
     actions:
-      - if: "{{ trigger.id == 'start' and is_state('input_boolean.kamin_modus', 'on') and not is_state('binary_sensor.kamin_heizt', 'on') }}"
+      # Neustart von Home Assistant (z. B. nach einem Update): Kamin-Modus bleibt an, Warmwasser-Soll wieder auf 45 °C
+      - if: "{{ trigger.id == 'start' and is_state('input_boolean.kamin_modus', 'on') }}"
         then:
-          - action: input_boolean.turn_off
-            target:
-              entity_id: input_boolean.kamin_modus
+          - if: "{{ states('number.hwr_warmepumpe_ww_temperatur') | int(50) > 45 }}"
+            then:
+              - action: number.set_value
+                continue_on_error: true
+                target:
+                  entity_id: number.hwr_warmepumpe_ww_temperatur
+                data:
+                  value: 45
+          - stop: Kamin-Modus bleibt nach dem Neustart an
       - if: "{{ trigger.id == 'auto' }}"
         then:
           - action: input_boolean.turn_off

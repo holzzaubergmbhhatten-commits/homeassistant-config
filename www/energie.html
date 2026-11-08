@@ -1245,7 +1245,7 @@ const A = { kVl: "sensor.kamin_vorlauf", kRl: "sensor.kamin_rucklauf", kAn: "bin
   kSpr: "sensor.kamin_spreizung", kLauf: "sensor.kamin_laufzeit_heute", kW: "sensor.kamin_warme_heute", kWw: "sensor.kamin_warme_woche",
   pOben: "sensor.hwr_warmepumpe_puffertemperatur_oben", wpAn: "binary_sensor.hwr_warmepumpe_kompressor",
   wpVl: "sensor.hwr_warmepumpe_sekundarkreis_vorlauftemperatur", wpRl: "sensor.hwr_warmepumpe_rucklauftemperatur",
-  wpMod: "sensor.hwr_warmepumpe_verdichtermodulation", wpCop: "sensor.hwr_warmepumpe_leistungszahl", aussen: "sensor.hwr_warmepumpe_aussentemperatur",
+  wpMod: "sensor.hwr_warmepumpe_verdichtermodulation", kModus: "input_boolean.kamin_modus", wpCop: "sensor.hwr_warmepumpe_leistungszahl", aussen: "sensor.hwr_warmepumpe_aussentemperatur",
   ww: "sensor.hwr_warmepumpe_ww_speichertemperatur", hkVl: "sensor.hwr_warmepumpe_vorlauftemperatur_2",
   hkPumpe: "binary_sensor.hwr_warmepumpe_heizkreisumwalzpumpe_2", wwLaden: "binary_sensor.hwr_warmepumpe_ww_aufladung" };
 function tFarbe(t) {             // 25 °C blau → 80 °C rot
@@ -1266,9 +1266,10 @@ function anlageBild() {
   // Kamin-Kreis fließt: Kamin heizt oder sein Vorlauf ist deutlich wärmer als die Puffer-Mitte (Ladepumpe läuft, z. B. Nachglühen).
   // Ein echtes Pumpensignal gibt es erst mit dem Relais der Kamin-Steuerung am Shelly-Eingang.
   const kFluss = kAn || (zahl(A.kVl) != null && pm != null && zahl(A.kVl) > pm + 3);
+  const kFeuer = kAn || an(A.kModus);   // Feuer: gemessen oder „Ofen an“ auf dem Monitor gedrückt
   const rot = "#FF3B30", blau = "#0A84FF", gelb = "#FFCC00";
   const unten = pm != null ? pm - 8 : (po != null ? po - 15 : null);
-  const flammen = kAn ? `
+  const flammen = kFeuer ? `
       <path class="flamme" d="M128 158 q-22 -28 -6 -58 q4 16 14 20 q-4 -26 16 -44 q-2 22 14 34 q10 -12 8 -26 q20 26 4 74 z" fill="#FF9500"/>
       <path class="flamme b" d="M138 158 q-12 -18 -2 -36 q6 12 12 12 q0 -16 10 -24 q2 16 10 24 q6 18 -4 24 z" fill="#FFD60A"/>` :
     `<path d="M120 152 h60" stroke="#8E8E93" stroke-width="5" stroke-linecap="round"/><path d="M128 144 h44" stroke="#A2845E" stroke-width="7" stroke-linecap="round"/>`;
@@ -1284,11 +1285,11 @@ function anlageBild() {
     <defs><linearGradient id="pufferG" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="${tFarbe(po)}"/><stop offset=".5" stop-color="${tFarbe(pm != null ? pm : po)}"/><stop offset="1" stop-color="${tFarbe(unten)}"/></linearGradient></defs>
     <!-- Kamin (im Haus) -->
-    <rect x="60" y="30" width="170" height="150" rx="14" fill="var(--karte)" stroke="${kAn ? "#FF9500" : "var(--grau)"}" stroke-width="3"/>
-    <rect x="90" y="65" width="110" height="95" rx="8" fill="${kAn ? "rgba(255,149,0,.15)" : "var(--bg)"}"/>
+    <rect x="60" y="30" width="170" height="150" rx="14" fill="var(--karte)" stroke="${kFeuer ? "#FF9500" : "var(--grau)"}" stroke-width="3"/>
+    <rect x="90" y="65" width="110" height="95" rx="8" fill="${kFeuer ? "rgba(255,149,0,.15)" : "var(--bg)"}"/>
     ${flammen}
     <text x="145" y="200" class="n" text-anchor="middle">Kamin Spartherm</text>
-    <text x="145" y="222" class="w" text-anchor="middle" style="fill:${kAn ? "#FF9500" : "var(--grau)"}">${kAn ? "🔥 heizt" : "aus"}</text>
+    <text x="145" y="222" class="w" text-anchor="middle" style="fill:${kFeuer ? "#FF9500" : "var(--grau)"}">${kAn ? "🔥 heizt" : kFeuer ? "🔥 an – lädt noch nicht" : "aus"}</text>
     <!-- draußen -->
     <rect x="0" y="282" width="245" height="190" rx="16" fill="var(--bg)"/>
     <line x1="245" y1="288" x2="245" y2="466" stroke="var(--grau)" stroke-width="3" stroke-dasharray="6 6" opacity=".5"/>
@@ -1348,7 +1349,7 @@ function anlage() {
       <div class="legende"><span><i style="background:#FF3B30"></i>Vorlauf (heiß)</span><span><i style="background:#0A84FF"></i>Rücklauf (kühler)</span>
         <span><i style="background:#FFCC00;border-radius:50%"></i>Messpunkt (Fühler)</span><span>1–6 = Rohre hinten am Puffer (von oben), N = seitlich, V/R = Frischwasser-Station vorne, C/E/H = Fühler-Klemmen</span><span>Bewegte Linie = da fließt gerade Wasser</span></div></div>
     <div class="karte"><h2>🔥 Kamin</h2><div class="kacheln">
-      <div class="kachel"><span>Kamin</span><b>${kAn ? "heizt" : "aus"}</b></div>
+      <div class="kachel"><span>Kamin</span><b>${kAn ? "heizt" : an(A.kModus) ? "an (wärmt auf)" : "aus"}</b></div>
       <div class="kachel"><span>Vorlauf (Rohr 1)</span><b>${grad(A.kVl)}</b></div>
       <div class="kachel"><span>Puffer Mitte (Rohr 3)</span><b>${grad(A.kRl)}</b></div>
       <div class="kachel"><span>Spreizung</span><b>${zahl(A.kSpr) == null ? "–" : fmt(zahl(A.kSpr), 0) + " K"}</b></div>
