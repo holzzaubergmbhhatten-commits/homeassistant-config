@@ -2013,14 +2013,14 @@ views:
       name: Laufzeit heute
       icon: mdi:timer-outline
     - type: tile
-      entity: sensor.kamin_waerme_heute
+      entity: sensor.kamin_warme_heute
       name: Wärme heute
     - type: tile
       entity: sensor.kamin_laufzeit_woche
       name: Laufzeit Woche
       icon: mdi:timer-outline
     - type: tile
-      entity: sensor.kamin_waerme_woche
+      entity: sensor.kamin_warme_woche
       name: Wärme Woche
     - type: markdown
       grid_options:
