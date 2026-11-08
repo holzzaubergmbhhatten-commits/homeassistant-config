@@ -1959,10 +1959,13 @@ views:
   path: kamin
   icon: mdi:fireplace
   type: panel
+  # nicht in der oberen Leiste – gehört zur Energie-Seite (Reiter „Heizung & Kamin“), geöffnet über den Kamin-Knopf
+  subview: true
+  back_path: /flur-display/start
   # Reiter „Heizung & Kamin“ der Energie-Seite (Anlagenbild mit Puffer, Kamin, Wärmepumpe, Fußbodenheizung, Warmwasser)
   cards:
   - type: iframe
-    url: /local/energie.html?v=40&reiter=anlage
+    url: /local/energie.html?v=41&reiter=anlage
     aspect_ratio: 53.3%
 - title: Klima & Energie
   path: energie
@@ -1971,7 +1974,7 @@ views:
   # Räume (HomePods), Energie wie das Energiecockpit der ViCare-App, Wärmepumpe, Wasser (Conel), alle Werte – Tag/Woche/Monat/Jahr
   cards:
   - type: iframe
-    url: /local/energie.html?v=40
+    url: /local/energie.html?v=41
     aspect_ratio: 53.3%
 - title: Grundriss
   path: grundriss

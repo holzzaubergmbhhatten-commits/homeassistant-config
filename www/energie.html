@@ -1263,6 +1263,9 @@ function anlageBild() {
   const Y = { r1: 96, r2: 209, r3: 250, r4: 271, r5: 328, r6: 388, N: 282, C: 169, E: 227, H: 295, wwVl: 225, wwRl: 302, A: 104 };
   const kAn = an(A.kAn), wpAn = an(A.wpAn), hkAn = an(A.hkPumpe) || zahl(A.hkVl) > 24, wwAn = an(A.wwLaden);
   const po = zahl(A.pOben), pm = zahl(A.kRl), voll = kAn && pm != null && pm > 65;
+  // Kamin-Kreis fließt: Kamin heizt oder sein Vorlauf ist deutlich wärmer als die Puffer-Mitte (Ladepumpe läuft, z. B. Nachglühen).
+  // Ein echtes Pumpensignal gibt es erst mit dem Relais der Kamin-Steuerung am Shelly-Eingang.
+  const kFluss = kAn || (zahl(A.kVl) != null && pm != null && zahl(A.kVl) > pm + 3);
   const rot = "#FF3B30", blau = "#0A84FF", gelb = "#FFCC00";
   const unten = pm != null ? pm - 8 : (po != null ? po - 15 : null);
   const flammen = kAn ? `
@@ -1297,8 +1300,8 @@ function anlageBild() {
     <text x="152" y="386" class="n" text-anchor="middle">${wpAn ? "läuft" : ""}</text>
     <text x="110" y="452" class="n" text-anchor="middle">Wärmepumpe Vitocal</text>
     <!-- Rohre links (Rückseite des Puffers): 1 Kamin-Vorlauf, 3 Kamin-Rücklauf, 4/5 Wärmepumpe, 6 Rücklauf Fußbodenheizung -->
-    ${rohr(`M230 ${Y.r1} H416`, rot, kAn)}
-    ${rohr(`M416 ${Y.r3} H330 V150 H230`, blau, kAn)}
+    ${rohr(`M230 ${Y.r1} H416`, rot, kFluss)}
+    ${rohr(`M416 ${Y.r3} H330 V150 H230`, blau, kFluss)}
     ${rohr(`M416 ${Y.r4} H300 V340 H190`, rot, wpAn)}
     ${rohr(`M416 ${Y.r5} H360 V405 H190`, blau, wpAn)}
     ${rohr(`M416 ${Y.r6} H408 V462 H820 V420`, blau, hkAn)}
