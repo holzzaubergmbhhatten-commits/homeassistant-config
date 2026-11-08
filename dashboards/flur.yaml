@@ -361,6 +361,17 @@ views:
         columns: 4
         rows: 2
     - type: button
+      name: Kamin
+      icon: mdi:fireplace
+      show_state: false
+      icon_height: 34px
+      tap_action:
+        action: navigate
+        navigation_path: /flur-display/kamin
+      grid_options:
+        columns: 4
+        rows: 2
+    - type: button
       name: Küche
       icon: mdi:silverware-fork-knife
       show_state: false
@@ -1944,6 +1955,107 @@ views:
   - type: iframe
     url: /local/kueche.html?v=11
     aspect_ratio: 53.3%
+- title: Kamin
+  path: kamin
+  icon: mdi:fireplace
+  type: sections
+  max_columns: 2
+  badges:
+  - type: entity
+    entity: weather.touchmonitor_home
+    name: Start
+    icon: mdi:home
+    show_name: true
+    show_state: false
+    show_icon: true
+    color: blue
+    tap_action:
+      action: navigate
+      navigation_path: /flur-display/start
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Kamin & Puffer
+      heading_style: title
+      icon: mdi:fireplace
+    - type: tile
+      entity: binary_sensor.kamin_heizt
+      name: Kamin heizt
+      color: deep-orange
+      grid_options:
+        columns: full
+    - type: tile
+      entity: sensor.kamin_vorlauf
+      name: Kamin-Vorlauf
+      icon: mdi:thermometer-chevron-up
+      color: red
+    - type: tile
+      entity: sensor.kamin_rucklauf
+      name: Rücklauf (Puffer Mitte)
+      icon: mdi:thermometer-chevron-down
+      color: blue
+    - type: tile
+      entity: sensor.hwr_warmepumpe_puffertemperatur_oben
+      name: Puffer oben
+      icon: mdi:storage-tank
+      color: orange
+    - type: tile
+      entity: sensor.kamin_spreizung
+      name: Spreizung
+      color: amber
+    - type: heading
+      heading: Wärme vom Kamin (geschätzt)
+      heading_style: subtitle
+      icon: mdi:fire
+    - type: tile
+      entity: sensor.kamin_laufzeit_heute
+      name: Laufzeit heute
+      icon: mdi:timer-outline
+    - type: tile
+      entity: sensor.kamin_waerme_heute
+      name: Wärme heute
+    - type: tile
+      entity: sensor.kamin_laufzeit_woche
+      name: Laufzeit Woche
+      icon: mdi:timer-outline
+    - type: tile
+      entity: sensor.kamin_waerme_woche
+      name: Wärme Woche
+    - type: markdown
+      grid_options:
+        columns: full
+      content: |-
+        **So liest du die Werte**
+        - **Kamin-Vorlauf**: Fühler an Rohr 1 oben am Puffer. Über 55 °C und wärmer als „Puffer oben“ = der Kamin heizt.
+        - **Rücklauf (Puffer Mitte)**: Fühler an Rohr 3. Über 65 °C beim Heizen = Puffer fast voll, nicht mehr nachlegen (Meldung kommt per Telegram).
+        - **Spreizung**: Vorlauf minus Mitte. Groß = der Kamin lädt kräftig, klein = der Puffer ist schon warm.
+        - **Wärme** ist geschätzt (Laufzeit × 5 kW). Genau messen ginge nur mit einem Wärmemengenzähler im Kamin-Kreis.
+  - type: grid
+    cards:
+    - type: heading
+      heading: Verlauf 24 Stunden
+      heading_style: title
+      icon: mdi:chart-line
+    - type: history-graph
+      hours_to_show: 24
+      grid_options:
+        columns: full
+      entities:
+      - entity: sensor.kamin_vorlauf
+        name: Kamin-Vorlauf
+      - entity: sensor.kamin_rucklauf
+        name: Puffer Mitte
+      - entity: sensor.hwr_warmepumpe_puffertemperatur_oben
+        name: Puffer oben
+    - type: history-graph
+      hours_to_show: 168
+      title: Kamin an/aus – 7 Tage
+      grid_options:
+        columns: full
+      entities:
+      - entity: binary_sensor.kamin_heizt
+        name: Kamin heizt
 - title: Klima & Energie
   path: energie
   icon: mdi:home-thermometer

@@ -54,6 +54,23 @@ input_number:
     mode: box
 
 sensor:
+  # Kamin-Laufzeit (aus „Kamin heizt“) – für die Kamin-Seite am Monitor
+  - platform: history_stats
+    name: Kamin Laufzeit heute
+    unique_id: kamin_laufzeit_heute
+    entity_id: binary_sensor.kamin_heizt
+    state: "on"
+    type: time
+    start: "{{ today_at() }}"
+    end: "{{ now() }}"
+  - platform: history_stats
+    name: Kamin Laufzeit Woche
+    unique_id: kamin_laufzeit_woche
+    entity_id: binary_sensor.kamin_heizt
+    state: "on"
+    type: time
+    start: "{{ today_at() - timedelta(days=now().weekday()) }}"
+    end: "{{ now() }}"
   # wie schnell sich der Puffer gerade ändert (K pro Stunde)
   - platform: derivative
     name: Puffer Änderung
@@ -87,6 +104,32 @@ template:
                else 'geschätzt aus Pufferanstieg bei ausgeschaltetem Kompressor' }}
           vorlauf: "{{ states('sensor.kamin_vorlauf') }}"
           ruecklauf: "{{ states('sensor.kamin_rucklauf') }}"
+  - sensor:
+      # Temperaturunterschied Kamin-Vorlauf zu Puffer-Mitte (Rohr 3) – groß = der Kamin lädt kräftig
+      - name: Kamin Spreizung
+        unique_id: kamin_spreizung
+        unit_of_measurement: K
+        icon: mdi:thermometer-lines
+        state: >-
+          {% set vl = states('sensor.kamin_vorlauf') | float(none) %}
+          {% set rl = states('sensor.kamin_rucklauf') | float(none) %}
+          {{ (vl - rl) | round(1) if vl is not none and rl is not none else none }}
+      # Geschätzte Wärme vom Kamin: Laufzeit × 5 kW (Spartherm Varia 1V H2O XL gibt bis 6 kW ans Wasser).
+      # Echte Messung nur mit Wärmemengenzähler im Kamin-Kreis.
+      - name: Kamin Wärme heute
+        unique_id: kamin_waerme_heute
+        unit_of_measurement: kWh
+        icon: mdi:fire
+        state: "{{ (states('sensor.kamin_laufzeit_heute') | float(0) * 5) | round(1) }}"
+        attributes:
+          hinweis: geschätzt (Laufzeit × 5 kW)
+      - name: Kamin Wärme Woche
+        unique_id: kamin_waerme_woche
+        unit_of_measurement: kWh
+        icon: mdi:fire
+        state: "{{ (states('sensor.kamin_laufzeit_woche') | float(0) * 5) | round(1) }}"
+        attributes:
+          hinweis: geschätzt (Laufzeit × 5 kW)
   - sensor:
       - name: Sonnenüberschuss
         unique_id: sonnen_ueberschuss
