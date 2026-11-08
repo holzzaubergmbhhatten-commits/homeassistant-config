@@ -3,7 +3,8 @@
 # 1) Sonnen-Warmwasser: Bei Sonnenüberschuss (Einspeisung, Speicher voll) heizt die Wärmepumpe das Warmwasser auf 60 °C
 #    („Einmalige Ladung“), statt den Strom für 7,9 ct einzuspeisen. Abends geht die Solltemperatur wieder zurück.
 #    Wärmepumpe zuerst, weil sie aus 1 kWh Strom ca. 3,3 kWh Wärme macht (Heizstab nur 1 kWh).
-# 2) Kamin erkennen: Puffer wird schnell wärmer, obwohl der Kompressor aus ist → der Kamin heizt (geschätzt).
+# 2) Kamin erkennen: gemessen am Kamin-Vorlauf (Shelly „Kamin“ mit Fühlern an Rohr 1 = Vorlauf, Rohr 3 = Rücklauf);
+#    ohne Fühlerwert geschätzt (Puffer wird schnell wärmer, obwohl der Kompressor aus ist).
 #    Später genauer über ein Relais der Kamin-Steuerung S-Thermatik NEO (Funktion „Combustion“/„Abbrand“) an einem Shelly-Eingang.
 # 3) Wärme abladen: Ist der Puffer durch den Kamin sehr heiß, wird die Raum-Solltemperatur des Fußbodenheizkreises (Heizkreis 2)
 #    der Vitocal für eine Weile angehoben, damit die Wärme ins Haus geht statt im Puffer zu stehen. Danach zurück.
@@ -67,14 +68,25 @@ template:
       - name: Kamin heizt
         unique_id: kamin_heizt
         icon: mdi:fireplace
-        # Puffer steigt deutlich, Kompressor aus → Wärme kommt vom Kamin
+        # Gemessen: Fühler am Kamin-Vorlauf (Shelly „Kamin“, Rohr 1 oben am Puffer) ist heiß und wärmer als der Puffer oben.
+        # Ist der Ofen aus, hat das Rohr höchstens Puffertemperatur. Fällt der Fühler aus: Schätzung wie bisher.
         state: >-
-          {{ states('sensor.puffer_anderung') | float(0) > 2
-             and is_state('binary_sensor.hwr_warmepumpe_kompressor', 'off') }}
-        delay_on: "00:10:00"
-        delay_off: "00:45:00"
+          {% set vl = states('sensor.kamin_vorlauf') | float(none) %}
+          {% set po = states('sensor.hwr_warmepumpe_puffertemperatur_oben') | float(none) %}
+          {% if vl is not none %}
+            {{ vl > 55 and (po is none or vl > po + 3) }}
+          {% else %}
+            {{ states('sensor.puffer_anderung') | float(0) > 2
+               and is_state('binary_sensor.hwr_warmepumpe_kompressor', 'off') }}
+          {% endif %}
+        delay_on: "00:03:00"
+        delay_off: "00:20:00"
         attributes:
-          hinweis: geschätzt aus Pufferanstieg bei ausgeschaltetem Kompressor
+          hinweis: >-
+            {{ 'gemessen am Kamin-Vorlauf' if states('sensor.kamin_vorlauf') | float(none) is not none
+               else 'geschätzt aus Pufferanstieg bei ausgeschaltetem Kompressor' }}
+          vorlauf: "{{ states('sensor.kamin_vorlauf') }}"
+          ruecklauf: "{{ states('sensor.kamin_rucklauf') }}"
   - sensor:
       - name: Sonnenüberschuss
         unique_id: sonnen_ueberschuss
