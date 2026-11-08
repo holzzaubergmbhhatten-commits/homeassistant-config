@@ -230,6 +230,15 @@ automation:
           entity_id: number.hwr_warmepumpe_normaltemperatur_2
         data:
           value: "{{ [states('number.hwr_warmepumpe_normaltemperatur_2') | int(22) + 2, 25] | min }}"
+      # Stellantriebe der Fußbodenheizung aufmachen: Shelly 1 Mini parallel zum Berker, in HA „switch.zone_…“ (z. B. switch.zone_schlafen)
+      - variables:
+          zonen: "{{ states.switch | selectattr('entity_id', 'match', 'switch\\.zone_') | map(attribute='entity_id') | list }}"
+      - if: "{{ zonen | count > 0 }}"
+        then:
+          - action: switch.turn_on
+            continue_on_error: true
+            target:
+              entity_id: "{{ zonen }}"
       - action: logbook.log
         data:
           name: Kamin-Wärme
@@ -263,6 +272,15 @@ automation:
           entity_id: number.hwr_warmepumpe_normaltemperatur_2
         data:
           value: "{{ states('input_number.hk2_soll_gemerkt') | int(22) if states('input_number.hk2_soll_gemerkt') | int(0) >= 15 else 22 }}"
+      # Stellantriebe wieder den Berker-Reglern überlassen
+      - variables:
+          zonen: "{{ states.switch | selectattr('entity_id', 'match', 'switch\\.zone_') | map(attribute='entity_id') | list }}"
+      - if: "{{ zonen | count > 0 }}"
+        then:
+          - action: switch.turn_off
+            continue_on_error: true
+            target:
+              entity_id: "{{ zonen }}"
       - action: input_boolean.turn_off
         target:
           entity_id: input_boolean.kamin_waerme_laeuft
@@ -270,6 +288,54 @@ automation:
         data:
           name: Kamin-Wärme
           message: "zurückgestellt auf {{ states('input_number.hk2_soll_gemerkt') | int(22) }} °C (Puffer {{ states('sensor.hwr_warmepumpe_puffertemperatur_oben') }} °C)"
+
+  # ---------- Puffer voll: nicht mehr nachlegen ----------
+  # Fühler „Kamin Rücklauf“ sitzt an Rohr 3 (Mitte des Puffers). Ist der beim Heizen über 65 °C, ist der Puffer fast voll –
+  # dann kann der Kamin seine Wärme nicht mehr loswerden. Oder der Puffer oben ist über 80 °C.
+  - id: kamin_puffer_voll
+    alias: "Heizung: Puffer voll – nicht mehr nachlegen"
+    mode: single
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.kamin_rucklauf
+        above: 65
+        for: "00:05:00"
+      - trigger: numeric_state
+        entity_id: sensor.hwr_warmepumpe_puffertemperatur_oben
+        above: 80
+        for: "00:05:00"
+    conditions:
+      - condition: state
+        entity_id: binary_sensor.kamin_heizt
+        state: "on"
+      # höchstens alle 3 Stunden
+      - condition: template
+        value_template: >-
+          {{ this.attributes.last_triggered is none
+             or (now() - this.attributes.last_triggered).total_seconds() > 10800 }}
+    actions:
+      - variables:
+          text: >-
+            🔥 Puffer ist fast voll – bitte kein Holz mehr nachlegen.
+            Puffer oben {{ states('sensor.hwr_warmepumpe_puffertemperatur_oben') | float(0) | round(0) | int }} °C,
+            Mitte {{ states('sensor.kamin_rucklauf') | float(0) | round(0) | int }} °C,
+            Kamin-Vorlauf {{ states('sensor.kamin_vorlauf') | float(0) | round(0) | int }} °C.
+      # an alle Empfänger (Marco und Mirka)
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
+                chat_id: "{{ repeat.item | int }}"
+                message: "{{ text }}"
+      - action: script.jarvis_monitor_nachricht
+        continue_on_error: true
+        data:
+          text: "{{ text }}"
+          minuten: 120
 
   # ---------- Kamin-Modus ----------
   # AN: Warmwasser-Soll der Wärmepumpe auf 45 °C, damit sie nicht kurz vorher selbst aufheizt – das macht gleich der Kamin.
