@@ -361,6 +361,17 @@ views:
         columns: 4
         rows: 2
     - type: button
+      name: Helfer
+      icon: mdi:toolbox-outline
+      show_state: false
+      icon_height: 34px
+      tap_action:
+        action: navigate
+        navigation_path: /flur-display/helfer
+      grid_options:
+        columns: 4
+        rows: 2
+    - type: button
       name: Kamin
       icon: mdi:fireplace
       show_state: false
@@ -1966,6 +1977,17 @@ views:
   cards:
   - type: iframe
     url: /local/energie.html?v=43&reiter=anlage
+    aspect_ratio: 53.3%
+- title: Helfer
+  path: helfer
+  icon: mdi:toolbox-outline
+  type: panel
+  # Helfer-Seite für Oma & Opa (packages/helfer.yaml, www/helfer.html) – nicht in der oberen Leiste, über den Knopf auf der Startseite
+  subview: true
+  back_path: /flur-display/start
+  cards:
+  - type: iframe
+    url: /local/helfer.html?v=1
     aspect_ratio: 53.3%
 - title: Klima & Energie
   path: energie

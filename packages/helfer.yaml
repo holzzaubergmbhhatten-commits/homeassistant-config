@@ -1,0 +1,106 @@
+# Helfer-Seite für Oma & Opa (Flur-Monitor, Knopf „🧰 Helfer“ → www/helfer.html):
+# große Kacheln mit leichten Aufgaben (Zisterne, Regenrinne, Hauswasserwerke …), jede mit Schritten und Fotos.
+# Was „jetzt dran“ ist, kommt aus dem Wartungskalender (sensor.wartung) bzw. aus den Monaten in claude_tools/helfer_vorlage.json.
+# „Erledigt“ hakt im Wartungskalender ab und schickt allen Empfängern eine Telegram-Nachricht.
+shell_command:
+  helfer_befehl: python3 /config/claude_tools/helfer.py {{ aktion }} {{ wert }} {{ daten }}
+
+script:
+  helfer_daten:
+    alias: "Helfer: Aufgaben und Fotos laden"
+    mode: queued
+    sequence:
+      - action: shell_command.helfer_befehl
+        data:
+          aktion: daten
+          wert: "-"
+          daten: ""
+        response_variable: roh
+      - variables:
+          antwort: >-
+            {% set t = roh.stdout | default('') if roh is defined and roh is mapping else '' %}
+            {{ t | from_json if (t | string).startswith('{') else {'ok': false, 'fehler': t or 'keine Antwort'} }}
+      - stop: fertig
+        response_variable: antwort
+
+  helfer_foto:
+    alias: "Helfer: Foto zu einem Schritt speichern (in Stücken)"
+    mode: queued
+    max: 50
+    fields:
+      aufgabe:
+        description: Kennung der Aufgabe (z. B. zisterne)
+      schritt:
+        description: Nummer des Schritts (0 = Übersichtsfoto)
+      teil:
+        description: Nummer des Stücks (0, 1, 2 …)
+      letzt:
+        description: true beim letzten Stück
+      daten:
+        description: Base64-Stück (höchstens 150 000 Zeichen)
+    sequence:
+      - action: shell_command.helfer_befehl
+        data:
+          aktion: foto
+          wert: >-
+            {{ {'aufgabe': aufgabe | string, 'schritt': schritt | int(0), 'teil': teil | int(0),
+                'letzt': letzt | default(false) | bool} | to_json | base64_encode }}
+          daten: >-
+            {% set s = daten | regex_replace('[^A-Za-z0-9+/=]', '') %}{% for i in range(0, s | length, 100000) %}{{ s[i:i + 100000] }} {% endfor %}
+        response_variable: roh
+      - variables:
+          antwort: >-
+            {% set t = roh.stdout | default('') if roh is defined and roh is mapping else '' %}
+            {{ t | from_json if (t | string).startswith('{') else {'ok': false, 'fehler': t or 'keine Antwort'} }}
+      - stop: fertig
+        response_variable: antwort
+
+  helfer_foto_weg:
+    alias: "Helfer: Foto entfernen"
+    mode: queued
+    fields:
+      aufgabe:
+        description: Kennung der Aufgabe
+      schritt:
+        description: Nummer des Schritts
+    sequence:
+      - action: shell_command.helfer_befehl
+        data:
+          aktion: foto_weg
+          wert: "{{ {'aufgabe': aufgabe | string, 'schritt': schritt | int(0)} | to_json | base64_encode }}"
+          daten: ""
+
+  helfer_erledigt:
+    alias: "Helfer: Aufgabe erledigt"
+    mode: queued
+    fields:
+      aufgabe:
+        description: Kennung der Aufgabe
+      titel:
+        description: Titel (für die Nachricht)
+      wartung:
+        description: Kennung im Wartungskalender (leer, wenn keine)
+    sequence:
+      - action: shell_command.helfer_befehl
+        continue_on_error: true
+        data:
+          aktion: erledigt
+          wert: "{{ {'aufgabe': aufgabe | string} | to_json | base64_encode }}"
+          daten: ""
+      - if: "{{ wartung | default('', true) | string | length > 0 }}"
+        then:
+          - action: script.wartung_erledigt
+            continue_on_error: true
+            data:
+              key: "{{ wartung }}"
+      # an alle Empfänger (Marco und Mirka)
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
+                chat_id: "{{ repeat.item | int }}"
+                message: "👍 Helfer: „{{ titel }}“ ist erledigt (am Flur-Monitor abgehakt)."

@@ -1,0 +1,187 @@
+{
+ "_hinweis": "Aufgaben für die Helfer-Seite am Flur-Monitor (www/helfer.html). Fotos zu den Schritten macht Marco direkt auf der Seite (liegen nur in Home Assistant, nicht hier). 'wartung' = Kennung im Wartungskalender (sensor.wartung), dann kommt „wann fällig“ von dort. Ohne 'wartung': 'monate' = in welchen Monaten die Aufgabe dran ist.",
+ "aufgaben": [
+  {
+   "id": "zisterne",
+   "titel": "Zisterne: Filter sauber machen",
+   "icon": "🪣",
+   "dauer": "ca. 20 Minuten",
+   "brauchen": "Handschuhe, Eimer, Gartenschlauch",
+   "wartung": "zisterne-10-000-l-filter-zulauf-reinigen",
+   "schritte": [
+    "Zum Zisternendeckel gehen (siehe Foto).",
+    "Deckel aufmachen und zur Seite legen.",
+    "Den Filterkorb am Zulauf herausnehmen.",
+    "Filterkorb mit dem Gartenschlauch gründlich abspritzen, Laub in den Eimer.",
+    "Nachsehen, ob im Zulaufrohr Laub hängt – mit der Hand herausnehmen.",
+    "Filterkorb wieder einsetzen, Deckel fest zumachen."
+   ],
+   "vorsicht": "Nicht in die Zisterne hineinlehnen. Deckel danach immer fest verschließen (Kinder!)."
+  },
+  {
+   "id": "regenrinne",
+   "titel": "Regenrinnen: Laub und Siebe oben sauber machen",
+   "icon": "🍂",
+   "dauer": "ca. 1 Stunde",
+   "brauchen": "Leiter, Handschuhe, Eimer, kleine Handschaufel",
+   "wartung": "regenrinnen-fallrohre-reinigen",
+   "schritte": [
+    "Leiter sicher aufstellen – am besten hält der andere unten fest.",
+    "Laub aus der Rinne in den Eimer holen.",
+    "Das Sieb oben im Rinnenablauf herausziehen, ausklopfen und wieder einstecken.",
+    "Leiter weiterstellen und alle Abläufe rund ums Haus so machen (siehe Fotos).",
+    "Zum Schluss mit dem Gartenschlauch oben etwas Wasser in die Rinne laufen lassen: läuft es unten aus dem Fallrohr? Dann ist alles frei."
+   ],
+   "vorsicht": "Nur bei trockenem Wetter und nicht allein auf die Leiter."
+  },
+  {
+   "id": "aussenhaehne",
+   "titel": "Außenhähne vor dem Frost leer machen",
+   "icon": "🚰",
+   "dauer": "ca. 20 Minuten",
+   "brauchen": "Eimer",
+   "wartung": "aussenhaehne-gartenleitungen-vor-frost-entleeren",
+   "schritte": [
+    "Im Haus das Absperrventil für die Außenleitung zudrehen (siehe Foto).",
+    "Draußen den Außenhahn ganz aufdrehen, bis kein Wasser mehr kommt.",
+    "Schläuche abschrauben, leer laufen lassen und in den Schuppen bringen.",
+    "Den Außenhahn offen lassen, damit Restwasser nicht einfriert."
+   ],
+   "vorsicht": "Erst innen zudrehen, dann außen öffnen."
+  },
+  {
+   "id": "hauswasserwerke",
+   "titel": "Hauswasserwerke (Brunnen) winterfest machen",
+   "icon": "💧",
+   "dauer": "ca. 45 Minuten",
+   "brauchen": "Eimer, Schraubenschlüssel, alte Decke oder Haube",
+   "monate": [10, 11],
+   "schritte": [
+    "Stecker der Pumpe ziehen (beide Hauswasserwerke, siehe Fotos).",
+    "Unten an der Pumpe die Ablassschraube aufdrehen und das Wasser in den Eimer laufen lassen.",
+    "Leitungen zum Gewächshaus und zur Bewässerung leer laufen lassen.",
+    "Ablassschraube wieder eindrehen.",
+    "Pumpe frostfrei stellen oder gut abdecken."
+   ],
+   "vorsicht": "Immer zuerst den Stecker ziehen."
+  },
+  {
+   "id": "hauswasserwerke-fruehjahr",
+   "titel": "Hauswasserwerke (Brunnen) wieder anschließen",
+   "icon": "🌱",
+   "dauer": "ca. 45 Minuten",
+   "brauchen": "Eimer mit Wasser, Schraubenschlüssel",
+   "monate": [3, 4],
+   "schritte": [
+    "Pumpe an ihren Platz stellen und Leitungen anschließen (siehe Fotos).",
+    "Pumpe vorne am Einfüllstutzen mit Wasser füllen, bis es oben herausläuft – sonst läuft sie trocken.",
+    "Einfüllschraube zudrehen, Stecker rein.",
+    "Prüfen: Kommt am Gewächshaus Wasser? Tropft irgendwo etwas?"
+   ],
+   "vorsicht": "Nie ohne Wasser einschalten."
+  },
+  {
+   "id": "waermepumpe",
+   "titel": "Wärmepumpe draußen frei halten",
+   "icon": "🍃",
+   "dauer": "ca. 10 Minuten",
+   "brauchen": "Besen, Handschuhe",
+   "wartung": "waermepumpe-ausseneinheit-von-laub-schnee-frei-halten",
+   "schritte": [
+    "Zur Wärmepumpe an der Hauswand gehen (siehe Foto).",
+    "Laub, Äste und Schnee rund um das Gerät wegfegen.",
+    "Hinten und vorne am Gitter Blätter vorsichtig abziehen.",
+    "Etwa 1 Meter um das Gerät frei lassen."
+   ],
+   "vorsicht": "Nichts aufschrauben, nicht mit Wasser abspritzen."
+  },
+  {
+   "id": "holz",
+   "titel": "Kaminholz nachfüllen",
+   "icon": "🪵",
+   "dauer": "ca. 30 Minuten",
+   "brauchen": "Schubkarre oder Korb",
+   "wartung": "holzvorrat-fuer-den-kamin-pruefen",
+   "schritte": [
+    "Trockenes Holz vom Holzlager holen (siehe Foto).",
+    "Neben dem Kamin ordentlich stapeln.",
+    "Nasse oder schimmelige Scheite aussortieren."
+   ],
+   "vorsicht": ""
+  },
+  {
+   "id": "salz",
+   "titel": "Salz für die Wasser-Enthärtung nachfüllen",
+   "icon": "🧂",
+   "dauer": "ca. 10 Minuten",
+   "brauchen": "Sack Regeneriersalz (Tabletten, 25 kg)",
+   "wartung": "enthaertung-salzstand-pruefen",
+   "schritte": [
+    "Zur Enthärtungsanlage gehen (siehe Foto).",
+    "Deckel vom Salzbehälter abnehmen.",
+    "Wenn weniger als halb voll: Salztabletten nachschütten, bis knapp unter den Rand.",
+    "Deckel wieder drauf."
+   ],
+   "vorsicht": "Nur Tabletten-Regeneriersalz nehmen, kein Speisesalz."
+  },
+  {
+   "id": "heizungsdruck",
+   "titel": "Heizungsdruck ablesen",
+   "icon": "🧭",
+   "dauer": "ca. 2 Minuten",
+   "brauchen": "Handy für ein Foto",
+   "wartung": "heizungsdruck-am-manometer-pruefen",
+   "schritte": [
+    "Zur Heizung gehen und den runden Druckanzeiger suchen (siehe Foto).",
+    "Ablesen: Der Zeiger soll im grünen Bereich stehen.",
+    "Ein Foto davon an Marco oder Mirka schicken."
+   ],
+   "vorsicht": "Nur ablesen, nichts drehen."
+  },
+  {
+   "id": "geschirrspueler",
+   "titel": "Geschirrspüler: Sieb sauber machen",
+   "icon": "🍽️",
+   "dauer": "ca. 10 Minuten",
+   "brauchen": "Spülbürste",
+   "wartung": "geschirrspueler-sieb-filter-reinigen",
+   "schritte": [
+    "Unteren Korb herausziehen.",
+    "Das Sieb unten in der Mitte nach links drehen und herausnehmen (siehe Foto).",
+    "Unter dem Wasserhahn mit der Bürste sauber machen.",
+    "Wieder einsetzen und nach rechts festdrehen, Korb rein."
+   ],
+   "vorsicht": ""
+  },
+  {
+   "id": "waschmaschine",
+   "titel": "Waschmaschine: Flusensieb sauber machen",
+   "icon": "🧺",
+   "dauer": "ca. 15 Minuten",
+   "brauchen": "flache Schale, Handtuch",
+   "wartung": "waschmaschine-flusensieb-pumpe-reinigen",
+   "schritte": [
+    "Unten vorne die kleine Klappe öffnen (siehe Foto).",
+    "Handtuch und Schale darunter – es kommt Wasser heraus.",
+    "Das Sieb langsam herausdrehen und das Wasser in die Schale laufen lassen.",
+    "Flusen entfernen, Sieb abspülen und wieder fest eindrehen, Klappe zu."
+   ],
+   "vorsicht": "Nur wenn die Maschine aus und abgekühlt ist."
+  },
+  {
+   "id": "trockner",
+   "titel": "Trockner: Filter sauber machen",
+   "icon": "🌀",
+   "dauer": "ca. 10 Minuten",
+   "brauchen": "Staubsauger oder weiche Bürste",
+   "wartung": "trockner-waermetauscher-sockelfilter-reinigen",
+   "schritte": [
+    "Flusensieb in der Tür herausziehen und die Flusen abnehmen.",
+    "Unten vorne die Sockelklappe öffnen (siehe Foto).",
+    "Den Filter dort herausnehmen und unter Wasser ausspülen, gut ausdrücken.",
+    "Alles wieder einsetzen."
+   ],
+   "vorsicht": ""
+  }
+ ]
+}
