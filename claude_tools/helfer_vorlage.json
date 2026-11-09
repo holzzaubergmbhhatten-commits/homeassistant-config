@@ -1,5 +1,5 @@
 {
- "_hinweis": "Aufgaben für die Helfer-Seite am Flur-Monitor (www/helfer.html). Fotos zu den Schritten macht Marco direkt auf der Seite (liegen nur in Home Assistant, nicht hier). 'wartung' = Kennung im Wartungskalender (sensor.wartung), dann kommt „wann fällig“ von dort. Ohne 'wartung': 'monate' = in welchen Monaten die Aufgabe dran ist.",
+ "_hinweis": "Aufgaben für die Helfer-Seite am Flur-Monitor (www/helfer.html). Fotos zu den Schritten macht Marco direkt auf der Seite (liegen nur in Home Assistant, nicht hier). 'wartung' = Kennung im Wartungskalender (sensor.wartung), dann kommt „wann fällig“ von dort. Ohne 'wartung': 'monate' = in welchen Monaten die Aufgabe dran ist. 'tage' = alle wie viele Tage (dann dran, wenn so lange nicht abgehakt; mit 'monate' nur in diesen Monaten). Die Mülltonnen-Kachel macht die Seite selbst aus dem Müllkalender (sensor.muell).",
  "aufgaben": [
   {
    "id": "zisterne",
@@ -55,7 +55,10 @@
    "icon": "💧",
    "dauer": "ca. 45 Minuten",
    "brauchen": "Eimer, Schraubenschlüssel, alte Decke oder Haube",
-   "monate": [10, 11],
+   "monate": [
+    10,
+    11
+   ],
    "schritte": [
     "Stecker der Pumpe ziehen (beide Hauswasserwerke, siehe Fotos).",
     "Unten an der Pumpe die Ablassschraube aufdrehen und das Wasser in den Eimer laufen lassen.",
@@ -71,7 +74,10 @@
    "icon": "🌱",
    "dauer": "ca. 45 Minuten",
    "brauchen": "Eimer mit Wasser, Schraubenschlüssel",
-   "monate": [3, 4],
+   "monate": [
+    3,
+    4
+   ],
    "schritte": [
     "Pumpe an ihren Platz stellen und Leitungen anschließen (siehe Fotos).",
     "Pumpe vorne am Einfüllstutzen mit Wasser füllen, bis es oben herausläuft – sonst läuft sie trocken.",
@@ -180,6 +186,217 @@
     "Unten vorne die Sockelklappe öffnen (siehe Foto).",
     "Den Filter dort herausnehmen und unter Wasser ausspülen, gut ausdrücken.",
     "Alles wieder einsetzen."
+   ],
+   "vorsicht": ""
+  },
+  {
+   "id": "maeher",
+   "titel": "Aufsitzmäher: sauber machen, Fangkorb leeren, tanken",
+   "icon": "🚜",
+   "dauer": "ca. 20 Minuten",
+   "brauchen": "Laubbläser, Handschuhe, Benzinkanister (Super bleifrei)",
+   "monate": [
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+   ],
+   "tage": 14,
+   "schritte": [
+    "Mäher aus, Schlüssel abziehen, Motor kurz abkühlen lassen.",
+    "Fangkorb abnehmen und auf dem Kompost leeren.",
+    "Mähwerk, Motor und Kühlrippen mit dem Laubbläser abpusten (Gras und Staub weg).",
+    "Tanken: nur Super bleifrei aus dem Benzinkanister – KEIN Gemisch!",
+    "Fangkorb wieder einhängen und den Mäher an seinen Platz stellen."
+   ],
+   "vorsicht": "Nicht bei laufendem Motor sauber machen. Beim Tanken nicht rauchen."
+  },
+  {
+   "id": "gemisch",
+   "titel": "Benzin-Gemisch für die Gartengeräte mischen (1:50)",
+   "icon": "⛽",
+   "dauer": "ca. 10 Minuten",
+   "brauchen": "Gemisch-Kanister, Super bleifrei, Stihl-Zweitaktöl, Messbecher",
+   "tage": 30,
+   "schritte": [
+    "Gemisch-Kanister nehmen (siehe Foto) – das ist der für Laubbläser, Freischneider und Motorsäge.",
+    "Zuerst das Öl hinein: 100 ml Zweitaktöl auf 5 Liter Benzin (bei 2,5 Liter: 50 ml).",
+    "Dann das Benzin dazu.",
+    "Kanister zu und gut schütteln.",
+    "Mit Stift das Datum auf den Kanister schreiben – Gemisch hält nur etwa 30 Tage."
+   ],
+   "vorsicht": "Gemisch NUR für Laubbläser, Freischneider und Motorsäge – nie in den Aufsitzmäher. Nicht rauchen, draußen mischen."
+  },
+  {
+   "id": "gartengeraete",
+   "titel": "Laubbläser, Freischneider & Co. sauber machen und aufhängen",
+   "icon": "🧹",
+   "dauer": "ca. 20 Minuten",
+   "brauchen": "Handbürste, Laubbläser oder Druckluft, Lappen",
+   "monate": [
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11
+   ],
+   "tage": 14,
+   "schritte": [
+    "Geräte abkühlen lassen.",
+    "Gras und Dreck mit der Bürste abmachen, dann abpusten – nicht mit Wasser abspritzen.",
+    "Beim Freischneider die Schutzhaube innen sauber machen und den Faden ansehen.",
+    "Alles an seinen Haken hängen (siehe Foto)."
+   ],
+   "vorsicht": "Nur an kalten, ausgeschalteten Geräten arbeiten."
+  },
+  {
+   "id": "gaestewc",
+   "titel": "Gäste-WC für die Camper: nach dem Rechten sehen",
+   "icon": "🚻",
+   "dauer": "ca. 20 Minuten",
+   "brauchen": "Putzeimer, Lappen, WC-Reiniger, Klopapier, Seife, Handtuch",
+   "monate": [
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+   ],
+   "tage": 3,
+   "schritte": [
+    "WC und Waschbecken sauber machen.",
+    "Boden wischen – dort soll niemand mit Schuhen rein.",
+    "Fußmatte ausschütteln, wenn nötig auswaschen.",
+    "Klopapier, Seife und Handtuch auffüllen, Mülleimer leeren.",
+    "Hängt das Schild „Bitte Schuhe ausziehen“ noch?"
+   ],
+   "vorsicht": ""
+  },
+  {
+   "id": "gewaechshaus",
+   "titel": "Gewächshaus nachsehen",
+   "icon": "🪴",
+   "dauer": "ca. 15 Minuten",
+   "brauchen": "Gießkanne",
+   "monate": [
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+   ],
+   "tage": 3,
+   "schritte": [
+    "Bei Sonne Fenster/Tür öffnen, abends wieder zu.",
+    "Pflanzen gießen, wenn die Erde trocken ist.",
+    "Unkraut zupfen, Kranke oder Vertrocknetes wegnehmen.",
+    "Nachsehen, ob Scheiben oder Tür kaputt sind – sonst Marco Bescheid sagen."
+   ],
+   "vorsicht": ""
+  },
+  {
+   "id": "asche",
+   "titel": "Kamin: Asche leeren und Scheibe putzen",
+   "icon": "🔥",
+   "dauer": "ca. 15 Minuten",
+   "brauchen": "Metalleimer mit Deckel, Schaufel, Zeitungspapier",
+   "monate": [
+    10,
+    11,
+    12,
+    1,
+    2,
+    3,
+    4
+   ],
+   "tage": 7,
+   "schritte": [
+    "Nur wenn der Kamin ganz kalt ist (am Vortag aus).",
+    "Asche mit der Schaufel in den Metalleimer, Deckel drauf.",
+    "Scheibe: Zeitungspapier anfeuchten, in die kalte Asche tupfen und damit die Scheibe putzen.",
+    "Mit trockenem Papier nachwischen.",
+    "Ascheeimer draußen auf Stein abstellen (nicht an Holz)."
+   ],
+   "vorsicht": "Asche kann noch nach einem Tag Glut haben – immer Metalleimer, nie Plastik."
+  },
+  {
+   "id": "fettfilter",
+   "titel": "Kochfeld-Abzug: Fettfilter in die Spülmaschine",
+   "icon": "🍳",
+   "dauer": "ca. 5 Minuten",
+   "brauchen": "Spülmaschine",
+   "tage": 30,
+   "schritte": [
+    "Kochfeld aus und abgekühlt.",
+    "Die Abdeckung in der Mitte des Kochfelds abnehmen und den Fettfilter herausziehen (siehe Foto).",
+    "Fettfilter in die Spülmaschine legen (normales Programm).",
+    "Danach trocken wieder einsetzen, Abdeckung drauf."
+   ],
+   "vorsicht": ""
+  },
+  {
+   "id": "gefrierschrank",
+   "titel": "Gefrierschrank auswischen und aufräumen",
+   "icon": "🧊",
+   "dauer": "ca. 30 Minuten",
+   "brauchen": "Kühltasche, Lappen, warmes Wasser",
+   "monate": [
+    1,
+    7
+   ],
+   "tage": 150,
+   "schritte": [
+    "Gefrorenes in die Kühltasche legen.",
+    "Schubladen herausnehmen und mit warmem Wasser auswischen.",
+    "Wenn sich Eis gebildet hat: Gerät ausschalten, Tür auf, Handtuch drunter, abtauen lassen.",
+    "Alles trocken wischen, einschalten, Sachen wieder einräumen – Altes aussortieren."
+   ],
+   "vorsicht": "Kein Messer oder Schaber gegen das Eis."
+  },
+  {
+   "id": "gartenwinter",
+   "titel": "Garten winterfest: Gartenmöbel und Polster einlagern",
+   "icon": "🪑",
+   "dauer": "ca. 1 Stunde",
+   "brauchen": "Lappen, ggf. Schubkarre",
+   "monate": [
+    10,
+    11
+   ],
+   "schritte": [
+    "Polster und Kissen rein (trocken!).",
+    "Gartenmöbel abwischen und an ihren Winterplatz bringen (siehe Foto).",
+    "Kübelpflanzen, die keinen Frost vertragen, ins Haus oder ins Gewächshaus.",
+    "Gartengeräte und Schläuche wegräumen."
+   ],
+   "vorsicht": ""
+  },
+  {
+   "id": "gartenfruehjahr",
+   "titel": "Gartenmöbel wieder rausstellen",
+   "icon": "🌷",
+   "dauer": "ca. 45 Minuten",
+   "brauchen": "Lappen",
+   "monate": [
+    4,
+    5
+   ],
+   "schritte": [
+    "Gartenmöbel aus dem Winterplatz holen und abwischen.",
+    "An ihren Platz auf der Terrasse stellen (siehe Foto).",
+    "Polster erst raus, wenn es trocken ist."
    ],
    "vorsicht": ""
   }

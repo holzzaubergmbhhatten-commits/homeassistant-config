@@ -88,17 +88,19 @@ function status(a) {        // dran | bald | ok
     if (w.status === "bald") return "bald";
     return "ok";
   }
-  const m = new Date().getMonth() + 1, zuletzt = D.zuletzt[a.id];
-  if ((a.monate || []).includes(m)) {
-    if (!zuletzt || (Date.now() - new Date(zuletzt)) / 864e5 > 90) return "dran";
-  }
+  if (a.muell) return "dran";
+  const m = new Date().getMonth() + 1, z = D.zuletzt[a.id], tageHer = z ? (Date.now() - new Date(z)) / 864e5 : Infinity;
+  if (a.monate && !a.monate.includes(m)) return "ok";
+  if (a.tage) return tageHer >= a.tage ? "dran" : "ok";
+  if (a.monate) return tageHer > 90 ? "dran" : "ok";
   return "ok";
 }
 function hinweisZeit(a) {
   const z = D.zuletzt[a.id];
   if (a.wartung) { const w = wartung(a.wartung); if (w && w.zuletzt) return "zuletzt " + new Date(w.zuletzt).toLocaleDateString("de-DE"); }
   if (z) return "zuletzt " + new Date(z).toLocaleDateString("de-DE");
-  if (a.monate) return "dran im " + a.monate.map(m => MONATE[m - 1]).join(" / ");
+  if (a.monate && a.monate.length <= 4) return "dran im " + a.monate.map(m => MONATE[m - 1]).join(" / ");
+  if (a.tage) return "etwa alle " + (a.tage >= 28 ? Math.round(a.tage / 30) + " Monat(e)" : a.tage + " Tage");
   return "";
 }
 function kachel(a) {
@@ -109,21 +111,46 @@ function kachel(a) {
     ${s === "dran" ? `<span class="marke dran">Jetzt dran</span>` : s === "bald" ? `<span class="marke dran">Bald dran</span>` : `<span class="marke ok">${esc(hinweisZeit(a) || "alles gut")}</span>`}
   </button>`;
 }
+// Mülltonne: kommt von selbst aus dem Müllkalender (sensor.muell) und verschwindet wieder, wenn sie erledigt oder nicht mehr dran ist
+function muellAufgabe() {
+  const s = hass() && hass().states["sensor.muell"]; if (!s) return null;
+  const namen = l => (l || []).map(x => typeof x === "string" ? x : (x.art || x.name || "")).filter(Boolean);
+  const heute = namen(s.attributes.heute), morgen = namen(s.attributes.morgen), h = new Date().getHours();
+  const tag = d => d.toISOString().slice(0, 10), jetzt = new Date(), mo = new Date(Date.now() + 864e5);
+  let art = null, tonnen = [], datum = "";
+  if (heute.length && h >= 12) { art = "rein"; tonnen = heute; datum = tag(jetzt); }
+  else if (heute.length && h < 10) { art = "raus"; tonnen = heute; datum = tag(jetzt); }
+  else if (morgen.length) { art = "raus"; tonnen = morgen; datum = tag(mo); }
+  if (!art) return null;
+  const id = `muell-${art}-${datum}`;
+  if (D.zuletzt[id]) return null;
+  const liste = tonnen.join(", ");
+  return art === "raus"
+    ? { id, muell: true, fotoId: "muell", icon: "🗑️", dauer: "ca. 5 Minuten", brauchen: liste,
+        titel: `Mülltonne rausstellen: ${liste}`,
+        schritte: [`Diese Tonne(n) an die Straße stellen: ${liste} (siehe Foto).`, "Deckel zu, Griff zeigt zum Haus.",
+          "Wird morgen früh abgeholt – heute Abend rausstellen reicht."], vorsicht: "" }
+    : { id, muell: true, fotoId: "muell", icon: "🗑️", dauer: "ca. 5 Minuten", brauchen: liste,
+        titel: `Mülltonne wieder reinholen: ${liste}`,
+        schritte: [`Die geleerte(n) Tonne(n) wieder an ihren Platz stellen: ${liste}.`], vorsicht: "" };
+}
+function alleAufgaben() { const m = muellAufgabe(); return (m ? [m] : []).concat(D.aufgaben); }
 function liste() {
-  const dran = D.aufgaben.filter(a => status(a) !== "ok"), rest = D.aufgaben.filter(a => status(a) === "ok");
+  const alle = alleAufgaben();
+  const dran = alle.filter(a => status(a) !== "ok"), rest = alle.filter(a => status(a) === "ok");
   $("inhalt").innerHTML = `<h1>🧰 Helfer</h1><p class="unter">Danke für eure Hilfe! Antippen, dann steht da genau, was zu tun ist.</p>
     <h2>Jetzt dran</h2>
     ${dran.length ? `<div class="kacheln">${dran.map(kachel).join("")}</div>` : `<div class="leer">Gerade ist nichts dringend. 👍</div>`}
     <h2>Alle Aufgaben</h2><div class="kacheln">${rest.map(kachel).join("")}</div>`;
 }
 function fotoBlock(a, nr) {
-  const name = D.fotos[a.id + "/" + nr];
+  const name = D.fotos[(a.fotoId || a.id) + "/" + nr];
   return `<div class="foto">${name ? `<img src="/local/helfer/${esc(name)}" alt="">` : ""}
     <button class="fotoknopf" data-foto="${nr}">📷 ${name ? "Foto ersetzen" : "Foto hinzufügen"}</button>
     ${name ? `<button class="fotoknopf" data-fotoweg="${nr}">✕ Foto weg</button>` : ""}</div>`;
 }
 function detail() {
-  const a = D.aufgaben.find(x => x.id === offen); if (!a) { offen = null; return liste(); }
+  const a = alleAufgaben().find(x => x.id === offen); if (!a) { offen = null; return liste(); }
   $("inhalt").innerHTML = `<button class="zurueck" data-zurueck="1">← Alle Aufgaben</button>
     <div class="kopf"><div class="ic">${a.icon || "🧰"}</div><h1>${esc(a.titel)}</h1></div>
     <div class="infos"><div class="info"><small>Dauer</small>${esc(a.dauer || "–")}</div>
@@ -144,7 +171,7 @@ function frage(text, ja) {
   document.body.appendChild(d);
 }
 async function erledigt() {
-  const a = D.aufgaben.find(x => x.id === offen);
+  const a = alleAufgaben().find(x => x.id === offen);
   frage(`„${a.titel}“ ist fertig?`, async () => {
     try {
       await skript("helfer_erledigt", { aufgabe: a.id, titel: a.titel, wartung: a.wartung || "" });
@@ -183,10 +210,11 @@ document.addEventListener("click", async ev => {
   if (t.dataset.auf) { offen = t.dataset.auf; zeichnen(); }
   else if (t.dataset.zurueck) { offen = null; zeichnen(); window.scrollTo(0, 0); }
   else if (t.dataset.erledigt) erledigt();
-  else if (t.dataset.foto) { fotoZiel = [offen, +t.dataset.foto]; $("datei").value = ""; $("datei").click(); }
+  else if (t.dataset.foto) { const a = alleAufgaben().find(x => x.id === offen); fotoZiel = [(a && a.fotoId) || offen, +t.dataset.foto]; $("datei").value = ""; $("datei").click(); }
   else if (t.dataset.fotoweg) {
-    frage("Dieses Foto entfernen?", async () => { await skript("helfer_foto_weg", { aufgabe: offen, schritt: +t.dataset.fotoweg });
-      delete D.fotos[offen + "/" + t.dataset.fotoweg]; zeichnen(); });
+    const a = alleAufgaben().find(x => x.id === offen), fid = (a && a.fotoId) || offen;
+    frage("Dieses Foto entfernen?", async () => { await skript("helfer_foto_weg", { aufgabe: fid, schritt: +t.dataset.fotoweg });
+      delete D.fotos[fid + "/" + t.dataset.fotoweg]; zeichnen(); });
   }
 });
 $("datei").addEventListener("change", ev => { const f = ev.target.files[0]; if (f && fotoZiel) fotoHochladen(f); });
