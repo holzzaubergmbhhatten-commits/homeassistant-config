@@ -26,6 +26,7 @@ zum Antippen einzelner Räume.
 - Nuki: bewusst weggelassen
 - Anzeige: bisher Chrome `--app` (nicht `--kiosk`), Seitenleiste eingeklappt
 - Design: dunkles Theme, transparente Kacheln via card-mod
+- **Emojis/Symbole auf eigenen Seiten (www/*.html): Der Flur-Monitor hat KEINE Emoji-Schrift** – jede Seite mit Emojis braucht im `<head>` `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap">` und `"Noto Color Emoji"` am Ende jeder `font-family`-Liste (nicht bei `inherit`). Prüfen vor dem Hochladen: `python3 claude_tools/emoji_check.py`.
 - Umzug: komplettes HA-Backup (.tar) wiederherstellen
 
 ## Wichtig: Home Assistant OS hat keinen Browser am HDMI-Ausgang
