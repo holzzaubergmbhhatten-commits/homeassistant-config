@@ -50,9 +50,14 @@ def main():
         print(json.dumps({"ok": False, "fehler": "kein_schluessel"}))
         return
     akte = json.load(open(AKTE, encoding="utf-8"))
-    e = next((x for x in akte if isinstance(x, dict) and x.get("id") == auftrag.get("id")), None)
-    if not e or not str(e.get("datei", "")).lower().endswith(".pdf"):
-        raise RuntimeError("Dokument in der Akte nicht gefunden")
+    kennung = auftrag.get("id")
+    e = next((x for x in akte if isinstance(x, dict) and x.get("id") == kennung), None)
+    if not e:   # Seite/Teil wurde inzwischen mit anderen zu einem Dokument zusammengefügt → das ganze Dokument nehmen
+        e = next((x for x in akte if isinstance(x, dict) and kennung in (x.get("aufgegangen") or [])), None)
+    if not e:
+        raise RuntimeError("Dokument in der Akte nicht gefunden (wurde es gelöscht?)")
+    if not str(e.get("datei", "")).lower().endswith(".pdf"):
+        raise RuntimeError("Das Dokument ist kein PDF")
     pfad = os.path.join(ABLAGE, e["datei"])
     if os.path.getsize(pfad) > 45_000_000:
         raise RuntimeError("PDF ist größer als 45 MB")
@@ -79,6 +84,11 @@ def main():
             kennung += "-2"
         beste = {"id": kennung, "gruppe": "Sonstiges", "name": e.get("titel") or "Anleitung", "pruef": [], "hersteller": [], "suche": []}
         quellen["geraete"].append(beste)
+    if any(g.get("akte_id") == e["id"] for g in quellen["geraete"]):   # dasselbe Dokument schon übernommen (z. B. Knopf bei jeder Seite)
+        print(json.dumps({"ok": True, "name": next(g["name"] for g in quellen["geraete"] if g.get("akte_id") == e["id"]),
+                          "geraet": beste["id"], "neu": False, "schon": True}, ensure_ascii=False))
+        return
+    beste["akte_id"] = e["id"]
     beste["manuell"] = {"quelle": f"{e.get('absender') or 'Hersteller'} – per Telegram von {auftrag.get('von') or 'Marco'}", "deutsch": True}
 
     datei_pfad = f"{ordner}/{beste['id']}.pdf"

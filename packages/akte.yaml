@@ -85,7 +85,8 @@ automation:
           config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
           chat_id: "{{ trigger.event.data.chat_id }}"
           message: >-
-            {% if a.ok | default(false) %}📖 „{{ a.name }}“ ist unterwegs ins Haus-Handbuch – in etwa 5 Minuten unter „📄 Anleitungen“
+            {% if a.schon | default(false) %}📖 „{{ a.name }}“ ist schon im Haus-Handbuch (gehört zum selben Dokument).
+            {%- elif a.ok | default(false) %}📖 „{{ a.name }}“ ist unterwegs ins Haus-Handbuch – in etwa 5 Minuten unter „📄 Anleitungen“
             {{- ' (neu angelegt unter „Sonstiges“)' if a.neu else ' und beim Gerät' }}.
             {%- elif a.fehler == 'kein_schluessel' %}📖 Dafür fehlt einmalig der GitHub-Schlüssel. So geht's (5 Minuten, nur einmal):
             {{ '\n' }}1. Am Laptop auf github.com anmelden → oben rechts Profilbild → Settings → ganz unten „Developer settings“

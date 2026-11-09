@@ -814,6 +814,16 @@ def datei_einordnen(e):
             e[feld] = neu
 
 
+def aufgehen(haupt, e):
+    """Merkt sich, dass Eintrag e in haupt aufgegangen ist – ältere Telegram-Knöpfe (z. B. „📖 Ins Haus-Handbuch“) finden ihn so noch."""
+    if haupt is e:
+        return
+    alt = haupt.setdefault("aufgegangen", [])
+    for i in [e.get("id")] + list(e.get("aufgegangen") or []):
+        if i and i not in alt:
+            alt.append(i)
+
+
 def zusammenfuehren(liste, gruppe):
     """Mehrere Foto-Belege (einzelne Seiten) zu einem zusammenführen und neu lesen."""
     es = [e for e in gruppe if e in liste and e.get("seiten")]
@@ -825,6 +835,7 @@ def zusammenfuehren(liste, gruppe):
         _weg(ablage(e))
         if e.get("notiz"):
             haupt["notiz"] = ((haupt.get("notiz") or "") + " · " + e["notiz"]).strip(" ·")
+        aufgehen(haupt, e)
         liste.remove(e)
     pfad = os.path.join(ABLAGE, haupt["original"]) if haupt.get("original") else ablage(haupt)
     seiten_zu_pdf([os.path.join(SEITEN, s) for s in haupt["seiten"]], pfad)
@@ -1601,6 +1612,7 @@ def heften(chat, liste, eintraege):
             _weg(ablage(e))
             if e.get("notiz"):
                 haupt["notiz"] = ((haupt.get("notiz") or "") + " · " + e["notiz"]).strip(" ·")
+            aufgehen(haupt, e)
             liste.remove(e)
         os.replace(ziel + ".neu", ziel)
         haupt["seiten"] = []
@@ -1781,11 +1793,13 @@ def vorgang_bilden(chat, liste, eintraege, auftrag_text, titel="", von="", still
     alte_dateien = {(alt or {}).get("datei"), (alt or {}).get("uebersicht")} - {None, ziel_rel}
 
     # Einzel-Einträge gehen im Vorgang auf (ihre Fotos bleiben, die Einzel-PDFs werden durch das Sammel-PDF ersetzt)
+    aufgegangen = {}
     for e in eintraege:
         if e is alt or e not in liste:
             continue
         if e.get("seiten"):
             _weg(ablage(e))
+        aufgehen(aufgegangen, e)
         liste.remove(e)
     inhalt = "\n".join(f"Beleg {z[0]}: {z[1]} {z[2]} ({z[3]}, {z[4]}) {z[5]}" for z in zeilen_pdf) + f"\nSumme: {euro(summe)}"
     v = alt or {"id": datetime.now().strftime("%Y%m%d%H%M%S") + uuid.uuid4().hex[:4], "eingang": datetime.now().isoformat(timespec="seconds"),
@@ -1793,6 +1807,7 @@ def vorgang_bilden(chat, liste, eintraege, auftrag_text, titel="", von="", still
                 "sendung_text": eintraege[-1].get("sendung_text") or auftrag_text[:500]}
     if alt is None:
         liste.append(v)
+    aufgehen(v, aufgegangen)
     v.update({"typ": "Sonstiges", "kategorie": a.get("kategorie") or "Sonstiges", "titel": f"Kostenaufstellung {titel}",
               "absender": "Zusammenstellung", "datum": date.today().isoformat(), "betrag": summe, "person": "",
               "ordner": ordner, "ordner_fest": True, "rechnungsnummer": "", "bezug": "", "mahnung": False,
