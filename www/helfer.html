@@ -134,14 +134,21 @@ function muellAufgabe() {
         titel: `Mülltonne wieder reinholen: ${liste}`,
         schritte: [`Die geleerte(n) Tonne(n) wieder an ihren Platz stellen: ${liste}.`], vorsicht: "" };
 }
+let alleZeigen = false;
+function inSaison(a) { return a.muell || !a.monate || a.monate.includes(new Date().getMonth() + 1); }
 function alleAufgaben() { const m = muellAufgabe(); return (m ? [m] : []).concat(D.aufgaben); }
 function liste() {
   const alle = alleAufgaben();
-  const dran = alle.filter(a => status(a) !== "ok"), rest = alle.filter(a => status(a) === "ok");
+  const dran = alle.filter(a => inSaison(a) && status(a) !== "ok"), rest = alle.filter(a => inSaison(a) && status(a) === "ok");
+  const spaeter = alle.filter(a => !inSaison(a));
   $("inhalt").innerHTML = `<h1>🧰 Helfer</h1><p class="unter">Danke für eure Hilfe! Antippen, dann steht da genau, was zu tun ist.</p>
     <h2>Jetzt dran</h2>
     ${dran.length ? `<div class="kacheln">${dran.map(kachel).join("")}</div>` : `<div class="leer">Gerade ist nichts dringend. 👍</div>`}
-    <h2>Alle Aufgaben</h2><div class="kacheln">${rest.map(kachel).join("")}</div>`;
+    ${rest.length ? `<h2>Gerade nicht dringend</h2><div class="kacheln">${rest.map(kachel).join("")}</div>` : ""}
+    ${spaeter.length ? (alleZeigen
+      ? `<h2>Andere Jahreszeit</h2><div class="kacheln">${spaeter.map(kachel).join("")}</div>
+         <p><button class="fotoknopf" data-alle="0">Andere Jahreszeit ausblenden</button></p>`
+      : `<p style="margin-top:28px"><button class="fotoknopf" data-alle="1">Aufgaben für andere Jahreszeiten zeigen (${spaeter.length})</button></p>`) : ""}`;
 }
 function fotoBlock(a, nr) {
   const name = D.fotos[(a.fotoId || a.id) + "/" + nr];
@@ -206,7 +213,8 @@ async function fotoHochladen(datei) {
   } catch (e) { toast("Foto ging nicht: " + (e.message || e)); }
 }
 document.addEventListener("click", async ev => {
-  const t = ev.target.closest("[data-auf],[data-zurueck],[data-erledigt],[data-foto],[data-fotoweg]"); if (!t) return;
+  const t = ev.target.closest("[data-auf],[data-zurueck],[data-erledigt],[data-foto],[data-fotoweg],[data-alle]"); if (!t) return;
+  if (t.dataset.alle) { alleZeigen = t.dataset.alle === "1"; zeichnen(); return; }
   if (t.dataset.auf) { offen = t.dataset.auf; zeichnen(); }
   else if (t.dataset.zurueck) { offen = null; zeichnen(); window.scrollTo(0, 0); }
   else if (t.dataset.erledigt) erledigt();
