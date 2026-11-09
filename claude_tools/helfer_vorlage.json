@@ -414,6 +414,56 @@
     "Am nächsten Tag: Ladegerät aus, Stecker raus, dann erst schwarze, dann rote Zange abnehmen."
    ],
    "vorsicht": "Rot an Plus, schwarz an Minus – nicht vertauschen. Nicht rauchen beim Laden."
+  },
+  {
+   "id": "camper-waschmaschine",
+   "titel": "Camper-Bad: Waschmaschine – Flusensieb sauber machen",
+   "icon": "🧺",
+   "dauer": "ca. 15 Minuten",
+   "brauchen": "flache Schale, Handtuch",
+   "monate": [
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+   ],
+   "tage": 30,
+   "schritte": [
+    "Unten vorne die kleine Klappe öffnen (siehe Foto).",
+    "Handtuch und Schale darunter – es kommt Wasser heraus.",
+    "Das Sieb langsam herausdrehen und das Wasser in die Schale laufen lassen.",
+    "Flusen entfernen, Sieb abspülen und wieder fest eindrehen, Klappe zu.",
+    "Tür offen lassen, damit die Trommel trocknet."
+   ],
+   "vorsicht": "Nur wenn die Maschine aus und abgekühlt ist."
+  },
+  {
+   "id": "camper-trockner",
+   "titel": "Camper-Bad: Trockner – Filter sauber machen",
+   "icon": "🌀",
+   "dauer": "ca. 10 Minuten",
+   "brauchen": "Staubsauger oder weiche Bürste",
+   "monate": [
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+   ],
+   "tage": 14,
+   "schritte": [
+    "Flusensieb in der Tür herausziehen und die Flusen abnehmen.",
+    "Unten vorne die Sockelklappe öffnen (siehe Foto).",
+    "Den Filter dort herausnehmen und unter Wasser ausspülen, gut ausdrücken.",
+    "Kondenswasser-Behälter leeren, falls einer da ist.",
+    "Alles wieder einsetzen."
+   ],
+   "vorsicht": ""
   }
  ]
 }
