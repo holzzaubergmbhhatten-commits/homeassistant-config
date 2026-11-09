@@ -216,19 +216,19 @@
   },
   {
    "id": "gemisch",
-   "titel": "Benzin-Gemisch für die Gartengeräte mischen (1:50)",
+   "titel": "Benzin-Kanister auffüllen: Gemisch 1:50, Gemisch 1:40 und Super",
    "icon": "⛽",
-   "dauer": "ca. 10 Minuten",
-   "brauchen": "Gemisch-Kanister, Super bleifrei, Stihl-Zweitaktöl, Messbecher",
+   "dauer": "ca. 20 Minuten",
+   "brauchen": "die drei Kanister (beschriftet), Super bleifrei E5, Zweitaktöl, Messbecher, Stift",
    "tage": 30,
    "schritte": [
-    "Gemisch-Kanister nehmen (siehe Foto) – das ist der für Laubbläser, Freischneider und Motorsäge.",
-    "Zuerst das Öl hinein: 100 ml Zweitaktöl auf 5 Liter Benzin (bei 2,5 Liter: 50 ml).",
-    "Dann das Benzin dazu.",
-    "Kanister zu und gut schütteln.",
-    "Mit Stift das Datum auf den Kanister schreiben – Gemisch hält nur etwa 30 Tage."
+    "Kanister 1 – Gemisch 1:50 für Laubbläser, Freischneider und Motorsäge: zuerst 100 ml Zweitaktöl, dann 5 Liter Super (bei 2,5 Liter: 50 ml Öl).",
+    "Kanister 2 – Gemisch 1:40 nur für den Erdbohrer (Fuxtec): zuerst 125 ml Zweitaktöl, dann 5 Liter Super (bei 1 Liter: 25 ml Öl).",
+    "Kanister 3 – reines Super E5, KEIN Öl: für Aufsitzmäher, Minibagger und Rüttelplatte.",
+    "Gemisch-Kanister gut schütteln.",
+    "Mit Stift das Datum auf die Gemisch-Kanister schreiben – Gemisch hält nur etwa 30 Tage."
    ],
-   "vorsicht": "Gemisch NUR für Laubbläser, Freischneider und Motorsäge – nie in den Aufsitzmäher. Nicht rauchen, draußen mischen."
+   "vorsicht": "Kanister nie verwechseln: Gemisch nie in Aufsitzmäher, Bagger oder Rüttelplatte, reines Benzin nie in Laubbläser, Freischneider, Motorsäge oder Erdbohrer. Für Bagger kein E10. Draußen mischen, nicht rauchen."
   },
   {
    "id": "gartengeraete",
