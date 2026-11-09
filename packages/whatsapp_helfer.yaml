@@ -1,0 +1,70 @@
+# WhatsApp an Oma & Opa (über den kostenlosen Dienst CallMeBot): Wenn wir im Urlaub sind (Urlaubsmodus an),
+# bekommen sie am Vortag eine Info, wenn in der Ferienwohnung Gäste an- oder abreisen.
+# Nummern und CallMeBot-Schlüssel stehen NUR im Helfer input_text.helfer_whatsapp (nie im Repository):
+#   Format: 49170…:SCHLÜSSEL  – mehrere Personen mit ; trennen.
+input_text:
+  helfer_whatsapp:
+    name: WhatsApp Oma & Opa (Nummer:Schlüssel; …)
+    icon: mdi:whatsapp
+    max: 255
+    mode: password
+
+rest_command:
+  whatsapp_callmebot:
+    url: "https://api.callmebot.com/whatsapp.php?phone={{ phone }}&text={{ text | urlencode }}&apikey={{ apikey }}"
+    method: get
+    timeout: 30
+
+script:
+  whatsapp_helfer:
+    alias: "WhatsApp an Oma & Opa schicken"
+    mode: queued
+    fields:
+      text:
+        description: Nachricht
+    sequence:
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.helfer_whatsapp') | string).split(';') | map('trim')
+               | select('match', '^\+?\d{6,}:\S+$') | list }}
+          sequence:
+            - action: rest_command.whatsapp_callmebot
+              continue_on_error: true
+              data:
+                phone: "{{ repeat.item.split(':')[0] | replace('+', '') }}"
+                apikey: "{{ repeat.item.split(':', 1)[1] }}"
+                text: "{{ text }}"
+
+automation:
+  - id: ferienwohnung_helfer_whatsapp
+    alias: "Ferienwohnung: Oma & Opa per WhatsApp Bescheid geben (nur im Urlaub)"
+    triggers:
+      - trigger: time
+        at: "16:47:00"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.urlaubsmodus
+        state: "on"
+    actions:
+      - variables:
+          morgen: "{{ (now() + timedelta(days=1)).strftime('%Y-%m-%d') }}"
+          tag: >-
+            {{ ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'][(now() + timedelta(days=1)).weekday()] }},
+            {{- (now() + timedelta(days=1)).strftime(' %d.%m.') }}
+          buchungen: "{{ state_attr('sensor.termine_vorschau', 'buchungen') or [] }}"
+          an: "{{ buchungen | selectattr('start', 'eq', morgen) | list | count > 0 }}"
+          ab: "{{ buchungen | selectattr('ende', 'eq', morgen) | list | count > 0 }}"
+          bis: "{{ (buchungen | selectattr('start', 'eq', morgen) | map(attribute='ende') | first | default('')) }}"
+      - condition: template
+        value_template: "{{ an or ab }}"
+      - action: script.whatsapp_helfer
+        data:
+          text: >-
+            🏡 Ferienwohnung – morgen, {{ tag }}:
+            {%- if ab %} Die Gäste reisen ab. Danach bitte sauber machen und frische Bettwäsche und Handtücher hinlegen.{% endif %}
+            {%- if an %} Neue Gäste kommen{{ ' (bis ' ~ as_datetime(bis).strftime('%d.%m.') ~ ')' if bis else '' }}. Bitte vorher kurz nachsehen, ob alles fertig ist.{% endif %}
+            Danke! Marco & Mirka
+      - action: logbook.log
+        data:
+          name: Ferienwohnung
+          message: "WhatsApp an Oma & Opa: {{ 'Abreise' if ab else '' }}{{ ' und ' if ab and an else '' }}{{ 'Anreise' if an else '' }} morgen"

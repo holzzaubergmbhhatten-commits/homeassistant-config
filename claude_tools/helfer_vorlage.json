@@ -399,6 +399,21 @@
     "Polster erst raus, wenn es trocken ist."
    ],
    "vorsicht": ""
+  },
+  {
+   "id": "ape-batterie",
+   "titel": "Ape: Batterie laden",
+   "icon": "🛺",
+   "dauer": "ca. 10 Minuten (Laden dauert über Nacht)",
+   "brauchen": "Batterieladegerät",
+   "wartung": "ape-batterie-im-winter-laden",
+   "schritte": [
+    "Zur Ape gehen (siehe Foto).",
+    "Ladegerät nehmen: erst die rote Zange an Plus (+), dann die schwarze an Minus (–).",
+    "Ladegerät in die Steckdose stecken und einschalten.",
+    "Am nächsten Tag: Ladegerät aus, Stecker raus, dann erst schwarze, dann rote Zange abnehmen."
+   ],
+   "vorsicht": "Rot an Plus, schwarz an Minus – nicht vertauschen. Nicht rauchen beim Laden."
   }
  ]
 }
