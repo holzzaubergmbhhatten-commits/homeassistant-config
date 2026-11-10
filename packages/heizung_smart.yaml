@@ -85,19 +85,22 @@ template:
       - name: Kamin heizt
         unique_id: kamin_heizt
         icon: mdi:fireplace
-        # Gemessen: Fühler am Kamin-Vorlauf (Shelly „Kamin“, Rohr 1 oben am Puffer) ist heiß und wärmer als der Puffer oben.
-        # Ist der Ofen aus, hat das Rohr höchstens Puffertemperatur. Fällt der Fühler aus: Schätzung wie bisher.
+        # Direkt von der Ofen-Steuerung: Relais 2 der S-Thermatik NEO (Funktion „Verbrennung“) → Shelly 1 Mini „Kamin Signal“
+        # (Eingang getrennt) = binary_sensor.kamin_brennt. Fällt der Mini aus: Fühler am Kamin-Vorlauf, sonst Schätzung.
         state: >-
+          {% set sig = states('binary_sensor.kamin_brennt') %}
           {% set vl = states('sensor.kamin_vorlauf') | float(none) %}
           {% set po = states('sensor.hwr_warmepumpe_puffertemperatur_oben') | float(none) %}
-          {% if vl is not none %}
+          {% if sig in ['on', 'off'] %}
+            {{ sig == 'on' }}
+          {% elif vl is not none %}
             {{ vl > 55 and (po is none or vl > po + 3) }}
           {% else %}
             {{ states('sensor.puffer_anderung') | float(0) > 2
                and is_state('binary_sensor.hwr_warmepumpe_kompressor', 'off') }}
           {% endif %}
-        delay_on: "00:03:00"
-        delay_off: "00:20:00"
+        delay_on: "00:00:30"
+        delay_off: "00:05:00"
         attributes:
           hinweis: >-
             {{ 'gemessen am Kamin-Vorlauf' if states('sensor.kamin_vorlauf') | float(none) is not none
