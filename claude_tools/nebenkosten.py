@@ -319,6 +319,26 @@ def pdf_senden(auftrag):
     akte.logbuch("Nebenkosten-Übersicht als PDF verschickt")
 
 
+def mieter_senden(auftrag):
+    """Abrechnung für den Mieter als PDF (verständlich, ohne OLMESS-Begriffe) per Telegram an den, der gedrückt hat."""
+    import nk_mieter
+    d = alle()
+    name = auftrag.get("id")
+    z = d["zeitraeume"].get(name)
+    if not z:
+        return
+    os.makedirs(ABLAGE, exist_ok=True)
+    pfad = os.path.join(ABLAGE, f"Nebenkostenabrechnung_Mieter_{z['von'][:4]}-{z['bis'][:4]}.pdf")
+    chat = akte.chat_fuer(auftrag.get("wer"), auftrag.get("chats")) or auftrag.get("chat")
+    e = nk_mieter.erstellen(pfad, name, z, {n: v for n, v in d["zeitraeume"].items() if n < name}, frist(z))
+    if chat:
+        akte.datei_senden(chat, pfad, f"Nebenkostenabrechnung {akte.de_datum(z['von'])} – {akte.de_datum(z['bis'])} für "
+                                      f"{e['mieter'].get('nutzer', 'den Mieter')}: {'Nachzahlung' if e['diff'] >= 0 else 'Guthaben'} "
+                                      f"{akte.euro(abs(e['diff']))}" + (" (vorläufig)" if e["fehlt"] or e["geschaetzt"] else "")
+                                      + ". Kann so weitergeleitet werden.")
+    akte.logbuch("Nebenkosten-Abrechnung für den Mieter als PDF verschickt")
+
+
 def seite(auftrag):
     """Aufrufe von der Akte-Seite (was beginnt mit nk_)."""
     was = auftrag.get("was")
@@ -365,6 +385,8 @@ def seite(auftrag):
         akte.im_hintergrund(zaehler_lesen, auftrag)
     elif was == "nk_pdf" and name in d["zeitraeume"]:
         akte.im_hintergrund(pdf_senden, auftrag)
+    elif was == "nk_mieter" and name in d["zeitraeume"]:
+        akte.im_hintergrund(mieter_senden, auftrag)
     elif was == "nk_foto":
         pfad = os.path.join(FOTOS, os.path.basename(auftrag.get("text") or ""))
         if not os.path.exists(pfad):

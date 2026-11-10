@@ -100,7 +100,8 @@
       <div class="aktionen">
         <button class="knopf blau gross-knopf" data-n="auswerten" ${gesperrt}>✨ Aus Belegen der Akte übernehmen</button>
         <button class="knopf gross-knopf" data-n="foto">📷 Zählerfoto auswerten</button>
-        <button class="knopf gruen gross-knopf" data-n="pdf">📄 Als PDF an mein Telegram</button></div>
+        <button class="knopf gruen gross-knopf" data-n="mieter">📨 Abrechnung für die Mieterin (PDF)</button>
+        <button class="knopf gross-knopf" data-n="pdf">📄 OLMESS-Übersicht (PDF)</button></div>
       <p class="klein">Rechnungen, Bescheide und Gasabrechnungen einfach wie immer in die Akte legen – „Aus Belegen übernehmen“ sucht die passenden heraus und trägt sie hier ein (gelb markiert = Vorschlag). Alles lässt sich ändern; gespeichert wird automatisch.</p>
 
       <div class="nk-karte"><h3>1 · Nutzerliste <span class="klein">wer wohnt wo – Flächen, Personen, Vorauszahlungen im Zeitraum</span></h3>
@@ -324,6 +325,10 @@
         if (speicherT) await speichern();
         await skript({ was: "nk_pdf", id: zeitraum, wer: (hass().user && hass().user.name) || "" });
         toast("Die Übersicht kommt gleich per Telegram (PDF)", 6000); break;
+      case "mieter":
+        if (speicherT) await speichern();
+        await skript({ was: "nk_mieter", id: zeitraum, wer: (hass().user && hass().user.name) || "" });
+        toast("Die Abrechnung für die Mieterin kommt gleich per Telegram (PDF)", 6000); break;
       case "foto": $("nk-foto-datei").click(); break;
       case "plus": nk[w] = (nk[w] || []).concat([{}]); zeichnen(); break;
       case "weg": { const [l, i] = w.split("."); nk[l].splice(Number(i), 1); zeichnen(); speichernBald(); break; }
