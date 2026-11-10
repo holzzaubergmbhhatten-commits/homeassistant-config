@@ -4,7 +4,7 @@
 // Braucht aus akte.html: hass(), skript(), toast(), esc(), datum().
 (() => {
   let nk = null, zeitraum = "", zeitraeume = [], frist = "", BS = {}, HH = {}, speicherT = null, pollT = null, offen = false;
-  let geloeschtFotos = [], geloeschtZaehler = [];
+  let geloeschtFotos = [], geloeschtZaehler = [], frueher = {};
   const zahl = x => { if (x === "" || x == null) return null; const n = Number(String(x).replace(/\./g, "").replace(",", ".")); return isFinite(n) ? n : null; };
   const zahlText = (x, st = 2) => { const n = zahl(typeof x === "number" ? String(x).replace(".", ",") : x); return n == null ? "" : n.toLocaleString("de-DE", { minimumFractionDigits: st, maximumFractionDigits: st }); };
   const roh = x => x == null ? "" : typeof x === "number" ? String(x).replace(".", ",") : String(x);
@@ -32,6 +32,14 @@
   .nk-banner { border-radius: 12px; padding: 10px 12px; font-size: 14px; line-height: 1.45; }
   .nk-banner.rot { background: #FF3B301A; color: #8E1B12; } .nk-banner.gelb { background: #FFF4D6; color: #6B4E00; } .nk-banner.blau { background: #007AFF14; color: #0B4A99; }
   .nk-summe { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .nk-ergebnis-karte { border: 2px solid #34C759; }
+  .nk-ergebnis { display: grid; gap: 8px; background: var(--karte); border-radius: 12px; padding: 12px; }
+  .nk-gross { font-size: 20px; } .nk-gross b { font-size: 24px; }
+  .nk-zwei { font-size: 15px; line-height: 1.5; }
+  .nk-tab { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .nk-tab td { padding: 5px 4px; border-bottom: 1px solid #E5E5EA; vertical-align: top; }
+  :root.dunkel .nk-tab td { border-color: #3A3A3C; }
+  details.nk-banner summary { cursor: pointer; }
   .nk-foto { max-width: 100%; border-radius: 10px; margin-top: 4px; }
   :root.dunkel .nk-feld input, :root.dunkel .nk-feld select, :root.dunkel .nk-feld textarea { background: #2C2C2E; border-color: #48484A; color: #fff; }
   :root.dunkel .nk-banner.gelb { background: #3A3018; color: #F5D78A; } :root.dunkel .nk-banner.rot { color: #FF9F97; } :root.dunkel .nk-banner.blau { color: #8EC1FF; }`;
@@ -49,6 +57,11 @@
     if (!a || !a.ok || !a.daten) { if (was !== "nk_foto") toast("Nebenkosten konnten nicht geladen werden"); return a; }
     nk = a.daten; zeitraum = a.zeitraum; zeitraeume = a.zeitraeume || []; frist = a.frist || ""; BS = a.schluessel || {}; HH = a.hh_typen || {};
     geloeschtFotos = []; geloeschtZaehler = [];
+    // frühere Zeiträume einmal mitladen: fehlende Posten werden mit dem letzten bekannten Betrag geschätzt
+    for (const n of zeitraeume.filter(n => n < zeitraum && !frueher[n])) {
+      const v = await skript({ was: "nk_lesen", id: n });
+      if (v && v.ok && v.daten) frueher[n] = v.daten;
+    }
     return a;
   }
   window.nkOeffnen = async () => {
@@ -80,8 +93,10 @@
       ${tage == null ? "" : tage < 0 ? `<div class="nk-banner rot"><b>Frist abgelaufen am ${datum(frist)}.</b> Die Abrechnung hätte 12 Monate nach Ende des Zeitraums beim Mieter sein müssen.
           Eine Nachzahlung kann man dann in der Regel nicht mehr verlangen – ein Guthaben des Mieters muss aber trotzdem erstattet werden. Für einen bereits leer stehenden oder selbst genutzten Teil spielt das keine Rolle.</div>`
         : `<div class="nk-banner ${tage <= 60 ? "rot" : "blau"}"><b>Abrechnung an den Mieter bis ${datum(frist)}</b> (noch ${tage} Tage) – danach sind Nachzahlungen ausgeschlossen.</div>`}
-      ${z.status ? `<div class="nk-banner gelb">${laeuft() ? "⏳ " : "✨ "}${esc(z.status)}</div>` : ""}
-      ${(z.hinweise || []).length ? `<div class="nk-banner gelb">${z.hinweise.map(h => "• " + esc(h)).join("<br>")}</div>` : ""}
+      ${ergebnisKarte(z, tage)}
+      ${laeuft() ? `<div class="nk-banner gelb">⏳ ${esc(z.status)}</div>` : ""}
+      ${(z.hinweise || []).length || (z.status && !laeuft()) ? `<details class="nk-banner gelb"><summary><b>Hinweise vom letzten Einlesen</b> ${z.status && !laeuft() ? "· " + esc(z.status) : ""}</summary>
+        ${(z.hinweise || []).map(h => "• " + esc(h)).join("<br>")}</details>` : ""}
       <div class="aktionen">
         <button class="knopf blau gross-knopf" data-n="auswerten" ${gesperrt}>✨ Aus Belegen der Akte übernehmen</button>
         <button class="knopf gross-knopf" data-n="foto">📷 Zählerfoto auswerten</button>
@@ -127,6 +142,86 @@
 
       <div class="nk-karte"><h3>Notiz</h3><label class="nk-feld xl"><textarea data-f="notiz" rows="3" placeholder="z. B. Mieter OG seit …, Vorauszahlung monatlich …">${esc(z.notiz || "")}</textarea></label></div>`;
     if (gesperrt) $("nk-inhalt").querySelectorAll("[data-f]").forEach(el => el.disabled = true);
+  }
+  // ---------- Ergebnis: was muss der Mieter zahlen? ----------
+  // Posten, die in einer Nebenkostenabrechnung normalerweise vorkommen (Reihenfolge = Zuordnung, erster Treffer zählt)
+  const POSTEN = [
+    ["Gas (Heizung + Warmwasser)", "heiz", (x, l) => l === "brennstoff"],
+    ["Heizungs- und Allgemeinstrom", "heiz", x => /strom/i.test(x.art || "")],
+    ["Schornsteinfeger", "heiz", x => /schornstein/i.test(x.art || "")],
+    ["Wartung Heizung", "heiz", x => /wartung/i.test(x.art || "")],
+    ["Grundsteuer", "betrieb", x => /grundsteuer/i.test(x.art || "")],
+    ["Müllabfuhr", "betrieb", x => /abfall|müll/i.test(x.art || "")],
+    ["Straßenreinigung", "betrieb", x => /stra(ß|ss)enrein/i.test(x.art || "")],
+    ["Frischwasser", "betrieb", x => /frischwasser|trinkwasser|wasserversorgung|wasserlieferung/i.test(x.art || "")],
+    ["Abwasser", "betrieb", x => /abwasser|schmutzwasser/i.test(x.art || "")],
+    ["Regenwasser (Niederschlag)", "betrieb", x => /niederschlag|regenwasser|oberfl/i.test(x.art || "")],
+    ["Gebäudeversicherung", "betrieb", x => /geb(ä|ae)ude|feuer|elementar/i.test(x.art || "")],
+    ["Haftpflichtversicherung", "betrieb", x => /haftpflicht/i.test(x.art || "")],
+  ];
+  function postenVon(z) {   // {Name: {summe, zeilen, bs}} plus "Sonstiges"
+    const aus = {};
+    for (const l of ["brennstoff", "heizneben", "betrieb"]) for (const x of z[l] || []) {
+      const b = dez(x.brutto); if (b == null) continue;
+      const p = POSTEN.find(([, , t]) => t(x, l)) || [l === "betrieb" ? "Sonstige Betriebskosten" : "Sonstige Heizkosten", l === "betrieb" ? "betrieb" : "heiz"];
+      const e = aus[p[0]] = aus[p[0]] || { summe: 0, gruppe: p[1], bs: x.bs };
+      e.summe += b;
+    }
+    return aus;
+  }
+  // Zahl mit Punkt als Komma (z. B. "78.63") nicht als Tausender lesen
+  const dez = x => { const t = String(x == null ? "" : x).trim(); return /^-?\d+\.\d{1,2}$/.test(t) ? Number(t) : zahl(roh(x)); };
+  function ergebnisKarte(z, tage) {
+    const ein = z.einheiten || [], flaeche = e => dez(e.hz_flaeche) || 0;
+    const gesamtF = ein.reduce((s, e) => s + flaeche(e), 0);
+    const mieter = ein.filter(e => e.nutzer && !/ferien|selbst|leer|eigen/i.test((e.nutzung || "") + " " + (e.nutzer || "")));
+    if (!mieter.length || !gesamtF) return `<div class="nk-banner blau">Für das Ergebnis bitte unten in der Nutzerliste Mieter und Wohnflächen eintragen.</div>`;
+    const jetzt = postenVon(z), alt = Object.keys(frueher).filter(n => n < zeitraum).sort().reverse().map(n => [n, postenVon(frueher[n])]);
+    // Liste aller Posten: da (Beleg) / geschätzt (letzter bekannter Betrag) / fehlt
+    const zeilen = POSTEN.map(([name, gruppe]) => {
+      if (jetzt[name]) return { name, gruppe, summe: jetzt[name].summe, bs: jetzt[name].bs, art: "da" };
+      const f = alt.find(([, p]) => p[name]);
+      return f ? { name, gruppe, summe: f[1][name].summe, bs: f[1][name].bs, art: "schaetzung", aus: f[0] } : { name, gruppe, summe: 0, art: "fehlt" };
+    });
+    Object.entries(jetzt).filter(([n]) => !POSTEN.some(([p]) => p === n)).forEach(([name, v]) => zeilen.push({ name, gruppe: v.gruppe, summe: v.summe, bs: v.bs, art: "da" }));
+    const von = new Date(z.von), bis = new Date(z.bis), tageZ = (bis - von) / 864e5 + 1;
+    const co2 = dez((z.abgaben || {}).co2) || 0, kwh = (z.brennstoff || []).reduce((s, x) => s + (dez(x.kwh) || 0), 0);
+    const kgM2 = kwh ? kwh * 0.181 / gesamtF : 0;   // Stufenmodell CO2-Kostenaufteilungsgesetz (Wohngebäude)
+    const STUFEN = [[12, 0], [17, 10], [22, 20], [27, 30], [32, 40], [37, 50], [42, 60], [47, 70], [52, 80], [1e9, 95]];
+    const vermieterCo2 = kwh ? STUFEN.find(([g]) => kgM2 < g)[1] : 0;
+    const fehlt = zeilen.filter(x => x.art === "fehlt"), geschaetzt = zeilen.filter(x => x.art === "schaetzung");
+    const heizHaus = zeilen.filter(x => x.gruppe === "heiz").reduce((s, x) => s + x.summe, 0);
+    const betrHaus = zeilen.filter(x => x.gruppe !== "heiz").reduce((s, x) => s + x.summe, 0);
+    const karten = mieter.map(m => {
+      const a = Math.max(von, m.einzug ? new Date(m.einzug) : von), b = Math.min(bis, m.auszug ? new Date(m.auszug) : bis);
+      const zeit = Math.max(0, (b - a) / 864e5 + 1) / tageZ, anteil = flaeche(m) / gesamtF * zeit;
+      const heiz = heizHaus * anteil, co2Weg = co2 * anteil * vermieterCo2 / 100;
+      const betr = zeilen.filter(x => x.gruppe !== "heiz").reduce((s, x) => s + x.summe * (x.bs === "S005" ? zeit / ein.length : anteil), 0);
+      const summeJahr = heiz - co2Weg + betr;
+      const vz = (dez(m.vz_neben) || 0) + (dez(m.vz_heizung) || 0);
+      const diff = summeJahr - vz, monate = Math.max(1, Math.round(zeit * 12));
+      const empf = Math.ceil(summeJahr / monate / 5) * 5;
+      const zeile = (t, w, fett) => `<tr${fett ? ' style="font-weight:700"' : ""}><td>${t}</td><td style="text-align:right;white-space:nowrap">${w}</td></tr>`;
+      return `<div class="nk-ergebnis">
+        <div class="nk-gross">${diff >= 0 ? "Nachzahlung" : "Guthaben"} ${esc(m.nutzer)}: <b>${euro(Math.abs(diff))}</b>${fehlt.length || geschaetzt.length ? " <span class='klein'>(vorläufig)</span>" : ""}</div>
+        <div class="nk-zwei">Sie müsste <b>${euro(summeJahr / monate)} im Monat</b> zahlen – gezahlt sind ${vz ? euro(vz / monate) + " im Monat" : "<i>(Vorauszahlung unten eintragen)</i>"}.
+          ${diff > 0 ? `Neue Vorauszahlung: <b>${euro(empf)} im Monat</b>.` : ""}</div>
+        ${diff > 0 && tage != null && tage < 0 ? `<div class="nk-banner rot" style="padding:6px 10px">Frist abgelaufen: Diese Nachzahlung darf nicht mehr verlangt werden.</div>` : ""}
+        <table class="nk-tab">
+          ${zeile(`Heizung + Warmwasser (Haus ${euro(heizHaus)}) × ${zahlText(anteil * 100, 1)} %`, euro(heiz))}
+          ${co2Weg ? zeile(`davon trägt der Vermieter CO₂-Kosten (${vermieterCo2} %, ca. ${zahlText(kgM2, 1)} kg CO₂/m²)`, "− " + euro(co2Weg)) : ""}
+          ${zeile(`Betriebskosten (Haus ${euro(betrHaus)}) × ${zahlText(anteil * 100, 1)} %`, euro(betr))}
+          ${zeile(`Kosten ${esc(m.nutzer)} im Zeitraum`, euro(summeJahr), true)}
+          ${zeile("abzüglich Vorauszahlungen", "− " + euro(vz))}
+          ${zeile(diff >= 0 ? "= Nachzahlung" : "= Guthaben", euro(Math.abs(diff)), true)}</table>
+        <div class="klein">${esc(m.lage)} · ${zahlText(flaeche(m))} m² von ${zahlText(gesamtF)} m². Vorläufig alles nach Wohnfläche verteilt – sobald die Wärme- und Wasserzähler den Wohnungen zugeordnet sind, wird die Hälfte der Heizung und das Wasser nach Verbrauch gerechnet.</div></div>`;
+    }).join("");
+    const symbol = { da: "✅", schaetzung: "🟡", fehlt: "❌" };
+    return `<div class="nk-karte nk-ergebnis-karte"><h3>💶 Ergebnis ${datum(z.von)} – ${datum(z.bis)}</h3>${karten}
+      <div><b>Posten</b> <span class="klein">✅ Beleg da · 🟡 fehlt noch, Betrag vom Vorjahr geschätzt · ❌ fehlt, nicht gerechnet</span></div>
+      <table class="nk-tab">${zeilen.map(x => `<tr><td>${symbol[x.art]} ${esc(x.name)}${x.art === "schaetzung" ? ` <span class="klein">(wie ${datum(x.aus.slice(0, 10)).slice(-4)}/${x.aus.slice(13, 15)})</span>` : ""}</td>
+        <td style="text-align:right">${x.art === "fehlt" ? "–" : euro(x.summe)}</td></tr>`).join("")}</table>
+      ${fehlt.length || geschaetzt.length ? `<div class="nk-banner gelb" style="padding:8px 10px"><b>Noch in die Akte legen:</b> ${[...geschaetzt, ...fehlt].map(x => esc(x.name)).join(", ")}. Danach „Aus Belegen der Akte übernehmen“ drücken.</div>` : `<div class="nk-banner blau">Alle Posten sind da. 👍</div>`}</div>`;
   }
   function kostenZeile(liste, x, i, mitBs) {
     return `<div class="nk-zeile ${x.vorschlag ? "vorschlag" : ""}">${feld(`${liste}.${i}.art`, x.art, "Kostenart", "", "l")}
