@@ -1243,6 +1243,9 @@ function geraeteLive() {
 }
 
 // ---------- Anlage: Puffer mit Kamin, Wärmepumpe, Fußbodenheizung und Warmwasser ----------
+// Fühler an den Rohren hinten am Puffer (von oben gezählt)
+const ROHR_T = { 1: "sensor.kamin_vorlauf", 2: "sensor.kamin_rohr_2", 3: "sensor.kamin_rucklauf", 4: "sensor.kamin_rohr_4",
+  5: "sensor.kamin_rohr_5", 6: "sensor.kamin_rohr_6" };
 const A = { kVl: "sensor.kamin_vorlauf", kRl: "sensor.kamin_rucklauf", kAn: "binary_sensor.kamin_heizt",
   kSpr: "sensor.kamin_spreizung", kLauf: "sensor.kamin_laufzeit_heute", kW: "sensor.kamin_warme_heute", kWw: "sensor.kamin_warme_woche",
   pOben: "sensor.hwr_warmepumpe_puffertemperatur_oben", wpAn: "binary_sensor.hwr_warmepumpe_kompressor",
@@ -1317,7 +1320,7 @@ function anlageBild() {
     <rect x="430" y="70" width="140" height="360" rx="40" fill="none" stroke="var(--text)" stroke-opacity=".25" stroke-width="2"/>
     <text x="500" y="56" class="n" text-anchor="middle">Puffer Vitocell 120-E · 600 l</text>
     ${stutzen(430, Y.r1, 1)}${stutzen(430, Y.r2, 2)}${stutzen(430, Y.r3, 3)}${stutzen(430, Y.r4, 4)}${stutzen(430, Y.r5, 5)}${stutzen(430, Y.r6, 6)}
-    <text x="404" y="${Y.r2 + 4}" class="n" text-anchor="end" style="font-size:11px">Ladelanze</text>
+    <text x="336" y="${Y.r2 + 4}" class="n" text-anchor="end" style="font-size:11px">Ladelanze</text>
     ${klemme(Y.C, "C")}${klemme(Y.E, "E")}${klemme(Y.H, "H")}
     <text x="510" y="135" class="ww" text-anchor="middle" style="fill:#fff">${grad(A.pOben)}</text><text x="510" y="153" class="n" text-anchor="middle" style="fill:#fff">oben</text>
     <text x="510" y="262" class="ww" text-anchor="middle" style="fill:#fff">${grad(A.kRl)}</text><text x="510" y="280" class="n" text-anchor="middle" style="fill:#fff">Mitte</text>
@@ -1338,9 +1341,11 @@ function anlageBild() {
     <text x="820" y="${Y.N + 4}" class="n" text-anchor="middle">Fußbodenheizung</text>
     <text x="820" y="${Y.N + 40}" class="ww" text-anchor="middle">${grad(A.hkVl)}</text>
     <text x="820" y="406" class="n" text-anchor="middle">${hkAn ? "Pumpe läuft" : "Pumpe aus"}</text>
-    <!-- Messpunkte -->
-    ${fuehler(385, Y.r1, "Fühler Vorlauf")}
-    ${fuehler(385, Y.r3, "Fühler Rücklauf")}
+    <!-- Messpunkte: an jedem Rohr 1–6 ein Fühler (Shellys „Kamin“ und „Puffer 2“) -->
+    ${[1, 2, 3, 4, 5, 6].map(n => { const t = zahl(ROHR_T[n]), y = Y["r" + n]; return `
+      <circle cx="406" cy="${y}" r="5.5" fill="${gelb}" stroke="#7a5d00" stroke-width="1.5"/>
+      <rect x="342" y="${y - 9}" width="54" height="18" rx="9" fill="var(--karte)" stroke="${tFarbe(t)}" stroke-width="1.5"/>
+      <text x="369" y="${y + 4}" text-anchor="middle" style="font-size:11.5px;font-weight:700;fill:${tFarbe(t)}">${t == null ? "–" : fmt(t, 0) + " °C"}</text>`; }).join("")}
     <circle cx="440" cy="${Y.C}" r="7" fill="${gelb}" stroke="#7a5d00" stroke-width="1.5"/><text x="496" y="${Y.C + 4}" style="font-size:10px;fill:#fff">WP-Fühler?</text>
   </svg>`;
 }
@@ -1353,13 +1358,13 @@ function anlage() {
     <div class="karte"><h2>🔥 Kamin</h2><div class="kacheln">
       <div class="kachel"><span>Kamin</span><b>${kAn ? "heizt" : an(A.kModus) ? "an (wärmt auf)" : "aus"}</b></div>
       <div class="kachel"><span>Vorlauf (Rohr 1)</span><b>${grad(A.kVl)}</b></div>
-      <div class="kachel"><span>Puffer Mitte (Rohr 3)</span><b>${grad(A.kRl)}</b></div>
+      <div class="kachel"><span>Rohr 3</span><b>${grad(A.kRl)}</b></div>
       <div class="kachel"><span>Spreizung</span><b>${zahl(A.kSpr) == null ? "–" : fmt(zahl(A.kSpr), 0) + " K"}</b></div>
       <div class="kachel"><span>Laufzeit heute</span><b>${zahl(A.kLauf) == null ? "–" : fmt(zahl(A.kLauf), 1) + " h"}</b></div>
       <div class="kachel"><span>Wärme heute ≈</span><b>${zahl(A.kW) == null ? "–" : fmt(zahl(A.kW), 0) + " kWh"}</b></div>
       <div class="kachel"><span>Wärme Woche ≈</span><b>${zahl(A.kWw) == null ? "–" : fmt(zahl(A.kWw), 0) + " kWh"}</b></div>
     </div>
-    <p class="klein">„Kamin heizt“: Vorlauf über 55 °C und wärmer als der Puffer oben. Puffer Mitte über 65 °C beim Heizen = fast voll,
+    <p class="klein">„Kamin heizt“ kommt direkt von der Ofen-Steuerung (Relais 2 → Shelly „Kamin Signal“). Die kleinen Schilder an den Rohren 1–6 sind die Fühler außen am Rohr. Puffer Mitte über 65 °C beim Heizen = fast voll,
       dann kommt eine Telegram-Nachricht „nicht mehr nachlegen“. Die Wärme ist geschätzt (Laufzeit × 5 kW) – genau ginge es nur mit
       einem Wärmemengenzähler im Kamin-Kreis.</p></div>`;
 }
