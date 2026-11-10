@@ -17,7 +17,7 @@ import urllib.request
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 CACHE = "/config/handbuch_cache.json"
-SEITEN = ["index", "sicherungen", "haustechnik", "geraete", "maschinen", "netzwerk", "nummern", "wo-ist-was", "wohnwagen",
+SEITEN = ["index", "sicherungen", "haustechnik", "geraete", "maschinen", "netzwerk", "nummern", "batterien", "wo-ist-was", "wohnwagen",
           "wartung", "grundriss", "offene-fragen", "packliste"]
 DATEN = ["wo-daten.js", "maschinen-daten.js"]
 

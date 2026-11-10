@@ -99,22 +99,27 @@ template:
         attributes:
           liste: >-
             {% set aus = integration_entities('mobile_app') + integration_entities('vicare') %}
+            {# welche Batterie das Gerät braucht (Übersicht: Haus-Handbuch, Seite „Batterien“) #}
+            {% set TYP = {'TIMMERFLOTTE temp/hmd sensor': '2× AAA (am besten Akku IKEA LADDA)', 'Eve Motion 20EBY9901': '2× AA',
+                          'Shelly Plus Smoke': '1× CR123A (3 V Lithium)', 'Smart Lock Pro': 'Akku – per USB-Kabel aufladen',
+                          'Doorbell (2nd Gen)': 'Akku – Klingel abnehmen und per USB aufladen',
+                          'CLEAR PRO RETROFIT LEAKAGE PROTECTION': '4× AA (Notstrom)', 'SafeFloor Connect': 'siehe Handbuch „Batterien“'} %}
             {% set ns = namespace(l=[], namen=[]) %}
             {% for s in states.sensor | selectattr('attributes.device_class', 'defined')
                  | selectattr('attributes.device_class', 'eq', 'battery') if s.entity_id not in aus %}
               {% set name = device_attr(s.entity_id, 'name_by_user') or device_attr(s.entity_id, 'name') or s.name %}
               {% if s.state in ['unavailable', 'unknown'] %}
                 {% if now() - s.last_changed > timedelta(hours=24) and name not in ns.namen %}
-                  {% set ns.l = ns.l + [{'name': name, 'wert': 'meldet sich nicht (Batterie leer?)'}] %}{% set ns.namen = ns.namen + [name] %}
+                  {% set ns.l = ns.l + [{'name': name, 'wert': 'meldet sich nicht (Batterie leer?)', 'typ': TYP.get(device_attr(s.entity_id, 'model') or '', '')}] %}{% set ns.namen = ns.namen + [name] %}
                 {% endif %}
               {% elif is_number(s.state) and s.state | float <= 20 and name not in ns.namen %}
-                {% set ns.l = ns.l + [{'name': name, 'wert': (s.state | float | round(0) | int) ~ ' %'}] %}{% set ns.namen = ns.namen + [name] %}
+                {% set ns.l = ns.l + [{'name': name, 'wert': (s.state | float | round(0) | int) ~ ' %', 'typ': TYP.get(device_attr(s.entity_id, 'model') or '', '')}] %}{% set ns.namen = ns.namen + [name] %}
               {% endif %}
             {% endfor %}
             {% for s in states.binary_sensor | selectattr('attributes.device_class', 'defined')
                  | selectattr('attributes.device_class', 'eq', 'battery') | selectattr('state', 'eq', 'on') if s.entity_id not in aus %}
               {% set name = device_attr(s.entity_id, 'name_by_user') or device_attr(s.entity_id, 'name') or s.name %}
-              {% if name not in ns.namen %}{% set ns.l = ns.l + [{'name': name, 'wert': 'Batterie niedrig'}] %}{% set ns.namen = ns.namen + [name] %}{% endif %}
+              {% if name not in ns.namen %}{% set ns.l = ns.l + [{'name': name, 'wert': 'Batterie niedrig', 'typ': TYP.get(device_attr(s.entity_id, 'model') or '', '')}] %}{% set ns.namen = ns.namen + [name] %}{% endif %}
             {% endfor %}
             {{ ns.l | sort(attribute='name') }}
 
@@ -221,7 +226,7 @@ template:
               {% set ns.l = ns.l + [{'icon': g.icon, 'farbe': '#34C759', 'text': g.text}] %}
             {% endfor %}
             {% for b in state_attr('sensor.batterien_schwach', 'liste') or [] %}
-              {% set ns.l = ns.l + [{'icon': 'mdi:battery-alert-variant-outline', 'farbe': '#FF9500', 'text': 'Batterie tauschen: ' ~ b.name ~ ' (' ~ b.wert ~ ')'}] %}
+              {% set ns.l = ns.l + [{'icon': 'mdi:battery-alert-variant-outline', 'farbe': '#FF9500', 'text': 'Batterie tauschen: ' ~ b.name ~ ' (' ~ b.wert ~ ')' ~ (' – ' ~ b.typ if b.typ else '')}] %}
             {% endfor %}
             {% if is_state('input_boolean.urlaubsmodus', 'on') %}
               {% set ns.l = ns.l + [{'icon': 'mdi:bag-suitcase', 'farbe': '#8E8E93', 'text': 'Urlaubsmodus ist an'}] %}
@@ -294,7 +299,7 @@ automation:
                 message: |-
                   🔋 Batterie tauschen:
                   {%- for b in neu %}
-                  • {{ b.name }} – {{ b.wert }}
+                  • {{ b.name }} – {{ b.wert }}{% if b.typ %} → braucht {{ b.typ }}{% endif %}
                   {%- endfor %}
 
   - id: haus_batterie_wochen_erinnerung
@@ -324,7 +329,7 @@ automation:
                 message: |-
                   🔋 Erinnerung – diese Batterien sind noch schwach:
                   {%- for b in state_attr('sensor.batterien_schwach', 'liste') or [] %}
-                  • {{ b.name }} – {{ b.wert }}
+                  • {{ b.name }} – {{ b.wert }}{% if b.typ %} → braucht {{ b.typ }}{% endif %}
                   {%- endfor %}
 
   # ---------- Wasser & Rauch ----------
