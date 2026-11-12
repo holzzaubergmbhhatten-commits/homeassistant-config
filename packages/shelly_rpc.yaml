@@ -1,0 +1,11 @@
+# Einstellungen direkt an einen Shelly (Gen2+/Gen3) im Heimnetz schicken, z. B.
+#   action: rest_command.shelly_rpc
+#   data: {ip: 192.168.0.x, methode: Switch.SetConfig, params: {id: 0, config: {in_mode: detached, initial_state: "off"}}}
+# Genutzt für: Eingang „getrennt“ und „nach Stromausfall aus“ bei den Zonen-Shellys und der Kamin-Sperre.
+rest_command:
+  shelly_rpc:
+    url: "http://{{ ip }}/rpc/{{ methode }}"
+    method: post
+    content_type: application/json
+    payload: "{{ params | default({}) | tojson }}"
+    timeout: 15
