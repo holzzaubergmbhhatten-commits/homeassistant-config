@@ -144,6 +144,17 @@ async def main():
         gemerkt = {}
     for k in liste:
         k["ok"] = rtsp_ok(k["ip"], k)
+    # Zwei Kameras mit derselben Adresse = Verwechslung (gleicher Zugang bei allen Tapo-Kameras). Behalten darf sie nur die,
+    # deren Titel zur Adresse passt; die andere gilt als „verrutscht“ und ihre gemerkte MAC als unsicher.
+    for ip in {k["ip"] for k in liste}:
+        gleiche = [k for k in liste if k["ip"] == ip]
+        if len(gleiche) > 1:
+            behalten = next((k for k in gleiche if k["name"].replace("_", ".") == ip), gleiche[0])
+            for k in gleiche:
+                if k is not behalten:
+                    k["ok"] = False
+                    k["doppelt"] = True
+                    gemerkt.pop(k["entity"] or k["name"], None)
     kaputt = [k for k in liste if not k["ok"]]
 
     async def arbeit(sc, nach_ip, nach_mac, netze):
@@ -151,13 +162,14 @@ async def main():
         for k in liste:   # funktionierende Kameras: MAC merken (für das nächste Mal)
             if k["ok"] and k["ip"] in nach_ip:
                 gemerkt[k["entity"] or k["name"]] = nach_ip[k["ip"]].mac
-        belegt = {k["ip"] for k in liste if k["ok"]}
+        belegt = {k["ip"] for k in liste if k["ok"] or k.get("doppelt")}
         kandidaten = None
         for k in kaputt:
             eintrag = {"name": k["name"], "ip": k["ip"], "status": "nicht_gefunden", "neu_ip": None, "hinweis": ""}
             neu_ip = None
             mac = gemerkt.get(k["entity"] or k["name"])
-            if mac and mac in nach_mac and nach_mac[mac].ip and nach_mac[mac].ip != k["ip"] and rtsp_ok(nach_mac[mac].ip, k):
+            if mac and mac in nach_mac and nach_mac[mac].ip and nach_mac[mac].ip != k["ip"] and nach_mac[mac].ip not in belegt \
+                    and rtsp_ok(nach_mac[mac].ip, k):
                 neu_ip = nach_mac[mac].ip
             if not neu_ip:
                 if kandidaten is None:   # einmal das Heimnetz nach offenen Kamera-Ports absuchen
@@ -180,6 +192,11 @@ async def main():
                 ergebnis.append(eintrag)
                 continue
             gemerkt[k["entity"] or k["name"]] = c.mac
+            if k.get("doppelt"):
+                eintrag["hinweis"] = (f"In Home Assistant stand die Adresse einer anderen Kamera. Diese Kamera ist jetzt unter {neu_ip} – "
+                                      f"in Home Assistant bei der Kamera die Adresse auf {neu_ip} ändern.")
+                ergebnis.append(eintrag)
+                continue
             netz = next((n for n in netze if n[1] and
                          ipaddress.ip_address(k["ip"]) in ipaddress.ip_network(n[1], strict=False)), None)
             besetzt = nach_ip.get(k["ip"])
