@@ -1,0 +1,96 @@
+# Wärmepumpe sperren, solange der Kamin brennt (Smart-Grid-Kontakt 1 der Vitocal 200-A).
+# Shelly 1 Gen3 „Wärmepumpe Kamin-Sperre“ in der Wärmepumpe: L + I an X3.1 (L′), N an X2, O an Stecker 216 Pin 1.
+# Relais an = Smart Grid „EVU-Sperre“ = Verdichter aus; Heizkreise laufen weiter aus dem Puffer.
+# Wirkt nur, wenn an der Vitocal „Freigabe Smart Grid 7E80“ = 4 steht (Serviceanleitung WO1C S. 31–32).
+#
+# Gesperrt wird nur, wenn sich das lohnt und nichts kalt wird:
+#   - Kamin brennt seit 10 Minuten (binary_sensor.kamin_brennt vom Kamin-Signal-Mini)
+#   - Puffer oben mind. 40 °C (läuft die Sperre schon: bis 35 °C)
+#   - Warmwasser mind. 40 °C (läuft die Sperre schon: bis 38 °C)
+# Sonst und sobald der Kamin aus ist: Sperre sofort weg. Spätestens nach 12 Stunden ebenfalls (Sicherheitsnetz).
+# Abschaltbar über den Schalter „Wärmepumpe bei Kamin sperren“.
+
+input_boolean:
+  kamin_sperre_erlaubt:
+    name: Wärmepumpe bei Kamin sperren
+    icon: mdi:fire-off
+
+template:
+  - binary_sensor:
+      - name: Wärmepumpe Kamin-Sperre soll
+        unique_id: wp_kamin_sperre_soll
+        icon: mdi:fire-off
+        delay_on: "00:10:00"
+        state: >-
+          {% set an = this.state == 'on' %}
+          {% set p = states('sensor.hwr_warmepumpe_puffertemperatur_oben') | float(0) %}
+          {% set ww = states('sensor.hwr_warmepumpe_ww_speichertemperatur') | float(0) %}
+          {{ is_state('input_boolean.kamin_sperre_erlaubt', 'on')
+             and is_state('binary_sensor.kamin_brennt', 'on')
+             and p >= (35 if an else 40)
+             and ww >= (38 if an else 40) }}
+
+automation:
+  - id: wp_kamin_sperre_schalten
+    alias: "Heizung: Wärmepumpe sperren, solange der Kamin brennt"
+    mode: queued
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.warmepumpe_kamin_sperre_soll
+      - trigger: state
+        entity_id: switch.warmepumpe_kamin_sperre
+        to: "on"
+        for: "12:00:00"
+        id: zu_lange
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/15"
+    actions:
+      - variables:
+          soll: >-
+            {{ trigger.id != 'zu_lange' and is_state('binary_sensor.warmepumpe_kamin_sperre_soll', 'on') }}
+      - if: "{{ soll and not is_state('switch.warmepumpe_kamin_sperre', 'on') }}"
+        then:
+          - action: switch.turn_on
+            target:
+              entity_id: switch.warmepumpe_kamin_sperre
+          - action: logbook.log
+            data:
+              name: Wärmepumpe
+              message: >-
+                gesperrt – Kamin heizt (Puffer {{ states('sensor.hwr_warmepumpe_puffertemperatur_oben') | float(0) | round(0) | int }} °C,
+                Warmwasser {{ states('sensor.hwr_warmepumpe_ww_speichertemperatur') | float(0) | round(0) | int }} °C)
+      - if: "{{ not soll and not is_state('switch.warmepumpe_kamin_sperre', 'off') }}"
+        then:
+          - action: switch.turn_off
+            continue_on_error: true
+            target:
+              entity_id: switch.warmepumpe_kamin_sperre
+          - if: "{{ trigger.id == 'zu_lange' }}"
+            then:
+              - action: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.kamin_sperre_erlaubt
+          - action: logbook.log
+            data:
+              name: Wärmepumpe
+              message: >-
+                {{ 'nach 12 Stunden Sperre wieder frei – Schalter „Wärmepumpe bei Kamin sperren“ ausgeschaltet, bitte prüfen'
+                   if trigger.id == 'zu_lange' else 'wieder frei' }}
+
+  # Beim ersten Einrichten einmal einschalten (danach bestimmt Marco)
+  - id: wp_kamin_sperre_einrichten
+    alias: "Heizung: Kamin-Sperre einmalig einschalten"
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: event
+        event_type: automation_reloaded
+    conditions:
+      - condition: template
+        value_template: "{{ states('input_boolean.kamin_sperre_erlaubt') in ['unknown', 'unavailable'] or this.attributes.last_triggered is none }}"
+    actions:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.kamin_sperre_erlaubt
