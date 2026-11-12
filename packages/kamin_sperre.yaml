@@ -55,6 +55,14 @@ automation:
           - action: switch.turn_on
             target:
               entity_id: switch.warmepumpe_kamin_sperre
+          # Zusätzlich über die Viessmann-Cloud: Warmwasser-Soll auf 38 °C, damit die Wärmepumpe nicht fürs
+          # Warmwasser anspringt (falls der Smart-Grid-Kontakt nicht wirkt). Zurück auf 45 °C (Kamin-Modus) beim Freigeben.
+          - action: number.set_value
+            continue_on_error: true
+            target:
+              entity_id: number.hwr_warmepumpe_ww_temperatur
+            data:
+              value: 38
           - action: logbook.log
             data:
               name: Wärmepumpe
@@ -67,6 +75,16 @@ automation:
             continue_on_error: true
             target:
               entity_id: switch.warmepumpe_kamin_sperre
+          - if: "{{ states('number.hwr_warmepumpe_ww_temperatur') | int(0) < 45 }}"
+            then:
+              - action: number.set_value
+                continue_on_error: true
+                target:
+                  entity_id: number.hwr_warmepumpe_ww_temperatur
+                data:
+                  value: >-
+                    {{ 45 if is_state('input_boolean.kamin_modus', 'on')
+                       else (states('input_number.ww_soll_kamin_gemerkt') | int(48) if states('input_number.ww_soll_kamin_gemerkt') | int(0) >= 40 else 48) }}
           - if: "{{ trigger.id == 'zu_lange' }}"
             then:
               - action: input_boolean.turn_off
