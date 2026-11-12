@@ -1,0 +1,98 @@
+# Ruhigere Startseite am Flur-Monitor (dashboards/flur.yaml, Ansicht "Zuhause"):
+# - Wartung: pro Woche nur EINE Sache für Marco/Mirka (die dringendste). Was Oma & Opa übernehmen können
+#   (Helfer-Seite, claude_tools/helfer_vorlage.json mit "wartung"-Kennung), erscheint hier gar nicht.
+# - Aufgaben: nur was ohne Datum ist oder bis heute fällig – Aufgaben mit späterem Datum (z. B. Putzplan Sonntag) erst an dem Tag.
+template:
+  - trigger:
+      - trigger: time_pattern
+        minutes: "/10"
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id: todo.aufgaben
+    action:
+      - action: todo.get_items
+        target:
+          entity_id: todo.aufgaben
+        data:
+          status: needs_action
+        response_variable: liste
+    sensor:
+      - name: Aufgaben heute
+        unique_id: aufgaben_heute
+        icon: mdi:checkbox-marked-circle-outline
+        state: >-
+          {% set heute = now().date() | string %}
+          {{ (liste['todo.aufgaben']['items'] if liste is defined else [])
+             | selectattr('due', 'undefined') | list | count
+             + (liste['todo.aufgaben']['items'] if liste is defined else [])
+             | selectattr('due', 'defined') | selectattr('due', 'le', heute) | list | count }}
+        attributes:
+          liste: >-
+            {% set heute = now().date() | string %}
+            {% set alle = liste['todo.aufgaben']['items'] if liste is defined else [] %}
+            {% set ns = namespace(l=[]) %}
+            {% for i in alle %}
+              {% if i.due is not defined or (i.due | string)[:10] <= heute %}
+                {% set ns.l = ns.l + [{'titel': i.summary, 'faellig': (i.due | string)[:10] if i.due is defined else ''}] %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.l }}
+          spaeter: >-
+            {% set heute = now().date() | string %}
+            {% set alle = liste['todo.aufgaben']['items'] if liste is defined else [] %}
+            {{ alle | selectattr('due', 'defined') | selectattr('due', 'gt', heute) | list | count }}
+
+  - sensor:
+      - name: Wartung diese Woche
+        unique_id: wartung_diese_woche
+        icon: mdi:wrench-clock
+        state: >-
+          {% set helfer = ['ape-batterie-im-winter-laden', 'aussenhaehne-gartenleitungen-vor-frost-entleeren',
+             'enthaertung-salzstand-pruefen', 'geschirrspueler-sieb-filter-reinigen', 'heizungsdruck-am-manometer-pruefen',
+             'holzvorrat-fuer-den-kamin-pruefen', 'regenrinnen-fallrohre-reinigen', 'trockner-waermetauscher-sockelfilter-reinigen',
+             'waermepumpe-ausseneinheit-von-laub-schnee-frei-halten', 'waschmaschine-flusensieb-pumpe-reinigen',
+             'zisterne-10-000-l-filter-zulauf-reinigen'] %}
+          {% set wir = (state_attr('sensor.wartung', 'anstehend') or []) | rejectattr('key', 'in', helfer) | list %}
+          {{ wir[0].titel if wir else 'nichts' }}
+        attributes:
+          key: >-
+            {% set helfer = ['ape-batterie-im-winter-laden', 'aussenhaehne-gartenleitungen-vor-frost-entleeren',
+               'enthaertung-salzstand-pruefen', 'geschirrspueler-sieb-filter-reinigen', 'heizungsdruck-am-manometer-pruefen',
+               'holzvorrat-fuer-den-kamin-pruefen', 'regenrinnen-fallrohre-reinigen', 'trockner-waermetauscher-sockelfilter-reinigen',
+               'waermepumpe-ausseneinheit-von-laub-schnee-frei-halten', 'waschmaschine-flusensieb-pumpe-reinigen',
+               'zisterne-10-000-l-filter-zulauf-reinigen'] %}
+            {% set wir = (state_attr('sensor.wartung', 'anstehend') or []) | rejectattr('key', 'in', helfer) | list %}
+            {{ wir[0].key if wir else '' }}
+          status: >-
+            {% set helfer = ['ape-batterie-im-winter-laden', 'aussenhaehne-gartenleitungen-vor-frost-entleeren',
+               'enthaertung-salzstand-pruefen', 'geschirrspueler-sieb-filter-reinigen', 'heizungsdruck-am-manometer-pruefen',
+               'holzvorrat-fuer-den-kamin-pruefen', 'regenrinnen-fallrohre-reinigen', 'trockner-waermetauscher-sockelfilter-reinigen',
+               'waermepumpe-ausseneinheit-von-laub-schnee-frei-halten', 'waschmaschine-flusensieb-pumpe-reinigen',
+               'zisterne-10-000-l-filter-zulauf-reinigen'] %}
+            {% set wir = (state_attr('sensor.wartung', 'anstehend') or []) | rejectattr('key', 'in', helfer) | list %}
+            {{ wir[0].status if wir else '' }}
+          danach: >-
+            {% set helfer = ['ape-batterie-im-winter-laden', 'aussenhaehne-gartenleitungen-vor-frost-entleeren',
+               'enthaertung-salzstand-pruefen', 'geschirrspueler-sieb-filter-reinigen', 'heizungsdruck-am-manometer-pruefen',
+               'holzvorrat-fuer-den-kamin-pruefen', 'regenrinnen-fallrohre-reinigen', 'trockner-waermetauscher-sockelfilter-reinigen',
+               'waermepumpe-ausseneinheit-von-laub-schnee-frei-halten', 'waschmaschine-flusensieb-pumpe-reinigen',
+               'zisterne-10-000-l-filter-zulauf-reinigen'] %}
+            {{ [((state_attr('sensor.wartung', 'anstehend') or []) | rejectattr('key', 'in', helfer) | list | count) - 1, 0] | max }}
+          helfer: >-
+            {% set helfer = ['ape-batterie-im-winter-laden', 'aussenhaehne-gartenleitungen-vor-frost-entleeren',
+               'enthaertung-salzstand-pruefen', 'geschirrspueler-sieb-filter-reinigen', 'heizungsdruck-am-manometer-pruefen',
+               'holzvorrat-fuer-den-kamin-pruefen', 'regenrinnen-fallrohre-reinigen', 'trockner-waermetauscher-sockelfilter-reinigen',
+               'waermepumpe-ausseneinheit-von-laub-schnee-frei-halten', 'waschmaschine-flusensieb-pumpe-reinigen',
+               'zisterne-10-000-l-filter-zulauf-reinigen'] %}
+            {{ (state_attr('sensor.wartung', 'anstehend') or []) | selectattr('key', 'in', helfer) | list | count }}
+
+script:
+  wartung_diese_woche_erledigt:
+    alias: "Startseite: Wartung der Woche erledigt"
+    sequence:
+      - condition: template
+        value_template: "{{ state_attr('sensor.wartung_diese_woche', 'key') | default('', true) | length > 0 }}"
+      - action: script.wartung_erledigt
+        data:
+          key: "{{ state_attr('sensor.wartung_diese_woche', 'key') }}"

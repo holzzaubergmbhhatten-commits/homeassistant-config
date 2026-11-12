@@ -70,22 +70,6 @@ views:
       show_forecast: true
       grid_options:
         columns: full
-    # Lautstärke der Morgen-Ansage (packages/jarvis.yaml) – Regler schieben, aufs Symbol tippen spielt eine Probe ab
-    - type: tile
-      entity: input_number.morgen_ansage_lautstaerke
-      name: Lautstärke Morgen-Ansage
-      icon: mdi:volume-medium
-      grid_options:
-        columns: full
-      tap_action:
-        action: none
-      icon_tap_action:
-        action: perform-action
-        perform_action: script.jarvis_morgen_ansage_probe
-      features_position: bottom
-      features:
-      - type: numeric-input
-        style: slider
     - type: markdown
       grid_options:
         columns: full
@@ -164,13 +148,6 @@ views:
         {%- if not a %}
         <font color="#34C759"><ha-icon icon="mdi:check-circle"></ha-icon></font> <font color="#8E8E93">Heute nichts Besonderes im Garten</font>
         {%- endif %}
-        {%- if b %}
-
-        <font color="#8E8E93"><b>Die nächsten Tage</b></font><br>
-        {% for t in b %}
-        {{ '<br>' if not loop.first }}<font color="#8E8E93"><ha-icon icon="{{ t.icon }}"></ha-icon></font> {{ t.titel }}{{ ' – ' ~ t.kurz if t.kurz }}
-        {%- endfor %}
-        {%- endif %}
     # Müllabfuhr (sensor.muell, packages/muell.yaml) – Termine kommen per Screenshot aus der GIB-App („Müll“ an den Bot)
     - type: heading
       heading: Müllabfuhr
@@ -187,9 +164,9 @@ views:
         {{ '<br>' if not loop.first }}<b>{{ tag }}</b> · {{ n | selectattr('tag', 'eq', tag) | map(attribute='art') | join(', ') }}
         {%- endfor %}
         {%- if not n %}<font color="#8E8E93">Noch keine Termine – Screenshots aus der GIB-App mit dem Text „Müll“ an den Telegram-Bot schicken</font>{% endif %}
-    # Wartung (Regenrinne, Heizung, FI-Test …) aus dem Haus-Handbuch – nur was ansteht; abhaken im Reiter "Wartung"
+    # Wartung: pro Woche nur EINE Sache für uns (packages/startseite.yaml); was Oma & Opa können, läuft über die Helfer-Seite
     - type: heading
-      heading: Wartung
+      heading: Wartung diese Woche
       heading_style: title
       icon: mdi:wrench-clock
       tap_action:
@@ -199,12 +176,31 @@ views:
       grid_options:
         columns: full
       content: |-
-        {% set a = state_attr('sensor.wartung', 'anstehend') or [] %}
-        {% for t in a[:6] %}
-        {{ '<br>' if not loop.first }}{% if t.status == 'ueberfaellig' %}<font color="#FF3B30"><ha-icon icon="mdi:alert-circle"></ha-icon></font>{% elif t.status == 'bald' %}<font color="#FFCC00"><ha-icon icon="mdi:clock-outline"></ha-icon></font>{% else %}<font color="#FF9500"><ha-icon icon="mdi:wrench"></ha-icon></font>{% endif %} {{ t.titel }} <font color="#8E8E93">· {{ 'überfällig' if t.status == 'ueberfaellig' else ('in ' ~ t.tage ~ ' Tagen' if t.status == 'bald' else 'jetzt dran') }}</font>
-        {%- endfor %}
-        {%- if a | count > 6 %}<br><font color="#8E8E93">+ {{ a | count - 6 }} weitere</font>{% endif %}
-        {%- if not a %}<font color="#34C759"><ha-icon icon="mdi:check-circle"></ha-icon></font> <font color="#8E8E93">Nichts fällig</font>{% endif %}
+        {% set w = states('sensor.wartung_diese_woche') %}
+        {% if w not in ['nichts', 'unknown', 'unavailable', ''] %}<font size="4"><b>{{ w }}</b></font>
+        {%- if state_attr('sensor.wartung_diese_woche', 'status') == 'ueberfaellig' %} <font color="#FF3B30">· überfällig</font>{% endif %}
+        <br><font color="#8E8E93">Anleitung: auf „Wartung diese Woche“ tippen</font>
+        {%- else %}<font color="#34C759"><ha-icon icon="mdi:check-circle"></ha-icon></font> <font color="#8E8E93">Diese Woche nichts für euch</font>{% endif %}
+        {%- set d = state_attr('sensor.wartung_diese_woche', 'danach') | int(0) %}{% set h = state_attr('sensor.wartung_diese_woche', 'helfer') | int(0) %}
+        {%- if d or h %}<br><font color="#8E8E93">{% if d %}danach noch {{ d }}, kommt nach und nach{% endif %}{{ ' · ' if d and h }}{% if h %}{{ h }} für Oma &amp; Opa (Helfer){% endif %}</font>{% endif %}
+    - type: conditional
+      grid_options:
+        columns: full
+      conditions:
+      - condition: state
+        entity: sensor.wartung_diese_woche
+        state_not: nichts
+      card:
+        type: button
+        name: Erledigt
+        icon: mdi:check-circle-outline
+        show_state: false
+        icon_height: 26px
+        tap_action:
+          action: perform-action
+          perform_action: script.wartung_diese_woche_erledigt
+          confirmation:
+            text: Diese Wartung als erledigt abhaken?
   - type: grid
     cards:
     - type: heading
@@ -216,21 +212,24 @@ views:
         navigation_path: /flur-display/aufgaben
       badges:
       - type: entity
-        entity: todo.aufgaben
+        entity: sensor.aufgaben_heute
         show_state: true
         show_icon: false
         color: orange
         tap_action:
           action: navigate
           navigation_path: /flur-display/aufgaben
-    # Abhaken direkt hier: Kreis antippen = erledigt (Erledigtes und Eingabefeld nur im Reiter "Aufgaben")
-    - type: todo-list
-      entity: todo.aufgaben
-      hide_create: true
-      hide_completed: true
-      display_order: none
+    # Nur was ohne Datum ist oder bis heute fällig (sensor.aufgaben_heute, packages/startseite.yaml) – abhaken im Reiter "Aufgaben"
+    - type: markdown
       grid_options:
         columns: full
+      content: |-
+        {% set l = state_attr('sensor.aufgaben_heute', 'liste') or [] %}
+        {% for a in l[:7] %}{{ '<br>' if not loop.first }}<font color="#FF9500">○</font> {{ a.titel }}{% if a.faellig and a.faellig < now().date() | string %} <font color="#FF3B30">· überfällig</font>{% endif %}{% endfor %}
+        {%- if l | count > 7 %}<br><font color="#8E8E93">+ {{ l | count - 7 }} weitere</font>{% endif %}
+        {%- if not l %}<font color="#34C759"><ha-icon icon="mdi:check-circle"></ha-icon></font> <font color="#8E8E93">Heute nichts offen</font>{% endif %}
+        {%- set sp = state_attr('sensor.aufgaben_heute', 'spaeter') | int(0) %}{% if sp %}<br><font color="#8E8E93">{{ sp }} weitere mit späterem Datum</font>{% endif %}
+        <br><font color="#8E8E93">Abhaken: auf „Aufgaben“ tippen</font>
     - type: heading
       heading: Ferienwohnung & Stellplätze
       heading_style: title
@@ -325,6 +324,23 @@ views:
     - type: heading
       heading: Schnellzugriff
       heading_style: title
+    # Kamin: nur sichtbar, solange er heizt – Tippen öffnet das Anlagenbild
+    - type: conditional
+      grid_options:
+        columns: full
+      conditions:
+      - condition: state
+        entity: binary_sensor.kamin_heizt
+        state: 'on'
+      card:
+        type: tile
+        entity: sensor.hwr_warmepumpe_puffertemperatur_oben
+        name: Kamin heizt · Puffer
+        icon: mdi:fireplace
+        color: deep-orange
+        tap_action:
+          action: navigate
+          navigation_path: /flur-display/kamin
     - type: tile
       entity: switch.shelly1g4_a085e3bd629c
       name: Hoftor
@@ -350,17 +366,6 @@ views:
         columns: 6
         rows: 2
     - type: button
-      name: Grundriss & Licht
-      icon: mdi:floor-plan
-      show_state: false
-      icon_height: 34px
-      tap_action:
-        action: navigate
-        navigation_path: /flur-display/grundriss
-      grid_options:
-        columns: 4
-        rows: 2
-    - type: button
       name: Helfer
       icon: mdi:toolbox-outline
       show_state: false
@@ -368,127 +373,6 @@ views:
       tap_action:
         action: navigate
         navigation_path: /flur-display/helfer
-      grid_options:
-        columns: 4
-        rows: 2
-    - type: button
-      name: Kamin
-      icon: mdi:fireplace
-      show_state: false
-      icon_height: 34px
-      tap_action:
-        action: navigate
-        navigation_path: /flur-display/kamin
-      grid_options:
-        columns: 4
-        rows: 2
-    - type: button
-      name: Küche
-      icon: mdi:silverware-fork-knife
-      show_state: false
-      icon_height: 34px
-      tap_action:
-        action: navigate
-        navigation_path: /flur-display/kueche
-      grid_options:
-        columns: 4
-        rows: 2
-    - type: button
-      name: Ausflug
-      icon: mdi:bicycle
-      show_state: false
-      icon_height: 34px
-      tap_action:
-        action: navigate
-        navigation_path: /flur-display/ausflug
-      grid_options:
-        columns: 4
-        rows: 2
-    - type: button
-      name: Netzwerk
-      icon: mdi:lan
-      show_state: false
-      icon_height: 34px
-      tap_action:
-        action: navigate
-        navigation_path: /flur-display/netzwerk
-      grid_options:
-        columns: 4
-        rows: 2
-    - type: button
-      name: Links
-      icon: mdi:link-variant
-      show_state: false
-      icon_height: 34px
-      tap_action:
-        action: navigate
-        navigation_path: /flur-display/links
-      grid_options:
-        columns: 4
-        rows: 2
-    - type: button
-      name: Musik
-      icon: mdi:music
-      show_state: false
-      icon_height: 34px
-      tap_action:
-        action: navigate
-        navigation_path: /flur-display/musik
-      grid_options:
-        columns: 4
-        rows: 2
-    - type: button
-      name: Kalender
-      icon: mdi:calendar-month
-      show_state: false
-      icon_height: 34px
-      tap_action:
-        action: navigate
-        navigation_path: /flur-display/kalender-buchungen
-      grid_options:
-        columns: 4
-        rows: 2
-    - type: button
-      name: Einkauf
-      icon: mdi:cart
-      show_state: false
-      icon_height: 34px
-      tap_action:
-        action: navigate
-        navigation_path: /flur-display/einkauf
-      grid_options:
-        columns: 4
-        rows: 2
-    - type: button
-      name: Aufgaben
-      icon: mdi:checkbox-marked-circle-outline
-      show_state: false
-      icon_height: 34px
-      tap_action:
-        action: navigate
-        navigation_path: /flur-display/aufgaben
-      grid_options:
-        columns: 4
-        rows: 2
-    - type: button
-      name: Mucki
-      icon: mdi:star-face
-      show_state: false
-      icon_height: 34px
-      tap_action:
-        action: navigate
-        navigation_path: /flur-display/mucki
-      grid_options:
-        columns: 4
-        rows: 2
-    - type: button
-      name: Kameras
-      icon: mdi:cctv
-      show_state: false
-      icon_height: 34px
-      tap_action:
-        action: navigate
-        navigation_path: /flur-display/kameras
       grid_options:
         columns: 4
         rows: 2
@@ -514,8 +398,50 @@ views:
       grid_options:
         columns: 4
         rows: 2
+    - type: button
+      name: Einstellungen
+      icon: mdi:cog-outline
+      show_state: false
+      icon_height: 34px
+      tap_action:
+        action: navigate
+        navigation_path: /flur-display/einstellungen
+      grid_options:
+        columns: 4
+        rows: 2
+# Einstellungen (Knopf auf der Startseite): Ansage-Lautstärke, Heizung & Kamin, Hausalarm, Urlaubsmodus, Design
+- title: Einstellungen
+  path: einstellungen
+  icon: mdi:cog-outline
+  subview: true
+  back_path: /flur-display/start
+  type: sections
+  max_columns: 2
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Morgen-Ansage
+      heading_style: title
+    # Lautstärke der Morgen-Ansage (packages/jarvis.yaml) – Regler schieben, aufs Symbol tippen spielt eine Probe ab
+    - type: tile
+      entity: input_number.morgen_ansage_lautstaerke
+      name: Lautstärke Morgen-Ansage
+      icon: mdi:volume-medium
+      grid_options:
+        columns: full
+      tap_action:
+        action: none
+      icon_tap_action:
+        action: perform-action
+        perform_action: script.jarvis_morgen_ansage_probe
+      features_position: bottom
+      features:
+      - type: numeric-input
+        style: slider
     - type: heading
       heading: Heizung & Kamin
+      heading_style: title
       icon: mdi:fireplace
       grid_options:
         columns: full
@@ -1982,9 +1908,7 @@ views:
   path: helfer
   icon: mdi:toolbox-outline
   type: panel
-  # Helfer-Seite für Oma & Opa (packages/helfer.yaml, www/helfer.html) – nicht in der oberen Leiste, über den Knopf auf der Startseite
-  subview: true
-  back_path: /flur-display/start
+  # Helfer-Seite für Oma & Opa (packages/helfer.yaml, www/helfer.html) – in der oberen Leiste und als Knopf auf der Startseite
   cards:
   - type: iframe
     url: /local/helfer.html?v=4
