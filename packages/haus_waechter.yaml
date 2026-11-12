@@ -211,6 +211,12 @@ template:
             {% if is_state('binary_sensor.wasser_dauerfluss', 'on') %}
               {% set ns.l = ns.l + [{'icon': 'mdi:water-alert', 'farbe': '#FF9500', 'text': 'Wasser läuft ohne Pause – Hahn oder Garten offen?'}] %}
             {% endif %}
+            {# Weser (packages/weser.yaml): ab 1 m über Mittelhochwasser erhöht, ab 1,5 m Sturmflut #}
+            {% set wh = states('sensor.weser_uber_mittelhochwasser') | float(0) %}
+            {% if wh >= 100 %}
+              {% set ns.l = ns.l + [{'icon': 'mdi:waves-arrow-up', 'farbe': '#FF3B30' if wh >= 150 else '#FF9500',
+                 'text': ('Sturmflut' if wh >= 150 else 'Erhöhter Wasserstand') ~ ' an der Weser: Pegel Brake ' ~ (wh / 100) | round(1) ~ ' m über Mittelhochwasser'}] %}
+            {% endif %}
             {# Unwetter: nur die stärkste Warnung, mit Zeitraum; weitere nur als Anzahl #}
             {% set uw = state_attr('sensor.unwetter', 'warnungen') or [] %}
             {% if uw %}

@@ -1,0 +1,61 @@
+# Wasserstand der Weser am Pegel Brake (Pegel-Online, Wasserstraßen- und Schifffahrtsverwaltung des Bundes, frei nutzbar).
+# Sturmflut = Hochwasser mindestens 1,5 m über dem mittleren Tidehochwasser (MThw, Definition des BSH).
+# Monitor-Hinweis ab 1,0 m über MThw ("erhöht"), Telegram an alle ab 1,5 m (Sturmflut), höchstens alle 6 Stunden.
+rest:
+  - resource: https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/BRAKE/W.json?includeCurrentMeasurement=true&includeCharacteristicValues=true
+    scan_interval: 900
+    sensor:
+      - name: Weser Pegel Brake
+        unique_id: weser_pegel_brake
+        icon: mdi:waves
+        unit_of_measurement: cm
+        value_template: "{{ value_json.currentMeasurement.value | default(none) }}"
+        json_attributes:
+          - currentMeasurement
+          - characteristicValues
+
+template:
+  - sensor:
+      - name: Weser über Mittelhochwasser
+        unique_id: weser_ueber_mthw
+        icon: mdi:waves-arrow-up
+        unit_of_measurement: cm
+        availability: >-
+          {{ is_number(states('sensor.weser_pegel_brake'))
+             and (state_attr('sensor.weser_pegel_brake', 'characteristicValues') or [])
+                 | selectattr('shortname', 'eq', 'MThw') | list | count > 0 }}
+        state: >-
+          {% set mthw = (state_attr('sensor.weser_pegel_brake', 'characteristicValues') or [])
+                        | selectattr('shortname', 'eq', 'MThw') | map(attribute='value') | first %}
+          {{ (states('sensor.weser_pegel_brake') | float - mthw | float) | round(0) }}
+        attributes:
+          trend: "{{ (state_attr('sensor.weser_pegel_brake', 'currentMeasurement') or {}).get('trend', 0) }}"
+          stand_zeit: "{{ (state_attr('sensor.weser_pegel_brake', 'currentMeasurement') or {}).get('timestamp', '') }}"
+
+automation:
+  - id: weser_sturmflut
+    alias: "Weser: Sturmflut am Pegel Brake"
+    mode: single
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.weser_uber_mittelhochwasser
+        above: 150
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ this.attributes.last_triggered is none
+             or now() - this.attributes.last_triggered > timedelta(hours=6) }}
+    actions:
+      - repeat:
+          for_each: >-
+            {{ (states('input_text.telegram_empfaenger') | string).split(';') | map('trim') | select('match', '^-?\d+$') | list }}
+          sequence:
+            - action: telegram_bot.send_message
+              continue_on_error: true
+              data:
+                config_entry_id: 01M3HM1R6DDKSC07MG87X4YEVB
+                chat_id: "{{ repeat.item | int }}"
+                message: >-
+                  🌊 Sturmflut an der Weser: Pegel Brake {{ (states('sensor.weser_uber_mittelhochwasser') | float / 100) | round(1) }} m
+                  über dem mittleren Hochwasser{{ ' und steigend' if state_attr('sensor.weser_uber_mittelhochwasser', 'trend') | int(0) > 0 }}.
+                  Infos: BSH Wasserstandsvorhersage.
