@@ -492,20 +492,20 @@ automation:
       - action: todo.get_items
         continue_on_error: true
         target:
-          entity_id: todo.aufgaben
+          entity_id: todo.hausarbeit
         data:
           status: needs_action
         response_variable: da
       - variables:
           schon: >-
-            {{ (da['todo.aufgaben']['items'] if da is defined and da is mapping and 'todo.aufgaben' in da else []) | map(attribute='summary') | list }}
+            {{ (da['todo.hausarbeit']['items'] if da is defined and da is mapping and 'todo.hausarbeit' in da else []) | map(attribute='summary') | list }}
       - repeat:
           for_each: "{{ aufgaben | reject('in', schon) | list }}"
           sequence:
             - action: todo.add_item
               continue_on_error: true
               target:
-                entity_id: todo.aufgaben
+                entity_id: todo.hausarbeit
               data:
                 item: "{{ repeat.item }}"
                 due_date: "{{ (now() + timedelta(days=6)).strftime('%Y-%m-%d') }}"
@@ -523,7 +523,7 @@ automation:
                   {%- for a in aufgaben %}
                   • {{ a }}
                   {%- endfor %}
-                  Abhaken in der Aufgabenliste (Monitor oder App).
+                  Abhaken in der Liste „Hausarbeit“ (Monitor: Reiter Aufgaben, oder App).
 
 script:
   einkauf_stamm_hinzufuegen:

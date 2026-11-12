@@ -28,7 +28,7 @@ automation:
   - condition: template
     value_template: >-
       {{ not (trigger.event.data.text | default('') | string)
-         is match('^\s*/?(liste|einkaufsliste|einkauf|aufgaben|todo)\s*\??\s*$', ignorecase=True) }}
+         is match('^\s*/?(liste|einkaufsliste|einkauf|aufgaben|todo|hausarbeit|putzplan)\s*\??\s*$', ignorecase=True) }}
   - condition: template
     value_template: >-
       {{ not (trigger.event.data.text | default('') | string)
@@ -704,6 +704,23 @@ automation:
   - action: script.liste_abhaken_senden
     data:
       liste: aufgaben
+      chat: '{{ trigger.event.data.chat_id }}'
+- id: telegram_hausarbeit_schicken
+  alias: 'Telegram: Hausarbeit schicken'
+  description: Auf "Hausarbeit" oder "Putzplan" schickt der Bot die Hausarbeit der Woche als Knöpfe zum Abhaken.
+  mode: queued
+  triggers:
+  - trigger: event
+    event_type: telegram_text
+  conditions:
+  - condition: template
+    value_template: >-
+      {{ (trigger.event.data.text | default('') | string)
+         is match('^\s*/?(hausarbeit|putzplan)\s*\??\s*$', ignorecase=True) }}
+  actions:
+  - action: script.liste_abhaken_senden
+    data:
+      liste: hausarbeit
       chat: '{{ trigger.event.data.chat_id }}'
 - id: telegram_monitor_zurueck
   alias: 'Telegram: Monitor zurück zum Dashboard'
