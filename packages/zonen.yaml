@@ -18,7 +18,7 @@ template:
               'switch.zone_schlafen':   ['sensor.schlafzimmer_temperatur_sensor_temperatur', 20.5],
               'switch.zone_badezimmer': ['sensor.badezimmer_badezimmer_temperatur_sensor_temperatur', 24.0],
               'switch.zone_flur':       ['sensor.flur_flur_temperatur_sensor_temperatur', 23.0],
-              'switch.zone_diele':      ['sensor.diele_diele_temperatur_sensor_temperatur', 23.0],
+              'switch.zone_diele':      ['sensor.diele_diele_temperatur_sensor_temperatur', 24.5],
               'switch.zone_buro':       ['sensor.buro_buro_temperatur_sensor_temperatur', 22.5],
             } }}
 
