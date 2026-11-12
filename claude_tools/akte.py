@@ -2031,6 +2031,9 @@ def seite(auftrag):
     if str(was).startswith("nk_"):   # Nebenkostenabrechnung (claude_tools/nebenkosten.py)
         import nebenkosten
         return nebenkosten.seite(auftrag)
+    if str(was).startswith("fi_"):   # Finanzen-Seite (claude_tools/finanzen.py)
+        import finanzen
+        return finanzen.seite(auftrag)
     liste = verzeichnis()
     eintrag = next((e for e in liste if e.get("id") == auftrag.get("id")), None)
     if was == "lesen" and eintrag:

@@ -1874,6 +1874,14 @@ views:
   - type: iframe
     url: /local/akte.html?v=27
     aspect_ratio: 53.3%
+- title: Finanzen
+  path: finanzen
+  icon: mdi:piggy-bank-outline
+  type: panel
+  cards:
+  - type: iframe
+    url: /local/finanzen.html?v=1
+    aspect_ratio: 53.3%
 - title: Mail
   path: mail
   icon: mdi:email-outline

@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Finanzen</title>
+<!--
+  Finanzen (Reiter „Finanzen“ im Flur-Dashboard): Haushaltsplan, Vorsorge-Rechner, Lernen, Was ist neu.
+  Die eigenen Zahlen werden nur auf dem Home-Assistant-Rechner gespeichert (/config/finanzen.json über
+  script.akte_aktion, was = fi_lesen / fi_speichern). In dieser Datei stehen KEINE persönlichen Beträge –
+  das Repository ist öffentlich.
+  Gesetzes-Stand: siehe STAND unten. Claude prüft monatlich auf Änderungen und passt den Teil „Was ist neu“ an.
+  Keine Anlageberatung.
+-->
+<style>
+  :root { --bg: #F2F2F7; --karte: #fff; --text: #1C1C1E; --grau: #8E8E93; --linie: rgba(0,0,0,.08);
+    --gruen: #34C759; --rot: #FF3B30; --orange: #FF9500; --blau: #536b45; --gold: #C9A227; --lila: #AF52DE; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "SF Pro Text", Roboto, "Helvetica Neue", system-ui, sans-serif, "Noto Color Emoji"; }
+  button { font: inherit; border: 0; background: none; color: inherit; cursor: pointer; padding: 0; }
+  input, select { font: inherit; color: inherit; }
+  main { max-width: 1100px; margin: 0 auto; padding: 14px 16px 60px; }
+  .kopf { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .kopf h1 { margin: 0; font-size: 26px; letter-spacing: -0.3px; flex: 1; min-width: 160px; }
+  .reiter { display: inline-flex; flex-wrap: wrap; max-width: 100%; background: #e5e5ea; border-radius: 12px; padding: 3px; gap: 2px; }
+  .reiter button { padding: 8px 14px; border-radius: 10px; font-size: 15px; font-weight: 600; color: var(--grau); }
+  .reiter button.an { background: #fff; color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .karte { background: var(--karte); border-radius: 18px; padding: 14px 16px; box-shadow: 0 1px 3px rgba(0,0,0,.06); margin-bottom: 12px; }
+  .karte h2 { margin: 0 0 8px; font-size: 18px; }
+  .karte h3 { margin: 14px 0 4px; font-size: 16px; }
+  .karte p, .karte li { line-height: 1.5; font-size: 15px; }
+  .klein { font-size: 13px; color: var(--grau); line-height: 1.45; }
+  .zwei { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 820px) { .zwei { grid-template-columns: 1fr; } }
+  .kacheln { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+  .kachel { background: var(--bg); border-radius: 14px; padding: 10px 12px; }
+  .kachel b { display: block; font-size: 22px; letter-spacing: -0.2px; }
+  .kachel span { font-size: 13px; color: var(--grau); }
+  .plus { color: #1f8a3b; } .minus { color: #c4271d; }
+  table.posten { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.posten td, table.posten th { padding: 5px 4px; border-bottom: 1px solid var(--linie); text-align: left; vertical-align: middle; }
+  table.posten th { font-size: 12px; color: var(--grau); font-weight: 600; }
+  table.posten input, table.posten select { width: 100%; border: 1px solid var(--linie); border-radius: 8px; padding: 6px 7px; background: #fff; }
+  table.posten input.betrag { text-align: right; max-width: 110px; }
+  @media (max-width: 640px) {   /* Handy: jede Zeile als kleiner Block */
+    table.posten tr:first-child { display: none; }
+    table.posten tr { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--linie); }
+    table.posten td { border: 0; padding: 0; }
+    table.posten td:first-child { grid-column: 1 / -1; }
+    table.posten input.betrag { max-width: none; }
+    table.posten td:last-child { grid-column: 1 / -1; text-align: right; }
+  }
+  .knopf { background: var(--blau); color: #fff; border-radius: 12px; padding: 9px 16px; font-weight: 600; }
+  .knopf.hell { background: var(--bg); color: var(--text); }
+  .knopf.rot { background: none; color: var(--rot); padding: 4px 8px; }
+  .leiste { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+  .feld { display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--grau); }
+  .feld input, .feld select { font-size: 16px; color: var(--text); border: 1px solid var(--linie); border-radius: 10px; padding: 8px 10px; background: #fff; }
+  .felder { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+  .balken { height: 14px; border-radius: 7px; background: var(--bg); overflow: hidden; display: flex; }
+  .balken i { display: block; height: 100%; }
+  .hinweis { background: #FFF6E0; border-radius: 12px; padding: 10px 12px; font-size: 14px; line-height: 1.45; }
+  .gut { background: #E8F7EC; border-radius: 12px; padding: 10px 12px; font-size: 14px; line-height: 1.45; }
+  .marke { display: inline-block; border-radius: 8px; padding: 2px 8px; font-size: 12px; font-weight: 700; }
+  .m-gilt { background: #E8F7EC; color: #1f8a3b; } .m-kommt { background: #E7EEF9; color: #2f5fa8; }
+  .m-offen { background: #FFF1CC; color: #8a6200; } .m-idee { background: #EEE; color: #666; }
+  details { border-top: 1px solid var(--linie); padding: 8px 0; }
+  details summary { cursor: pointer; font-weight: 700; font-size: 16px; list-style: none; }
+  details summary::before { content: "▸ "; color: var(--grau); }
+  details[open] summary::before { content: "▾ "; }
+  svg text { font-family: inherit; }
+  .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #1C1C1E; color: #fff; padding: 10px 16px; border-radius: 12px; font-size: 14px; opacity: 0; transition: opacity .3s; pointer-events: none; }
+  .toast.an { opacity: 1; }
+  a { color: var(--blau); }
+</style>
+</head>
+<body>
+<main>
+  <div class="kopf">
+    <h1>💶 Finanzen</h1>
+    <div class="reiter" id="reiter">
+      <button data-r="monat" class="an">Unser Monat</button>
+      <button data-r="rechner">Vorsorge-Rechner</button>
+      <button data-r="lernen">Lernen</button>
+      <button data-r="neu">Was ist neu</button>
+    </div>
+  </div>
+  <div id="inhalt"></div>
+  <p class="klein" style="margin-top:18px">Keine Anlage- oder Steuerberatung. Zahlen der Rechner sind Beispiele, keine Versprechen.
+    Gesetzes-Stand: <span id="stand"></span> – wird jeden Monat geprüft.</p>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+// ---------- Gesetzes-Stand (von Claude gepflegt, monatlich geprüft) ----------
+const STAND = "12.11.2026";
+const NEU = [
+  { status: "gilt", datum: "seit 01.07.2026", titel: "Renten +4,24 %",
+    text: "Der Rentenwert stieg von 40,79 € auf 42,52 € je Rentenpunkt. Eine „Standardrente“ (45 Jahre Durchschnittsverdienst) liegt bei ca. 1.913 € brutto.",
+    quelle: "https://www.bundesregierung.de/breg-de/schwerpunkte/wirksam-regieren/rentenanpassung-2026-2337000" },
+  { status: "gilt", datum: "bis 2031", titel: "Rentenniveau mindestens 48 %",
+    text: "Das Rentenpaket 2025 hält das Rentenniveau bis 2031 bei 48 %. Danach ist offen, wie es weitergeht – private Vorsorge bleibt wichtig.",
+    quelle: "https://blogs.pwc.de/en/steuern-und-recht/article/252522/bundesrat-stimmt-rentenpaket-2025-zu/" },
+  { status: "kommt", datum: "ab 01.01.2027", titel: "Altersvorsorgedepot ersetzt Riester",
+    text: "Beschlossen (Bundestag 27.03.2026, Bundesrat 08.05.2026). Staatliche Zulage auf eigene Einzahlungen: 50 % auf die ersten 360 € im Jahr, 25 % auf den Rest bis 1.800 € → bis zu 540 € pro Jahr und Person. Pro Kind bis zu 300 € im Jahr dazu. Auch reine ETF-Depots möglich, Kostendeckel 1 % beim Standardprodukt, Auszahlung ab 65. Einzelheiten zum staatlichen Standardprodukt werden noch per Verordnung geregelt.",
+    quelle: "https://www.verbraucherzentrale.de/wissen/geld-versicherungen/altersvorsorge/neues-altersvorsorgedepot-rentenchance-oder-teure-verkaufsfalle-118178" },
+  { status: "offen", datum: "geplant 01.01.2027", titel: "Frühstart-Rente: 10 € im Monat pro Kind",
+    text: "Für jedes Kind von 6 bis 18 zahlt der Staat 10 € im Monat in ein Vorsorgedepot. Bundestag hat am 16.10.2026 beschlossen, der Bundesrat muss noch zustimmen. Für Kinder unter 6 erst, wenn sie 6 werden.",
+    quelle: "https://www.bundestag.de/presse/hib/kurzmeldungen-1211024" },
+  { status: "gilt", datum: "seit 2024", titel: "Krypto: nach 1 Jahr steuerfrei",
+    text: "Gewinne aus Krypto sind privat steuerfrei, wenn man sie länger als 1 Jahr hält. Darunter: Freigrenze 1.000 € Gewinn pro Jahr – wird sie überschritten, ist der ganze Gewinn steuerpflichtig. Seit 2026 melden Krypto-Börsen die Daten ans Finanzamt.",
+    quelle: "https://www.blockpit.io/de-de/steuer-guides/krypto-steuer-deutschland" },
+  { status: "idee", datum: "nur Diskussion", titel: "Abschaffung der Krypto-Haltefrist?",
+    text: "Es wird diskutiert, die 1-Jahres-Frist abzuschaffen und Krypto wie Aktien mit ca. 25 % zu besteuern. Stand heute: kein Gesetz beschlossen.",
+    quelle: "https://divly.com/de/guides/krypto-haltefrist-deutschland-abgeschafft" },
+  { status: "gilt", datum: "seit 2023", titel: "Sparerpauschbetrag 1.000 € / 2.000 €",
+    text: "Zinsen, Dividenden und ETF-Gewinne bis 1.000 € im Jahr (Ehepaar 2.000 €) sind steuerfrei – dafür bei der Bank einen Freistellungsauftrag stellen. Gilt nicht für Krypto (dort Haltefrist/Freigrenze).",
+    quelle: "https://www.cointracking.info/de/steuer-guides/deutschland/krypto-steuern-2026" },
+];
+const MARKE = { gilt: ["gilt", "m-gilt"], kommt: ["kommt", "m-kommt"], offen: ["noch offen", "m-offen"], idee: ["nur Idee", "m-idee"] };
+
+// ---------- Hilfen ----------
+function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const euro = (x, d = 0) => (Number(x) || 0).toLocaleString("de-DE", { minimumFractionDigits: d, maximumFractionDigits: d }) + " €";
+const zahl = x => { const v = parseFloat(String(x).replace(/\./g, "").replace(",", ".")); return isFinite(v) ? v : 0; };
+const FAKTOR = { monat: 1, quartal: 1 / 3, halbjahr: 1 / 6, jahr: 1 / 12 };
+const RHY = [["monat", "monatlich"], ["quartal", "vierteljährlich"], ["halbjahr", "halbjährlich"], ["jahr", "jährlich"]];
+const GRUPPEN = { ein: ["Gehalt", "Miete", "Kindergeld", "Sonstiges"],
+  aus: ["Wohnen & Haus", "Kredit", "Versicherung", "Auto", "Kinder", "Lebensmittel", "Handy & Abos", "Sparen", "Sonstiges"] };
+function toast(t) { const e = document.getElementById("toast"); e.textContent = t; e.classList.add("an"); clearTimeout(e._t); e._t = setTimeout(() => e.classList.remove("an"), 2600); }
+async function skript(daten) {
+  const h = hass(); if (!h) throw new Error("keine Verbindung");
+  const r = await h.callWS({ type: "call_service", domain: "script", service: "akte_aktion", service_data: daten, return_response: true });
+  let a = r && r.response && r.response.stdout; if (typeof a === "string") { try { a = JSON.parse(a); } catch (e) { a = null; } }
+  return a;
+}
+
+// ---------- Zustand ----------
+let reiter = new URLSearchParams(location.search).get("reiter") || "monat";
+let D = { posten: [], vorsorge: {}, geaendert: "" }, geladen = false, ungespeichert = false;
+async function laden() {
+  try { const a = await skript({ was: "fi_lesen" }); if (a && a.ok) { D = a.daten; if (!D.vorsorge) D.vorsorge = {}; } geladen = true; }
+  catch (e) { geladen = "fehler"; }
+  zeigen();
+}
+async function speichern() {
+  try {
+    const wer = (hass() && hass().user && hass().user.name) || "";
+    const a = await skript({ was: "fi_speichern", text: JSON.stringify({ posten: D.posten, vorsorge: D.vorsorge }), wer });
+    if (a && a.ok) { D = a.daten; ungespeichert = false; toast("Gespeichert ✓"); zeigen(); } else toast("Speichern hat nicht geklappt");
+  } catch (e) { toast("Keine Verbindung zu Home Assistant"); }
+}
+const V = (k, std) => (D.vorsorge && D.vorsorge[k] != null && D.vorsorge[k] !== "") ? D.vorsorge[k] : std;
+function vSetzen(k, v) { D.vorsorge[k] = v; ungespeichert = true; }
+
+// ---------- Unser Monat ----------
+function summen() {
+  let ein = 0, aus = 0, sparen = 0; const gr = {};
+  for (const p of D.posten) {
+    const m = (Number(p.betrag) || 0) * (FAKTOR[p.rhythmus] || 1);
+    if (p.art === "ein") ein += m; else { aus += m; if (p.gruppe === "Sparen") sparen += m; gr[p.gruppe || "Sonstiges"] = (gr[p.gruppe || "Sonstiges"] || 0) + m; }
+  }
+  return { ein, aus, sparen, rest: ein - aus, gr };
+}
+function zeilen(art) {
+  return D.posten.map((p, i) => p.art !== art ? "" : `<tr>
+    <td><input data-i="${i}" data-k="name" value="${esc(p.name)}" placeholder="z. B. ${art === "ein" ? "Gehalt Marco" : "Kfz-Versicherung"}"></td>
+    <td><input class="betrag" data-i="${i}" data-k="betrag" inputmode="decimal" value="${p.betrag ? String(p.betrag).replace(".", ",") : ""}" placeholder="0"></td>
+    <td><select data-i="${i}" data-k="rhythmus">${RHY.map(([k, t]) => `<option value="${k}"${p.rhythmus === k ? " selected" : ""}>${t}</option>`).join("")}</select></td>
+    <td><select data-i="${i}" data-k="gruppe">${GRUPPEN[art].map(g => `<option${p.gruppe === g ? " selected" : ""}>${g}</option>`).join("")}</select></td>
+    <td style="text-align:right;white-space:nowrap">${p.rhythmus !== "monat" ? `<span class="klein">${euro((Number(p.betrag) || 0) * FAKTOR[p.rhythmus])}/Mon.</span>` : ""}
+      <button class="knopf rot" data-weg="${i}" title="löschen">✕</button></td></tr>`).join("");
+}
+function monat() {
+  if (geladen === "fehler") return `<div class="karte hinweis">Keine Verbindung zu Home Assistant. Die Seite im Flur-Dashboard bzw. in der Home-Assistant-App öffnen.</div>`;
+  if (!geladen) return `<div class="karte klein">Lade …</div>`;
+  return `<div id="ueb">${uebersicht()}</div>
+  <div class="zwei">
+    <div class="karte"><h2>➕ Einnahmen</h2>
+      <table class="posten"><tr><th>Was</th><th>Betrag</th><th>Wie oft</th><th>Art</th><th></th></tr>${zeilen("ein")}</table>
+      <div class="leiste"><button class="knopf hell" data-neu="ein">+ Einnahme</button></div></div>
+    <div class="karte"><h2>➖ Ausgaben</h2>
+      <table class="posten"><tr><th>Was</th><th>Betrag</th><th>Wie oft</th><th>Art</th><th></th></tr>${zeilen("aus")}</table>
+      <div class="leiste"><button class="knopf hell" data-neu="aus">+ Ausgabe</button></div></div>
+  </div>
+  <div class="leiste"><button class="knopf" id="speichern">${ungespeichert ? "💾 Speichern (geändert)" : "💾 Speichern"}</button>
+    <span class="klein">${D.geaendert ? "Zuletzt gespeichert: " + esc(D.geaendert) : ""} · bleibt nur auf eurem Home-Assistant-Rechner.</span></div>`;
+}
+function uebersicht() {
+  const s = summen(), leer = !D.posten.length;
+  const farben = ["#536b45", "#7a9a68", "#C9A227", "#FF9500", "#AF52DE", "#5AC8FA", "#FF6482", "#8E8E93", "#34C759"];
+  const grp = Object.entries(s.gr).sort((a, b) => b[1] - a[1]);
+  const notgroschen = (s.aus - s.sparen) * 3;
+  const quote = s.ein > 0 ? (s.sparen + Math.max(s.rest, 0)) / s.ein * 100 : 0;
+  return `
+  <div class="karte">
+    <h2>📊 Unser Monat auf einen Blick</h2>
+    <div class="kacheln">
+      <div class="kachel"><span>Einnahmen pro Monat</span><b class="plus">${euro(s.ein)}</b></div>
+      <div class="kachel"><span>Ausgaben pro Monat</span><b class="minus">${euro(s.aus)}</b></div>
+      <div class="kachel"><span>${s.rest >= 0 ? "Bleibt übrig" : "Fehlt"}</span><b class="${s.rest >= 0 ? "plus" : "minus"}">${euro(Math.abs(s.rest))}</b></div>
+      <div class="kachel"><span>davon schon gespart (Sparpläne)</span><b>${euro(s.sparen)}</b></div>
+    </div>
+    ${grp.length ? `<div style="margin-top:12px"><div class="balken">${grp.map(([g, v], i) => `<i title="${esc(g)}" style="width:${s.aus ? v / s.aus * 100 : 0}%;background:${farben[i % farben.length]}"></i>`).join("")}</div>
+      <div class="klein" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px 14px">${grp.map(([g, v], i) => `<span><b style="color:${farben[i % farben.length]}">■</b> ${esc(g)} ${euro(v)}</span>`).join("")}</div></div>` : ""}
+    ${leer ? `<div class="hinweis" style="margin-top:12px">Noch leer. Unten Einnahmen und Ausgaben eintragen – ungefähre Beträge reichen. Jährliche Kosten (Versicherungen, Kfz-Steuer, Grundsteuer) mit „jährlich“ eintragen, die Seite rechnet sie auf den Monat um.</div>` : `
+    <div class="${s.rest >= 0 ? "gut" : "hinweis"}" style="margin-top:12px">
+      ${s.rest >= 0 ? `Jeden Monat bleiben ca. <b>${euro(s.rest)}</b> übrig.` : `Es fehlen jeden Monat ca. <b>${euro(-s.rest)}</b> – fehlt etwas bei den Einnahmen, oder ist eine Ausgabe zu hoch geschätzt?`}
+      Sparquote (gespart + übrig): <b>${quote.toLocaleString("de-DE", { maximumFractionDigits: 0 })} %</b> der Einnahmen.
+      <br>Notgroschen-Ziel (3 Monate Ausgaben ohne Sparen): <b>${euro(notgroschen)}</b> auf dem Tagesgeld.</div>`}
+  </div>`;
+}
+
+// ---------- Vorsorge-Rechner ----------
+function sparplan(rate, jahre, zins, start, kosten) {
+  const r = (zins - kosten) / 100 / 12; let w = start; const verlauf = [w];
+  for (let m = 1; m <= jahre * 12; m++) { w = w * (1 + r) + rate; if (m % 12 === 0) verlauf.push(w); }
+  return { end: w, ein: start + rate * jahre * 12, verlauf };
+}
+function linien(sz, jahre) {
+  const B = 640, H = 220, L = 54, U = 26, max = Math.max(...sz.flatMap(s => s.verlauf)) || 1;
+  const x = j => L + (B - L - 10) * j / jahre, y = v => H - U - (H - U - 10) * v / max;
+  const tick = [0, .25, .5, .75, 1].map(f => `<line x1="${L}" x2="${B - 10}" y1="${y(max * f)}" y2="${y(max * f)}" stroke="rgba(0,0,0,.07)"/>
+    <text x="${L - 6}" y="${y(max * f) + 4}" font-size="11" fill="#8E8E93" text-anchor="end">${Math.round(max * f / 1000)} T€</text>`).join("");
+  const jt = [0, Math.round(jahre / 2), jahre].map(j => `<text x="${x(j)}" y="${H - 6}" font-size="11" fill="#8E8E93" text-anchor="middle">${j} J.</text>`).join("");
+  const p = sz.map(s => `<polyline fill="none" stroke="${s.farbe}" stroke-width="${s.dick || 2.5}" ${s.strich ? 'stroke-dasharray="5 5"' : ""} points="${s.verlauf.map((v, j) => x(j) + "," + y(v)).join(" ")}"/>`).join("");
+  return `<svg viewBox="0 0 ${B} ${H}" style="width:100%;height:auto">${tick}${jt}${p}</svg>`;
+}
+function feld(k, titel, std, art = "zahl", extra = "") {
+  return `<label class="feld">${titel}<input data-v="${k}" inputmode="decimal" value="${esc(String(V(k, std)).replace(".", ","))}" ${extra}></label>`;
+}
+function rechner() {
+  const rate = zahl(V("sp_rate", 150)), jahre = Math.max(1, Math.min(50, Math.round(zahl(V("sp_jahre", 25))))), start = zahl(V("sp_start", 0)), kosten = zahl(V("sp_kosten", "0,2"));
+  const sz = [{ n: "schwach (3 %)", z: 3, farbe: "#C9A227" }, { n: "mittel (6 %)", z: 6, farbe: "#536b45", dick: 3.5 }, { n: "gut (8 %)", z: 8, farbe: "#34C759" }]
+    .map(s => ({ ...s, ...sparplan(rate, jahre, s.z, start, kosten) }));
+  const nur = { n: "nur eingezahlt", farbe: "#8E8E93", strich: true, verlauf: Array.from({ length: jahre + 1 }, (_, j) => start + rate * 12 * j) };
+  // Altersvorsorgedepot-Zulage
+  const avBeitrag = zahl(V("av_rate", 150)) * 12, avPers = Math.max(1, Math.round(zahl(V("av_personen", 2)))), avKinder = Math.max(0, Math.round(zahl(V("av_kinder", 2))));
+  const grund = Math.min(avBeitrag, 360) * 0.5 + Math.max(0, Math.min(avBeitrag, 1800) - 360) * 0.25;
+  const kind = avKinder ? Math.min(avBeitrag, 300) : 0;   // vereinfachend: Kinderzulage bis 300 € je Kind (Eigenbeitrag mind. 300 €)
+  const zulageJahr = grund * avPers + kind * avKinder;
+  // Krypto
+  const kb = zahl(V("kr_bestand", 0)), kr = zahl(V("kr_rate", 250));
+  // Rentenlücke
+  const wunsch = zahl(V("rl_wunsch", 2500)), rente = zahl(V("rl_rente", 1600)), bis = Math.max(1, Math.round(zahl(V("rl_jahre", 25))));
+  const luecke = Math.max(0, wunsch - rente), kapital = luecke * 12 * 25;      // grob: 25 Jahresbeträge (≈ 4-%-Regel)
+  const r6 = 0.055 / 12, n = bis * 12, noetig = kapital > 0 ? kapital * r6 / (Math.pow(1 + r6, n) - 1) : 0;
+  return `
+  <div class="karte"><h2>📈 Sparplan-Rechner (z. B. Welt-ETF)</h2>
+    <div class="felder">${feld("sp_rate", "Monatlich (€)", 150)}${feld("sp_jahre", "Wie viele Jahre", 25)}${feld("sp_start", "Startbetrag (€)", 0)}${feld("sp_kosten", "Kosten pro Jahr (%)", "0,2")}</div>
+    <div style="margin-top:10px">${linien([nur, ...sz], jahre)}</div>
+    <div class="kacheln" style="margin-top:8px">
+      <div class="kachel"><span>eingezahlt</span><b>${euro(sz[0].ein)}</b></div>
+      ${sz.map(s => `<div class="kachel"><span style="color:${s.farbe}">● ${s.n} pro Jahr</span><b>${euro(s.end)}</b></div>`).join("")}
+    </div>
+    <p class="klein">Ein Welt-ETF brachte in der Vergangenheit über 20+ Jahre im Schnitt etwa 6–8 % pro Jahr – mit Einbrüchen von −30 bis −50 % zwischendurch.
+      Wer in einem Crash nicht verkauft, hat sich langfristig bisher immer erholt. Garantie gibt es keine. Inflation (ca. 2 %) ist hier nicht abgezogen.</p>
+  </div>
+  <div class="zwei">
+    <div class="karte"><h2>🏛️ Altersvorsorgedepot ab 2027: Was gibt der Staat dazu?</h2>
+      <div class="felder">${feld("av_rate", "Eigenbeitrag pro Person/Monat (€)", 150)}${feld("av_personen", "Wie viele Erwachsene", 2)}${feld("av_kinder", "Kinder mit Kindergeld", 2)}</div>
+      <div class="kacheln" style="margin-top:10px">
+        <div class="kachel"><span>Zulage pro Jahr (zusammen)</span><b class="plus">${euro(zulageJahr)}</b></div>
+        <div class="kachel"><span>auf ${euro(avBeitrag * avPers)} Eigenbeitrag</span><b>+${avBeitrag ? Math.round(zulageJahr / (avBeitrag * avPers) * 100) : 0} % geschenkt</b></div>
+      </div>
+      <p class="klein">Grundzulage je Erwachsenem: 50 % auf die ersten 360 €, 25 % bis 1.800 € im Jahr (max. 540 €). Kinderzulage bis 300 € je Kind und Jahr.
+        Volle Grundzulage ab 150 €/Monat. Gefördert wird, wer auch Riester bekommen konnte (v. a. Angestellte und deren Ehepartner) – bei Selbstständigkeit vorher prüfen.
+        Vereinfachte Rechnung, Stand ${STAND}.</p></div>
+    <div class="karte"><h2>🪙 Krypto: Was wäre wenn?</h2>
+      <div class="felder">${feld("kr_bestand", "Wert heute (€)", 0)}${feld("kr_rate", "Monatlich (€)", 250)}</div>
+      <div class="kacheln" style="margin-top:10px">
+        <div class="kachel"><span>Crash −70 % (gab es mehrfach)</span><b class="minus">${euro(kb * 0.3)}</b></div>
+        <div class="kachel"><span>halbiert</span><b>${euro(kb * 0.5)}</b></div>
+        <div class="kachel"><span>verdoppelt</span><b class="plus">${euro(kb * 2)}</b></div>
+        <div class="kachel"><span>in 1 Jahr eingezahlt</span><b>${euro(kr * 12)}</b></div>
+      </div>
+      <p class="klein">Krypto kann sich vervielfachen – oder 70–80 % verlieren (2018, 2022). Faustregel vieler Ratgeber: nur so viel, dass ein Totalverlust die Rente nicht gefährdet,
+        oft 5–10 % des Ersparten. Nach 1 Jahr Haltedauer sind Gewinne steuerfrei – Kaufdatum und Preis aufheben.</p></div>
+  </div>
+  <div class="karte"><h2>🧓 Rentenlücke grob schätzen</h2>
+    <div class="felder">${feld("rl_wunsch", "Gewünschtes Netto im Alter (€/Monat)", 2500)}${feld("rl_rente", "Erwartete Rente netto (€/Monat)", 1600)}${feld("rl_jahre", "Jahre bis zur Rente", 25)}</div>
+    <div class="kacheln" style="margin-top:10px">
+      <div class="kachel"><span>Lücke pro Monat</span><b class="minus">${euro(luecke)}</b></div>
+      <div class="kachel"><span>dafür nötiges Vermögen (grob)</span><b>${euro(kapital)}</b></div>
+      <div class="kachel"><span>nötige Sparrate bei 5,5 %</span><b>${euro(noetig)}/Mon.</b></div>
+    </div>
+    <p class="klein">Die erwartete Rente steht in der jährlichen <b>Renteninformation</b> der Deutschen Rentenversicherung (brutto – davon gehen grob 11 % Kranken-/Pflegeversicherung und ggf. Steuer ab).
+      „Nötiges Vermögen“ = 25 Jahre lang die Lücke entnehmen (vereinfacht, ohne Inflation). Für beide Partner getrennt rechnen.</p>
+  </div>
+  <div class="leiste"><button class="knopf" id="speichern">${ungespeichert ? "💾 Eingaben merken (geändert)" : "💾 Eingaben merken"}</button></div>`;
+}
+
+// ---------- Lernen ----------
+const KAPITEL = [
+  ["1. Die richtige Reihenfolge", `<ol>
+    <li><b>Überblick</b>: Was kommt rein, was geht raus? (Reiter „Unser Monat“)</li>
+    <li><b>Notgroschen</b>: 3–6 Monatsausgaben auf einem Tagesgeldkonto. Für kaputtes Auto, Waschmaschine, Arbeitsausfall.</li>
+    <li><b>Teure Schulden weg</b>: Dispo und Ratenkäufe kosten oft 10–15 % Zinsen – das schlägt jede Geldanlage.</li>
+    <li><b>Geschenktes Geld mitnehmen</b>: Zuschuss vom Arbeitgeber (betriebliche Altersvorsorge) und ab 2027 die Zulagen fürs Altersvorsorgedepot.</li>
+    <li><b>Langfristig breit anlegen</b>: z. B. Welt-ETF-Sparplan, mindestens 10–15 Jahre liegen lassen.</li>
+    <li><b>Spielgeld</b>: Einzelaktien, Krypto – nur ein kleiner Teil.</li></ol>`],
+  ["2. Was ist eine Aktie, was ein ETF?", `<p><b>Aktie</b> = ein kleines Stück einer Firma. Geht es der Firma gut, steigt der Wert und es gibt oft Dividende. Geht sie pleite, ist das Geld weg.</p>
+    <p><b>ETF</b> = ein Korb mit sehr vielen Aktien auf einmal, z. B. „MSCI World“ (ca. 1.400 Firmen aus Industrieländern) oder „FTSE All-World“ (auch Schwellenländer, ca. 4.000 Firmen).
+    Geht eine Firma pleite, merkt man es kaum. Kosten nur ca. 0,1–0,25 % im Jahr.</p>
+    <p><b>Sparplan</b> = jeden Monat automatisch z. B. 50 € kaufen. Bei vielen Online-Banken kostenlos, schon ab 1–25 €. Vorteil: Man kauft mal teuer, mal billig – über die Jahre gleicht sich das aus.</p>`],
+  ["3. Schwankungen gehören dazu", `<p>Aktienmärkte fallen regelmäßig: 2000–2003 (−50 %), 2008 (−50 %), 2020 (−34 % in 4 Wochen), 2022 (−20 %). Jedes Mal ging es danach wieder auf neue Höchststände – das dauerte aber teils Jahre.</p>
+    <p>Wichtigste Regel: <b>Im Crash nicht verkaufen.</b> Geld, das man in den nächsten 5 Jahren braucht, gehört nicht in Aktien.</p>`],
+  ["4. Krypto verstehen", `<p>Bitcoin und Co. haben keinen Firmenwert dahinter, der Preis entsteht nur aus Angebot und Nachfrage. Deshalb schwankt er extrem: Verluste von 70–80 % kamen schon mehrfach vor.</p>
+    <ul><li>Monatlich gleichen Betrag kaufen (wie ihr es macht) glättet die Schwankungen.</li>
+    <li>Nur bei großen, in der EU zugelassenen Anbietern (MiCA-Lizenz) kaufen.</li>
+    <li>Steuer: nach <b>1 Jahr</b> Haltedauer steuerfrei. Darunter Freigrenze 1.000 € Gewinn pro Jahr. Kaufbelege aufheben.</li>
+    <li>Für die Rente: Krypto als kleiner Zusatz, nicht als Hauptbaustein.</li></ul>`],
+  ["5. Die drei Säulen der Rente", `<p><b>1. Gesetzliche Rente</b>: Wie viel ihr bekommt, steht in der jährlichen Renteninformation. Das Rentenniveau ist bis 2031 bei 48 % gesichert – das heißt aber: Die Rente ist deutlich weniger als das letzte Gehalt.</p>
+    <p><b>2. Betriebliche Vorsorge</b>: Über den Arbeitgeber, aus dem Brutto. Lohnt sich vor allem, wenn der Arbeitgeber etwas dazugibt (mind. 15 % sind Pflicht, wenn er Sozialabgaben spart).</p>
+    <p><b>3. Private Vorsorge</b>: ETF-Sparplan, ab 2027 das geförderte Altersvorsorgedepot, Immobilie (eine vermietete Wohnung bringt auch im Alter regelmäßig Geld – wie eine zweite Rente).</p>`],
+  ["6. Steuern einfach", `<ul><li><b>Freistellungsauftrag</b> bei der Bank stellen: 1.000 € Erträge im Jahr steuerfrei, als Ehepaar 2.000 €.</li>
+    <li>Darüber: ca. 26,4 % Abgeltungsteuer (mit Soli) auf Gewinne – die Bank zieht sie automatisch ab.</li>
+    <li>Krypto: eigene Regeln (Haltefrist 1 Jahr), muss man selbst in die Steuererklärung schreiben.</li>
+    <li>Mieteinnahmen gehören in die Steuererklärung (Anlage V) – Kosten wie Nebenkosten, Reparaturen, Abschreibung mindern die Steuer.</li></ul>`],
+  ["7. Vorsicht Falle", `<ul><li>Niemand kann Kurse vorhersagen. Wer „sichere 20 % im Monat“ verspricht, lügt.</li>
+    <li>Keine Anlagen über WhatsApp, Telegram, Instagram oder „Trading-Coaches“.</li>
+    <li>Teure Versicherungsprodukte mit hohen Abschlusskosten meiden – vorher Kosten (Effektivkosten) vergleichen.</li>
+    <li>Unabhängige Hilfe: Verbraucherzentrale (Honorarberatung), Finanztip.</li></ul>`],
+];
+function lernen() {
+  return `<div class="karte"><h2>📚 Geld verstehen – Schritt für Schritt</h2>
+    ${KAPITEL.map(([t, x], i) => `<details${i === 0 ? " open" : ""}><summary>${t}</summary><div style="padding:4px 0 0 4px">${x}</div></details>`).join("")}</div>`;
+}
+function neu() {
+  return `<div class="karte"><h2>🆕 Was gilt, was kommt (Stand ${STAND})</h2>
+    ${NEU.map(n => { const [t, c] = MARKE[n.status] || ["", ""]; return `<div style="border-top:1px solid var(--linie);padding:10px 0">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="marke ${c}">${t}</span><span class="klein">${esc(n.datum)}</span></div>
+      <h3 style="margin:6px 0 2px">${esc(n.titel)}</h3><p style="margin:2px 0">${esc(n.text)}</p>
+      <a class="klein" href="${esc(n.quelle)}" target="_blank" rel="noopener">Quelle</a></div>`; }).join("")}
+    <p class="klein">Claude prüft jeden Monat, ob sich etwas geändert hat, und trägt es hier ein.</p></div>`;
+}
+
+// ---------- Anzeigen ----------
+function zeigen() {
+  document.getElementById("stand").textContent = STAND;
+  document.querySelectorAll("#reiter button").forEach(b => b.classList.toggle("an", b.dataset.r === reiter));
+  const f = { monat, rechner, lernen, neu }[reiter] || monat;
+  const fokus = document.activeElement && document.activeElement.dataset ? [document.activeElement.dataset.i, document.activeElement.dataset.k, document.activeElement.dataset.v] : null;
+  document.getElementById("inhalt").innerHTML = f();
+  if (fokus) { const sel = fokus[2] ? `[data-v="${fokus[2]}"]` : (fokus[0] != null ? `[data-i="${fokus[0]}"][data-k="${fokus[1]}"]` : null);
+    const e = sel && document.querySelector(sel); if (e) { e.focus(); if (e.setSelectionRange && e.type !== "select-one") { const l = e.value.length; e.setSelectionRange(l, l); } } }
+}
+document.getElementById("reiter").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { reiter = b.dataset.r; zeigen(); window.scrollTo(0, 0); } });
+document.addEventListener("click", e => {
+  const t = e.target.closest("button"); if (!t) return;
+  if (t.id === "speichern") speichern();
+  else if (t.dataset.neu) { D.posten.push({ name: "", betrag: 0, rhythmus: "monat", art: t.dataset.neu, gruppe: GRUPPEN[t.dataset.neu][0], notiz: "" }); ungespeichert = true; zeigen();
+    const ins = document.querySelectorAll(`[data-k="name"]`); const l = [...ins].filter(x => D.posten[x.dataset.i].art === t.dataset.neu).pop(); if (l) l.focus(); }
+  else if (t.dataset.weg != null) { D.posten.splice(+t.dataset.weg, 1); ungespeichert = true; zeigen(); }
+});
+document.addEventListener("change", e => {
+  const x = e.target;
+  if (x.dataset.i != null) { const p = D.posten[x.dataset.i]; p[x.dataset.k] = x.dataset.k === "betrag" ? zahl(x.value) : x.value; ungespeichert = true; teilweise(); }
+  else if (x.dataset.v) { vSetzen(x.dataset.v, x.value); zeigen(); }
+});
+document.addEventListener("input", e => {
+  const x = e.target;
+  if (x.dataset.v) { vSetzen(x.dataset.v, x.value); clearTimeout(x._t); x._t = setTimeout(zeigen, 700); }
+});
+function teilweise() {   // beim Tippen nicht die Eingabefelder ersetzen
+  const u = document.getElementById("ueb"); if (u) u.innerHTML = uebersicht();
+  const k = document.getElementById("speichern"); if (k) k.textContent = "💾 Speichern (geändert)";
+}
+window.addEventListener("beforeunload", e => { if (ungespeichert) { e.preventDefault(); e.returnValue = ""; } });
+zeigen();
+(function warten(n) { if (hass()) laden(); else if (n < 40) setTimeout(() => warten(n + 1), 250); else { geladen = "fehler"; zeigen(); } })(0);
+</script>
+</body>
+</html>
