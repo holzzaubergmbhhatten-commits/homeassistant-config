@@ -211,10 +211,14 @@ template:
             {% if is_state('binary_sensor.wasser_dauerfluss', 'on') %}
               {% set ns.l = ns.l + [{'icon': 'mdi:water-alert', 'farbe': '#FF9500', 'text': 'Wasser läuft ohne Pause – Hahn oder Garten offen?'}] %}
             {% endif %}
-            {% for w in state_attr('sensor.unwetter', 'warnungen') or [] %}
+            {# Unwetter: nur die stärkste Warnung, mit Zeitraum; weitere nur als Anzahl #}
+            {% set uw = state_attr('sensor.unwetter', 'warnungen') or [] %}
+            {% if uw %}
+              {% set w = uw[0] %}
               {% set ns.l = ns.l + [{'icon': 'mdi:weather-lightning-rainy', 'farbe': '#c96f4a' if w.stufe >= 2 else '#8E8E93',
-                 'text': (w.titel or w.ereignis) ~ (' – ' ~ w.tipp if w.tipp else '')}] %}
-            {% endfor %}
+                 'text': (w.titel or w.ereignis) ~ ((' · ' ~ w.von ~ ' bis ' ~ w.bis[-5:] ~ ' Uhr' if w.bis[:9] == w.von[:9] else ' · ' ~ w.von ~ ' bis ' ~ w.bis) if w.von else '')
+                   ~ (' (+ ' ~ (uw | count - 1) ~ ' weitere)' if uw | count > 1 else '') ~ (' – ' ~ w.tipp if w.tipp else '')}] %}
+            {% endif %}
             {% if now().hour >= 15 and state_attr('sensor.schule_morgen', 'schule') %}
               {% set ns.l = ns.l + [{'icon': 'mdi:bag-personal', 'farbe': '#536b45', 'text': 'Mathilda morgen: ' ~ (state_attr('sensor.schule_morgen', 'faecher') | join(', '))
                  ~ ((' – einpacken: ' ~ (state_attr('sensor.schule_morgen', 'einpacken') | join('; '))) if state_attr('sensor.schule_morgen', 'einpacken') else '')}] %}

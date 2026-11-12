@@ -151,8 +151,10 @@ def dwd():
                     continue
                 ereignis = str(w.get("event", "")).strip()
                 tipp = next((t for muster, t in TIPPS if re.search(muster, ereignis, re.I)), "")
-                start = datetime.fromtimestamp(int(w.get("start") or 0) / 1000) if w.get("start") else None
-                ende = datetime.fromtimestamp(int(w.get("end") or 0) / 1000) if w.get("end") else None
+                from zoneinfo import ZoneInfo
+                berlin = ZoneInfo("Europe/Berlin")   # Home Assistant läuft evtl. in UTC – Zeiten immer deutsch anzeigen
+                start = datetime.fromtimestamp(int(w.get("start") or 0) / 1000, berlin) if w.get("start") else None
+                ende = datetime.fromtimestamp(int(w.get("end") or 0) / 1000, berlin) if w.get("end") else None
                 aus.append({"id": f"{ereignis}-{w.get('start')}", "ereignis": ereignis.title(), "stufe": int(w.get("level") or 0),
                             "titel": str(w.get("headline", ""))[:120], "text": str(w.get("description", ""))[:400],
                             "von": start.strftime("%a %d.%m. %H:%M") if start else "", "bis": ende.strftime("%a %d.%m. %H:%M") if ende else "",
