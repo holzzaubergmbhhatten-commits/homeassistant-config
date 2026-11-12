@@ -276,15 +276,7 @@ automation:
           entity_id: number.hwr_warmepumpe_normaltemperatur_2
         data:
           value: "{{ [states('number.hwr_warmepumpe_normaltemperatur_2') | int(22) + 2, 25] | min }}"
-      # Stellantriebe der Fußbodenheizung aufmachen: Shelly 1 Mini parallel zum Berker, in HA „switch.zone_…“ (z. B. switch.zone_schlafen)
-      - variables:
-          zonen: "{{ states.switch | selectattr('entity_id', 'match', 'switch\\.zone_') | map(attribute='entity_id') | list }}"
-      - if: "{{ zonen | count > 0 }}"
-        then:
-          - action: switch.turn_on
-            continue_on_error: true
-            target:
-              entity_id: "{{ zonen }}"
+      # Stellantriebe der Fußbodenheizung (switch.zone_…) öffnet packages/zonen.yaml – mit Obergrenze pro Raum
       - action: logbook.log
         data:
           name: Kamin-Wärme

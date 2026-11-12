@@ -1,0 +1,62 @@
+# Fußbodenheizung: Zonen-Shellys (Shelly 1 Mini parallel zum Berker, O → Klemme 3 „Heizsignal“ der Regelleiste).
+# Shelly an = Stellantrieb der Zone offen, egal was der Berker will. Geöffnet wird nur bei Wärme-Überschuss
+# (input_boolean.kamin_waerme_laeuft, siehe heizung_smart.yaml). Damit kein Raum zu warm wird, gilt pro Zone eine
+# Obergrenze, gemessen mit dem IKEA-Sensor im Raum. Nachts (20–7 Uhr) 1 Grad weniger.
+# Neue Zone: Shelly „Zone …“ nennen, dann hier in ZONEN eintragen (Schalter: [Raumsensor, Obergrenze Tag]).
+
+template:
+  - sensor:
+      - name: Zonen Obergrenzen
+        unique_id: zonen_obergrenzen
+        icon: mdi:thermometer-chevron-up
+        state: "{{ states.switch | selectattr('entity_id', 'match', 'switch\\.zone_') | list | count }}"
+        attributes:
+          zonen: >-
+            {{ {
+              'switch.zone_mucki':      ['sensor.muckis_zimmer_mucki_temperatur_sensor_temperatur', 22.0],
+              'switch.zone_kind_2':     ['sensor.kind_2_kind_2_temperatur_sensor_temperatur', 22.0],
+              'switch.zone_schlafen':   ['sensor.schlafzimmer_temperatur_sensor_temperatur', 20.5],
+              'switch.zone_badezimmer': ['sensor.badezimmer_badezimmer_temperatur_sensor_temperatur', 24.0],
+              'switch.zone_flur':       ['sensor.flur_flur_temperatur_sensor_temperatur', 23.0],
+              'switch.zone_diele':      ['sensor.diele_diele_temperatur_sensor_temperatur', 23.0],
+              'switch.zone_buro':       ['sensor.buro_buro_temperatur_sensor_temperatur', 22.5],
+            } }}
+
+automation:
+  - id: zonen_obergrenze
+    alias: "Heizung: Zonen bei Überschuss öffnen, an der Obergrenze schließen"
+    mode: queued
+    max: 5
+    triggers:
+      - trigger: time_pattern
+        minutes: "/5"
+      - trigger: state
+        entity_id: input_boolean.kamin_waerme_laeuft
+    actions:
+      - variables:
+          ueberschuss: "{{ is_state('input_boolean.kamin_waerme_laeuft', 'on') }}"
+          nacht: "{{ now().hour >= 20 or now().hour < 7 }}"
+          zonen: "{{ state_attr('sensor.zonen_obergrenzen', 'zonen') or {} }}"
+          vorhanden: "{{ states.switch | selectattr('entity_id', 'match', 'switch\\.zone_') | map(attribute='entity_id') | list }}"
+      - repeat:
+          for_each: "{{ vorhanden }}"
+          sequence:
+            - variables:
+                z: "{{ repeat.item }}"
+                sensor: "{{ zonen.get(z, [none, 0])[0] }}"
+                grenze: "{{ zonen.get(z, [none, 21.0])[1] | float - (1 if nacht else 0) }}"
+                temp: "{{ states(sensor) | float(none) if sensor else none }}"
+                zu_warm: "{{ temp is none or temp >= grenze }}"
+                darf_auf: "{{ ueberschuss and temp is not none and temp < grenze - 0.5 }}"
+            - if: "{{ is_state(z, 'on') and (not ueberschuss or zu_warm) }}"
+              then:
+                - action: switch.turn_off
+                  continue_on_error: true
+                  target:
+                    entity_id: "{{ z }}"
+            - if: "{{ is_state(z, 'off') and darf_auf }}"
+              then:
+                - action: switch.turn_on
+                  continue_on_error: true
+                  target:
+                    entity_id: "{{ z }}"
