@@ -374,16 +374,18 @@ document.addEventListener("click", e => {
 document.addEventListener("change", e => {
   const x = e.target;
   if (x.dataset.i != null) { const p = D.posten[x.dataset.i]; p[x.dataset.k] = x.dataset.k === "betrag" ? zahl(x.value) : x.value; ungespeichert = true; teilweise(); }
-  else if (x.dataset.v) { vSetzen(x.dataset.v, x.value); zeigen(); }
+  else if (x.dataset.v) { vSetzen(x.dataset.v, x.value); const y = window.scrollY; zeigen(); window.scrollTo(0, y); }
 });
 document.addEventListener("input", e => {
   const x = e.target;
-  if (x.dataset.v) { vSetzen(x.dataset.v, x.value); clearTimeout(x._t); x._t = setTimeout(zeigen, 700); }
+  // nur merken – NICHT neu zeichnen, sonst schließt die Bildschirmtastatur und das Feld verliert die Eingabe
+  if (x.dataset.v) { vSetzen(x.dataset.v, x.value); const k = document.getElementById("speichern"); if (k) k.textContent = "💾 Eingaben merken (geändert)"; }
 });
 function teilweise() {   // beim Tippen nicht die Eingabefelder ersetzen
   const u = document.getElementById("ueb"); if (u) u.innerHTML = uebersicht();
   const k = document.getElementById("speichern"); if (k) k.textContent = "💾 Speichern (geändert)";
 }
+document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.dataset && e.target.dataset.v) e.target.blur(); });
 window.addEventListener("beforeunload", e => { if (ungespeichert) { e.preventDefault(); e.returnValue = ""; } });
 zeigen();
 (function warten(n) { if (hass()) laden(); else if (n < 40) setTimeout(() => warten(n + 1), 250); else { geladen = "fehler"; zeigen(); } })(0);
