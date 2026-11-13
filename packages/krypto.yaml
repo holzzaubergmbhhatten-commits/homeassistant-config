@@ -1,0 +1,14 @@
+# Bitcoin-Kurs in Euro (CoinGecko, frei nutzbar, ohne Schlüssel) für die Finanzen-Seite (www/finanzen.html).
+# Bestand und Kaufpreis stehen NICHT hier, sondern nur lokal in /config/finanzen.json.
+rest:
+  - resource: https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur&include_24hr_change=true
+    scan_interval: 900
+    sensor:
+      - name: Bitcoin EUR
+        unique_id: bitcoin_eur
+        icon: mdi:bitcoin
+        unit_of_measurement: "€"
+        value_template: "{{ value_json.bitcoin.eur | default(none) }}"
+        json_attributes_path: "$.bitcoin"
+        json_attributes:
+          - eur_24h_change

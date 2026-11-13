@@ -95,6 +95,10 @@
 <script>
 // ---------- Gesetzes-Stand (von Claude gepflegt, monatlich geprüft) ----------
 const STAND = "12.11.2026";
+// Krypto-Marktlage in einfachen Worten (von Claude gepflegt, kein Kauf-/Verkaufstipp)
+const MARKT = { datum: "13.11.2026", text: "Bitcoin ist seit Wochen im Abwärtstrend: fünf Verlustwochen in Folge, rund 40 % unter dem Rekordhoch von ca. 126.000 $ (Okt. 2025). Gründe: Geld fließt aus den Bitcoin-ETFs ab und die Sorge vor höheren US-Zinsen. Wichtige Marke laut Analysten: ca. 73.000 $ (≈ 63.000 €) – darunter wären 69.000–70.000 $ möglich. Solche Phasen gab es oft (2018, 2022); niemand weiß, wann sie enden. Für einen monatlichen Sparplan heißt ein tiefer Kurs: Man bekommt für dieselben 250 € mehr Bitcoin.",
+  quellen: [["finanzen.net 09.11.", "https://www.finanzen.net/nachricht/devisen/kryptomarkt-fuenfte-verlustwoche-in-folge-bitcoin-startet-bei-74-200-dollar-in-die-cpi-woche-ether-faellt-auf-2-100-dollar-00-16049754"],
+            ["ad-hoc-news", "https://www.ad-hoc-news.de/boerse/news/marktberichte/bitcoin-kurs-unter-druck-etf-abfluesse-treffen-auf-zinsaengste/70497630"]] };
 const NEU = [
   { status: "gilt", datum: "seit 01.07.2026", titel: "Renten +4,24 %",
     text: "Der Rentenwert stieg von 40,79 € auf 42,52 € je Rentenpunkt. Eine „Standardrente“ (45 Jahre Durchschnittsverdienst) liegt bei ca. 1.913 € brutto.",
@@ -124,7 +128,10 @@ const MARKE = { gilt: ["gilt", "m-gilt"], kommt: ["kommt", "m-kommt"], offen: ["
 function hass() { try { return window.parent.document.querySelector("home-assistant").hass; } catch (e) { return null; } }
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const euro = (x, d = 0) => (Number(x) || 0).toLocaleString("de-DE", { minimumFractionDigits: d, maximumFractionDigits: d }) + " €";
-const zahl = x => { const v = parseFloat(String(x).replace(/\./g, "").replace(",", ".")); return isFinite(v) ? v : 0; };
+const zahl = x => { let t = String(x == null ? "" : x).trim().replace(/\s|€/g, "");
+  if (t.includes(",")) t = t.replace(/\./g, "").replace(",", ".");          // 1.234,56
+  else if (!/^-?\d{1,3}(\.\d{3})+$/.test(t)) { /* 0.0497 oder 12.5 = Dezimalpunkt */ } else t = t.replace(/\./g, "");   // 1.234 = Tausender
+  const v = parseFloat(t); return isFinite(v) ? v : 0; };
 const FAKTOR = { monat: 1, quartal: 1 / 3, halbjahr: 1 / 6, jahr: 1 / 12 };
 const RHY = [["monat", "monatlich"], ["quartal", "vierteljährlich"], ["halbjahr", "halbjährlich"], ["jahr", "jährlich"]];
 const GRUPPEN = { ein: ["Gehalt", "Miete", "Kindergeld", "Sonstiges"],
@@ -242,7 +249,11 @@ function rechner() {
   const kind = avKinder ? Math.min(avBeitrag, 300) : 0;   // vereinfachend: Kinderzulage bis 300 € je Kind (Eigenbeitrag mind. 300 €)
   const zulageJahr = grund * avPers + kind * avKinder;
   // Krypto
-  const kb = zahl(V("kr_bestand", 0)), kr = zahl(V("kr_rate", 250));
+  const kr = zahl(V("kr_rate", 250)), btc = zahl(V("kr_btc", 0)), einst = zahl(V("kr_einstand", 0));
+  const st = hass() && hass().states && hass().states["sensor.bitcoin_eur"];
+  const kurs = st && isFinite(parseFloat(st.state)) ? parseFloat(st.state) : zahl(V("kr_kurs", 0));
+  const ch24 = st && st.attributes ? Number(st.attributes.eur_24h_change) : NaN;
+  const kb = btc && kurs ? btc * kurs : zahl(V("kr_bestand", 0)), eingesetzt = btc * einst, gv = eingesetzt ? kb - eingesetzt : 0;
   // Rentenlücke
   const wunsch = zahl(V("rl_wunsch", 2500)), rente = zahl(V("rl_rente", 1600)), bis = Math.max(1, Math.round(zahl(V("rl_jahre", 25))));
   const luecke = Math.max(0, wunsch - rente), kapital = luecke * 12 * 25;      // grob: 25 Jahresbeträge (≈ 4-%-Regel)
@@ -268,14 +279,19 @@ function rechner() {
       <p class="klein">Grundzulage je Erwachsenem: 50 % auf die ersten 360 €, 25 % bis 1.800 € im Jahr (max. 540 €). Kinderzulage bis 300 € je Kind und Jahr.
         Volle Grundzulage ab 150 €/Monat. Gefördert wird, wer auch Riester bekommen konnte (v. a. Angestellte und deren Ehepartner) – bei Selbstständigkeit vorher prüfen.
         Vereinfachte Rechnung, Stand ${STAND}.</p></div>
-    <div class="karte"><h2>🪙 Krypto: Was wäre wenn?</h2>
-      <div class="felder">${feld("kr_bestand", "Wert heute (€)", 0)}${feld("kr_rate", "Monatlich (€)", 250)}</div>
+    <div class="karte"><h2>🪙 Unser Bitcoin</h2>
+      <div class="felder">${feld("kr_btc", "Menge (BTC)", 0)}${feld("kr_einstand", "Ø Kaufpreis (€ pro BTC)", 0)}${feld("kr_rate", "Sparplan monatlich (€)", 250)}</div>
       <div class="kacheln" style="margin-top:10px">
-        <div class="kachel"><span>Crash −70 % (gab es mehrfach)</span><b class="minus">${euro(kb * 0.3)}</b></div>
-        <div class="kachel"><span>halbiert</span><b>${euro(kb * 0.5)}</b></div>
-        <div class="kachel"><span>verdoppelt</span><b class="plus">${euro(kb * 2)}</b></div>
-        <div class="kachel"><span>in 1 Jahr eingezahlt</span><b>${euro(kr * 12)}</b></div>
+        <div class="kachel"><span>Kurs jetzt${isFinite(ch24) ? ` (24 h ${ch24 >= 0 ? "+" : ""}${ch24.toFixed(1).replace(".", ",")} %)` : ""}</span><b>${kurs ? euro(kurs) : "–"}</b></div>
+        <div class="kachel"><span>Wert jetzt</span><b>${euro(kb)}</b></div>
+        ${eingesetzt ? `<div class="kachel"><span>eingesetzt</span><b>${euro(eingesetzt)}</b></div>
+        <div class="kachel"><span>Gewinn / Verlust</span><b class="${gv >= 0 ? "plus" : "minus"}">${gv >= 0 ? "+" : "−"}${euro(Math.abs(gv))} (${(gv / eingesetzt * 100).toFixed(0)} %)</b></div>` : ""}
+        <div class="kachel"><span>bei Crash −70 %</span><b class="minus">${euro(kb * 0.3)}</b></div>
+        <div class="kachel"><span>bei Verdopplung</span><b class="plus">${euro(kb * 2)}</b></div>
       </div>
+      ${kurs && einst ? `<p class="klein">Bitcoin muss auf <b>${euro(einst)}</b> steigen (+${Math.max(0, (einst / kurs - 1) * 100).toFixed(0)} %), damit ihr bei null seid. Mit dem Sparplan sinkt euer Durchschnittspreis jeden Monat, solange der Kurs darunter liegt.</p>` : ""}
+      <div class="hinweis" style="margin-top:8px"><b>Markt-Lage (${esc(MARKT.datum)}):</b> ${esc(MARKT.text)}
+        <div class="klein" style="margin-top:4px">${MARKT.quellen.map(([t, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(t)}</a>`).join(" · ")} – keine Kauf- oder Verkaufsempfehlung.</div></div>
       <p class="klein">Krypto kann sich vervielfachen – oder 70–80 % verlieren (2018, 2022). Faustregel vieler Ratgeber: nur so viel, dass ein Totalverlust die Rente nicht gefährdet,
         oft 5–10 % des Ersparten. Nach 1 Jahr Haltedauer sind Gewinne steuerfrei – Kaufdatum und Preis aufheben.</p></div>
   </div>
