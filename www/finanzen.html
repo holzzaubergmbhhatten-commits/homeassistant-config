@@ -255,7 +255,7 @@ function rechner() {
   const ch24 = st && st.attributes ? Number(st.attributes.eur_24h_change) : NaN;
   const kb = btc && kurs ? btc * kurs : zahl(V("kr_bestand", 0)), eingesetzt = btc * einst, gv = eingesetzt ? kb - eingesetzt : 0;
   // Rentenlücke
-  const wunsch = zahl(V("rl_wunsch", 2500)), rente = zahl(V("rl_rente", 1600)), bis = Math.max(1, Math.round(zahl(V("rl_jahre", 25))));
+  const wunsch = zahl(V("rl_wunsch", 2500)), rente = zahl(V("rl_rente", 1600)) + zahl(V("rl_miete", 0)), bis = Math.max(1, Math.round(zahl(V("rl_jahre", 25))));
   const luecke = Math.max(0, wunsch - rente), kapital = luecke * 12 * 25;      // grob: 25 Jahresbeträge (≈ 4-%-Regel)
   const r6 = 0.055 / 12, n = bis * 12, noetig = kapital > 0 ? kapital * r6 / (Math.pow(1 + r6, n) - 1) : 0;
   return `
@@ -296,14 +296,14 @@ function rechner() {
         oft 5–10 % des Ersparten. Nach 1 Jahr Haltedauer sind Gewinne steuerfrei – Kaufdatum und Preis aufheben.</p></div>
   </div>
   <div class="karte"><h2>🧓 Rentenlücke grob schätzen</h2>
-    <div class="felder">${feld("rl_wunsch", "Gewünschtes Netto im Alter (€/Monat)", 2500)}${feld("rl_rente", "Erwartete Rente netto (€/Monat)", 1600)}${feld("rl_jahre", "Jahre bis zur Rente", 25)}</div>
+    <div class="felder">${feld("rl_wunsch", "Gewünschtes Netto im Alter (€/Monat)", 2500)}${feld("rl_rente", "Erwartete Renten netto (€/Monat)", 1600)}${feld("rl_miete", "Mieteinnahmen im Alter, schuldenfrei (€/Monat)", 0)}${feld("rl_jahre", "Jahre bis zur Rente", 25)}</div>
     <div class="kacheln" style="margin-top:10px">
       <div class="kachel"><span>Lücke pro Monat</span><b class="minus">${euro(luecke)}</b></div>
       <div class="kachel"><span>dafür nötiges Vermögen (grob)</span><b>${euro(kapital)}</b></div>
       <div class="kachel"><span>nötige Sparrate bei 5,5 %</span><b>${euro(noetig)}/Mon.</b></div>
     </div>
     <p class="klein">Die erwartete Rente steht in der jährlichen <b>Renteninformation</b> der Deutschen Rentenversicherung (brutto – davon gehen grob 11 % Kranken-/Pflegeversicherung und ggf. Steuer ab).
-      „Nötiges Vermögen“ = 25 Jahre lang die Lücke entnehmen (vereinfacht, ohne Inflation). Für beide Partner getrennt rechnen.</p>
+      Mieteinnahmen: Kaltmiete abzüglich ca. 20 % für Instandhaltung und Steuer, ab dann ohne Kreditrate. „Nötiges Vermögen“ = 25 Jahre lang die Lücke entnehmen (vereinfacht, ohne Inflation). Für beide Partner getrennt rechnen.</p>
   </div>
   <div class="leiste"><button class="knopf" id="speichern">${ungespeichert ? "💾 Eingaben merken (geändert)" : "💾 Eingaben merken"}</button></div>`;
 }
