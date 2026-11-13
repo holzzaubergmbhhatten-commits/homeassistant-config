@@ -16,6 +16,7 @@ zum Antippen einzelner Räume.
 ## Entscheidungen
 - **Marco ist Tischlermeister (selbstständig) mit Elektro-Qualifizierung** – Elektroarbeiten (230 V, Verteiler, Shellys an Netzspannung) macht er selbst. Nicht auf einen Elektriker verweisen. Nicht „Elektriker“ nennen. Das eigene Wohnhaus (ca. 200 m² + DG) ist auf neuestem Dämmstandard; Ausbau meist in Eigenleistung (kaum Handwerkerrechnungen, keine KfW/BAFA-Themen).
 - **Familie: nur ein Kind (Mucki).** Der Raum „Kind 2“ wird Muckis zweites Zimmer – kein zweites Kind einplanen.
+- **Marcos Firma: Holzzauber GmbH, Papenmoorweg 8, Hatten.** Die Werkstatt in der Scheune zu Hause ist privat (Basteln, Hausbau) und hat nichts mit der GmbH zu tun. Stellplätze: Strom ist im Preis drin (nicht extra), an jeder Säule hängt ein einfacher Zähler; im Sommer läuft das meiste über PV-Überschuss.
 - Plattform: Home Assistant (statt iPad)
 - Kalender: eigene Website (Direktbuchungen) + Holidu + lokaler Geburtstage-Kalender
 - Wetter: Met.no
