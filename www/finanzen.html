@@ -135,7 +135,8 @@ const zahl = x => { let t = String(x == null ? "" : x).trim().replace(/\s|€/g,
 const FAKTOR = { monat: 1, quartal: 1 / 3, halbjahr: 1 / 6, jahr: 1 / 12 };
 const RHY = [["monat", "monatlich"], ["quartal", "vierteljährlich"], ["halbjahr", "halbjährlich"], ["jahr", "jährlich"]];
 const GRUPPEN = { ein: ["Gehalt", "Miete", "Kindergeld", "Sonstiges"],
-  aus: ["Wohnen & Haus", "Kredit", "Versicherung", "Gesundheit", "Auto", "Kinder", "Lebensmittel", "Einkäufe", "Freizeit & Urlaub", "Handy & Abos", "Sparen", "Sonstiges"] };
+  aus: ["Wohnen & Haus", "Kredit", "Versicherung", "Gesundheit", "Auto", "Kinder", "Lebensmittel", "Einkäufe", "Freizeit & Urlaub", "Handy & Abos", "Sparen", "Sonstiges", "Haus-Projekte (vorübergehend)"] };
+const PROJEKT = "Haus-Projekte (vorübergehend)";   // zählt NICHT zu den dauerhaften Ausgaben
 function toast(t) { const e = document.getElementById("toast"); e.textContent = t; e.classList.add("an"); clearTimeout(e._t); e._t = setTimeout(() => e.classList.remove("an"), 2600); }
 async function skript(daten) {
   const h = hass(); if (!h) throw new Error("keine Verbindung");
@@ -164,12 +165,14 @@ function vSetzen(k, v) { D.vorsorge[k] = v; ungespeichert = true; }
 
 // ---------- Unser Monat ----------
 function summen() {
-  let ein = 0, aus = 0, sparen = 0; const gr = {};
+  let ein = 0, aus = 0, sparen = 0, projekt = 0; const gr = {};
   for (const p of D.posten) {
     const m = (Number(p.betrag) || 0) * (FAKTOR[p.rhythmus] || 1);
-    if (p.art === "ein") ein += m; else { aus += m; if (p.gruppe === "Sparen") sparen += m; gr[p.gruppe || "Sonstiges"] = (gr[p.gruppe || "Sonstiges"] || 0) + m; }
+    if (p.art === "ein") ein += m;
+    else if (p.gruppe === PROJEKT) projekt += m;
+    else { aus += m; if (p.gruppe === "Sparen") sparen += m; gr[p.gruppe || "Sonstiges"] = (gr[p.gruppe || "Sonstiges"] || 0) + m; }
   }
-  return { ein, aus, sparen, rest: ein - aus, gr };
+  return { ein, aus, sparen, projekt, rest: ein - aus, gr };
 }
 function zeilen(art) {
   return D.posten.map((p, i) => p.art !== art ? "" : `<tr>
@@ -206,7 +209,7 @@ function uebersicht() {
     <h2>📊 Unser Monat auf einen Blick</h2>
     <div class="kacheln">
       <div class="kachel"><span>Einnahmen pro Monat</span><b class="plus">${euro(s.ein)}</b></div>
-      <div class="kachel"><span>Ausgaben pro Monat</span><b class="minus">${euro(s.aus)}</b></div>
+      <div class="kachel"><span>Ausgaben pro Monat (dauerhaft)</span><b class="minus">${euro(s.aus)}</b></div>
       <div class="kachel"><span>${s.rest >= 0 ? "Bleibt übrig" : "Fehlt"}</span><b class="${s.rest >= 0 ? "plus" : "minus"}">${euro(Math.abs(s.rest))}</b></div>
       <div class="kachel"><span>davon schon gespart (Sparpläne)</span><b>${euro(s.sparen)}</b></div>
     </div>
@@ -215,7 +218,8 @@ function uebersicht() {
     ${leer ? `<div class="hinweis" style="margin-top:12px">Noch leer. Unten Einnahmen und Ausgaben eintragen – ungefähre Beträge reichen. Jährliche Kosten (Versicherungen, Kfz-Steuer, Grundsteuer) mit „jährlich“ eintragen, die Seite rechnet sie auf den Monat um.</div>` : `
     <div class="${s.rest >= 0 ? "gut" : "hinweis"}" style="margin-top:12px">
       ${s.rest >= 0 ? `Jeden Monat bleiben ca. <b>${euro(s.rest)}</b> übrig.` : `Es fehlen jeden Monat ca. <b>${euro(-s.rest)}</b> – fehlt etwas bei den Einnahmen, oder ist eine Ausgabe zu hoch geschätzt?`}
-      Sparquote (gespart + übrig): <b>${quote.toLocaleString("de-DE", { maximumFractionDigits: 0 })} %</b> der Einnahmen.
+      ${s.projekt ? `<br>🔨 Gerade zusätzlich für Haus-Projekte: ca. <b>${euro(s.projekt)}</b> im Monat (Farbe, Elektrik, Smart Home …) – zählt nicht als dauerhafte Ausgabe. ${s.rest - s.projekt >= 0 ? `Auch damit bleibt noch etwas übrig.` : `Mit den Projekten fehlen zurzeit ca. <b>${euro(s.projekt - s.rest)}</b> im Monat – das geht vom Ersparten ab, bis die Projekte fertig sind.`}` : ""}
+      <br>Sparquote (gespart + übrig): <b>${quote.toLocaleString("de-DE", { maximumFractionDigits: 0 })} %</b> der Einnahmen.
       <br>Notgroschen-Ziel (3 Monate Ausgaben ohne Sparen): <b>${euro(notgroschen)}</b> auf dem Tagesgeld.</div>`}
   </div>`;
 }
