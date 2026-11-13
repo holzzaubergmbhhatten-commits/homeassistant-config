@@ -698,6 +698,13 @@ setInterval(async () => {
   } catch (e) { /* später nochmal */ }
 }, 300000);
 </script>
-<script src="nebenkosten.js?v=4"></script>
+<script src="nebenkosten.js?v=4">
+// Bildschirmtastatur am Touchmonitor schließen: Enter im Feld oder Tipp daneben (Regel aus PROJEKT.md)
+document.addEventListener("keydown", e => { if (e.key === "Enter" && /INPUT|SELECT/.test(e.target.tagName)) e.target.blur(); });
+document.addEventListener("pointerdown", e => {
+  const a = document.activeElement;
+  if (a && /INPUT|SELECT|TEXTAREA/.test(a.tagName) && !e.target.closest("input,select,textarea,button")) a.blur();
+}, true);
+</script>
 </body>
 </html>

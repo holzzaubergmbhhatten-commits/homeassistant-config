@@ -191,6 +191,13 @@ setInterval(async () => {
     if (m && Number(m[1]) > SEITEN_VERSION) location.replace(location.pathname + "?v=" + m[1] + "&t=" + Date.now());
   } catch (e) { /* später nochmal */ }
 }, 300000);
+
+// Bildschirmtastatur am Touchmonitor schließen: Enter im Feld oder Tipp daneben (Regel aus PROJEKT.md)
+document.addEventListener("keydown", e => { if (e.key === "Enter" && /INPUT|SELECT/.test(e.target.tagName)) e.target.blur(); });
+document.addEventListener("pointerdown", e => {
+  const a = document.activeElement;
+  if (a && /INPUT|SELECT|TEXTAREA/.test(a.tagName) && !e.target.closest("input,select,textarea,button")) a.blur();
+}, true);
 </script>
 </body>
 </html>

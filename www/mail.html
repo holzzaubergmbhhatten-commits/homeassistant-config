@@ -325,6 +325,13 @@ function later() { [12000, 25000, 45000].forEach(t => setTimeout(neuLaden, t)); 
 function design() { const h = hass(); document.documentElement.classList.toggle("dunkel", !!(h && h.themes && h.themes.darkMode)); }
 function start() { if (!hass()) { setTimeout(start, 400); return; } design(); neuLaden(); setInterval(() => { design(); neuLaden(); }, 60000); }
 start();
+
+// Bildschirmtastatur am Touchmonitor schließen: Enter im Feld oder Tipp daneben (Regel aus PROJEKT.md)
+document.addEventListener("keydown", e => { if (e.key === "Enter" && /INPUT|SELECT/.test(e.target.tagName)) e.target.blur(); });
+document.addEventListener("pointerdown", e => {
+  const a = document.activeElement;
+  if (a && /INPUT|SELECT|TEXTAREA/.test(a.tagName) && !e.target.closest("input,select,textarea,button")) a.blur();
+}, true);
 </script>
 </body>
 </html>
