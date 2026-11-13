@@ -26,6 +26,7 @@ zum Antippen einzelner Räume.
 - Nuki: bewusst weggelassen
 - Anzeige: bisher Chrome `--app` (nicht `--kiosk`), Seitenleiste eingeklappt
 - Design: dunkles Theme, transparente Kacheln via card-mod
+- **Eingabefelder auf eigenen Seiten (www/*.html): Die Bildschirmtastatur am Flur-Monitor (Onboard) verschwindet nur, wenn kein Feld mehr den Fokus hat.** Deshalb immer: Enter = `blur()`, Tipp neben ein Feld (pointerdown außerhalb von input/select) = `blur()`, Felder beim Tippen NICHT neu zeichnen, nach dem Neuzeichnen NIE den Fokus zurücksetzen und nichts automatisch fokussieren. `enterkeyhint="done"` setzen. Vorbild: www/finanzen.html, www/ausflug.html.
 - **Emojis/Symbole auf eigenen Seiten (www/*.html): Der Flur-Monitor hat KEINE Emoji-Schrift** – jede Seite mit Emojis braucht im `<head>` `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap">` und `"Noto Color Emoji"` am Ende jeder `font-family`-Liste (nicht bei `inherit`). Prüfen vor dem Hochladen: `python3 claude_tools/emoji_check.py`.
 - Umzug: komplettes HA-Backup (.tar) wiederherstellen
 
