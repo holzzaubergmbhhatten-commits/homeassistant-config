@@ -14,7 +14,7 @@ zum Antippen einzelner Räume.
   Vorher Testphase auf Windows-Laptop mit Docker.
 
 ## Entscheidungen
-- **Marco ist Tischlermeister (selbstständig) mit Elektro-Qualifizierung** – Elektroarbeiten (230 V, Verteiler, Shellys an Netzspannung) macht er selbst. Nicht auf einen Elektriker verweisen. Nicht „Elektriker“ nennen. Haus Fünfhauser Weg ist auf neuestem Dämmstandard; Ausbau meist in Eigenleistung (kaum Handwerkerrechnungen, keine KfW/BAFA-Themen).
+- **Marco ist Tischlermeister (selbstständig) mit Elektro-Qualifizierung** – Elektroarbeiten (230 V, Verteiler, Shellys an Netzspannung) macht er selbst. Nicht auf einen Elektriker verweisen. Nicht „Elektriker“ nennen. Das eigene Wohnhaus (ca. 200 m² + DG) ist auf neuestem Dämmstandard; Ausbau meist in Eigenleistung (kaum Handwerkerrechnungen, keine KfW/BAFA-Themen).
 - Plattform: Home Assistant (statt iPad)
 - Kalender: eigene Website (Direktbuchungen) + Holidu + lokaler Geburtstage-Kalender
 - Wetter: Met.no
