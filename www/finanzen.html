@@ -135,7 +135,7 @@ const zahl = x => { let t = String(x == null ? "" : x).trim().replace(/\s|€/g,
 const FAKTOR = { monat: 1, quartal: 1 / 3, halbjahr: 1 / 6, jahr: 1 / 12 };
 const RHY = [["monat", "monatlich"], ["quartal", "vierteljährlich"], ["halbjahr", "halbjährlich"], ["jahr", "jährlich"]];
 const GRUPPEN = { ein: ["Gehalt", "Miete", "Kindergeld", "Sonstiges"],
-  aus: ["Wohnen & Haus", "Kredit", "Versicherung", "Auto", "Kinder", "Lebensmittel", "Handy & Abos", "Sparen", "Sonstiges"] };
+  aus: ["Wohnen & Haus", "Kredit", "Versicherung", "Gesundheit", "Auto", "Kinder", "Lebensmittel", "Einkäufe", "Freizeit & Urlaub", "Handy & Abos", "Sparen", "Sonstiges"] };
 function toast(t) { const e = document.getElementById("toast"); e.textContent = t; e.classList.add("an"); clearTimeout(e._t); e._t = setTimeout(() => e.classList.remove("an"), 2600); }
 async function skript(daten) {
   const h = hass(); if (!h) throw new Error("keine Verbindung");

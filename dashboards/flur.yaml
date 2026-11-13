@@ -1880,7 +1880,7 @@ views:
   type: panel
   cards:
   - type: iframe
-    url: /local/finanzen.html?v=2
+    url: /local/finanzen.html?v=3
     aspect_ratio: 53.3%
 - title: Mail
   path: mail
