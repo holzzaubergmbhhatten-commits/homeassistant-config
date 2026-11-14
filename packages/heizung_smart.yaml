@@ -285,7 +285,17 @@ automation:
         target:
           entity_id: number.hwr_warmepumpe_normaltemperatur_2
         data:
-          value: "{{ [states('number.hwr_warmepumpe_normaltemperatur_2') | int(22) + 2, 25] | min }}"
+          value: "{{ [states('input_number.hk2_soll_gemerkt') | int(22) + 2, 25] | min }}"
+      # Die Viessmann-Cloud nimmt den Wert manchmal nicht an (14.11.2026) – nach 1 Minute prüfen und notfalls nochmal
+      - delay: "00:01:00"
+      - if: "{{ states('number.hwr_warmepumpe_normaltemperatur_2') | int(0) < [states('input_number.hk2_soll_gemerkt') | int(22) + 2, 25] | min }}"
+        then:
+          - action: number.set_value
+            continue_on_error: true
+            target:
+              entity_id: number.hwr_warmepumpe_normaltemperatur_2
+            data:
+              value: "{{ [states('input_number.hk2_soll_gemerkt') | int(22) + 2, 25] | min }}"
       # Stellantriebe der Fußbodenheizung (switch.zone_…) öffnet packages/zonen.yaml – mit Obergrenze pro Raum
       - action: logbook.log
         data:
