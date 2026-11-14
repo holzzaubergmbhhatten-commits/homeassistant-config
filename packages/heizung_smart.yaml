@@ -155,6 +155,14 @@ automation:
       - trigger: time_pattern
         minutes: "/15"
     conditions:
+      # nicht, solange der Kamin brennt bzw. die Wärmepumpe wegen Kamin gesperrt ist – das Warmwasser kommt dann vom Kamin
+      # (13./14.11.2026: Sonnen-Warmwasser hat die Wärmepumpe trotz Kamin-Sperre gestartet)
+      - condition: state
+        entity_id: binary_sensor.kamin_brennt
+        state: "off"
+      - condition: state
+        entity_id: switch.warmepumpe_kamin_sperre
+        state: "off"
       - condition: state
         entity_id: input_boolean.pv_warmwasser
         state: "on"

@@ -5,8 +5,9 @@
 #
 # Gesperrt wird nur, wenn sich das lohnt und nichts kalt wird:
 #   - Kamin brennt seit 10 Minuten (binary_sensor.kamin_brennt vom Kamin-Signal-Mini)
-#   - Puffer oben mind. 40 °C (läuft die Sperre schon: bis 35 °C)
-#   - Warmwasser mind. 40 °C (läuft die Sperre schon: bis 38 °C)
+#   - Puffer oben mind. 45 °C (läuft die Sperre schon: bis 40 °C). Das Warmwasser kommt über die Frischwasser-Station
+#     oben aus dem Puffer – der WW-Fühler der Wärmepumpe sitzt tiefer und schwankt stark (25–59 °C), er zählt nicht mehr
+#     (14.11.2026: er fiel immer wieder unter 38 °C → Sperre kurz weg → Wärmepumpe lud sofort Warmwasser).
 # Sonst und sobald der Kamin aus ist: Sperre sofort weg. Spätestens nach 12 Stunden ebenfalls (Sicherheitsnetz).
 # Abschaltbar über den Schalter „Wärmepumpe bei Kamin sperren“.
 
@@ -24,11 +25,9 @@ template:
         state: >-
           {% set an = this.state == 'on' %}
           {% set p = states('sensor.hwr_warmepumpe_puffertemperatur_oben') | float(0) %}
-          {% set ww = states('sensor.hwr_warmepumpe_ww_speichertemperatur') | float(0) %}
           {{ is_state('input_boolean.kamin_sperre_erlaubt', 'on')
              and is_state('binary_sensor.kamin_brennt', 'on')
-             and p >= (35 if an else 40)
-             and ww >= (38 if an else 40) }}
+             and p >= (40 if an else 45) }}
 
 automation:
   - id: wp_kamin_sperre_schalten
@@ -55,20 +54,30 @@ automation:
           - action: switch.turn_on
             target:
               entity_id: switch.warmepumpe_kamin_sperre
-          # Zusätzlich über die Viessmann-Cloud: Warmwasser-Soll auf 38 °C, damit die Wärmepumpe nicht fürs
-          # Warmwasser anspringt (falls der Smart-Grid-Kontakt nicht wirkt). Zurück auf 45 °C (Kamin-Modus) beim Freigeben.
+          # Zusätzlich über die Viessmann-Cloud: Warmwasser-Soll auf 20 °C, damit die Wärmepumpe nicht fürs
+          # Warmwasser anspringt (falls der Smart-Grid-Kontakt nicht wirkt). Das Warmwasser kommt in der Zeit vom Kamin
+          # über den Puffer. Zurück auf 45 °C (Kamin-Modus) bzw. den gemerkten Wert beim Freigeben.
           - action: number.set_value
             continue_on_error: true
             target:
               entity_id: number.hwr_warmepumpe_ww_temperatur
             data:
-              value: 38
+              value: 20
           - action: logbook.log
             data:
               name: Wärmepumpe
               message: >-
                 gesperrt – Kamin heizt (Puffer {{ states('sensor.hwr_warmepumpe_puffertemperatur_oben') | float(0) | round(0) | int }} °C,
                 Warmwasser {{ states('sensor.hwr_warmepumpe_ww_speichertemperatur') | float(0) | round(0) | int }} °C)
+      # Sperre läuft schon: Warmwasser-Soll niedrig halten (z. B. nach Neustart oder wenn eine andere Automation ihn hochgesetzt hat)
+      - if: "{{ soll and is_state('switch.warmepumpe_kamin_sperre', 'on') and states('number.hwr_warmepumpe_ww_temperatur') | int(0) > 20 }}"
+        then:
+          - action: number.set_value
+            continue_on_error: true
+            target:
+              entity_id: number.hwr_warmepumpe_ww_temperatur
+            data:
+              value: 20
       - if: "{{ not soll and not is_state('switch.warmepumpe_kamin_sperre', 'off') }}"
         then:
           - action: switch.turn_off
