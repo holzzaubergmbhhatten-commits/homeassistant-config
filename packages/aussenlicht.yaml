@@ -96,9 +96,11 @@ automation:
                | selectattr('attributes.device_class', 'eq', 'illuminance')
                | selectattr('name', 'search', '(?i)haust(ü|ue|u)r|eingang') | map(attribute='state') | map('float', 9999) | list %}
             {{ h | min if h else 9999 }}
-          # dunkel = Sensor unter 50 Lux ODER Sonne untergegangen (Straßenlicht kann den Sensor aufhellen)
+          # dunkel = Sonne untergegangen (oder knapp darüber) – die Bewegungsmelder sitzen im Schatten unter dem Gesims und
+          # messen auch mittags oft nur 1–20 Lux (14.11.2026: Licht ging tagsüber an). Lux zählt nur noch bei tief stehender Sonne.
           dunkel: >-
-            {{ lux < 50 or state_attr('sun.sun', 'elevation') | float(10) < 0 }}
+            {% set hoehe = state_attr('sun.sun', 'elevation') | float(10) %}
+            {{ hoehe < 0 or (hoehe < 2 and lux < 5) }}
           aus: "{{ lampen | reject('is_state', 'on') | list }}"
       - condition: template
         value_template: "{{ lampen | count > 0 and (dunkel or is_state('input_boolean.haustuer_licht_auto', 'on')) }}"
@@ -170,9 +172,11 @@ automation:
                | selectattr('attributes.device_class', 'eq', 'illuminance')
                | selectattr('name', 'search', '(?i)giebel|hinten|heini|renate|gesims') | map(attribute='state') | map('float', 9999) | list %}
             {{ h | min if h else 9999 }}
-          # dunkel = Sensor unter 50 Lux ODER Sonne untergegangen (Straßenlicht kann den Sensor aufhellen)
+          # dunkel = Sonne untergegangen (oder knapp darüber) – die Bewegungsmelder sitzen im Schatten unter dem Gesims und
+          # messen auch mittags oft nur 1–20 Lux (14.11.2026: Licht ging tagsüber an). Lux zählt nur noch bei tief stehender Sonne.
           dunkel: >-
-            {{ lux < 50 or state_attr('sun.sun', 'elevation') | float(10) < 0 }}
+            {% set hoehe = state_attr('sun.sun', 'elevation') | float(10) %}
+            {{ hoehe < 0 or (hoehe < 2 and lux < 5) }}
           aus: "{{ lampen | reject('is_state', 'on') | list }}"
       - condition: template
         value_template: "{{ lampen | count > 0 and (dunkel or is_state('input_boolean.gesimse_licht_auto', 'on')) }}"
@@ -198,3 +202,54 @@ automation:
       - action: input_boolean.turn_off
         target:
           entity_id: input_boolean.gesimse_licht_auto
+
+  # Nach einem Neustart von Home Assistant läuft die Warte-Zeit der Bewegungs-Automationen nicht weiter –
+  # dann blieb das Licht an (14.11.2026, Gesimse den ganzen Nachmittag). Alle 5 Minuten und beim Start prüfen:
+  # von der Automation eingeschaltet, aber seit 5 Minuten keine Bewegung → aus.
+  - id: aussenlicht_aufraeumen
+    alias: "Außenlicht: von der Automation eingeschaltet, keine Bewegung mehr → aus"
+    mode: single
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/5"
+    actions:
+      - repeat:
+          for_each:
+            - auto: input_boolean.gesimse_licht_auto
+              suche: "(?i)giebel|hinten|heini|renate|gesims"
+              lampe: "(?i)gesims|\\b(licht|lampe)\\s*0?(7|8|9|10|11|12|20|21|22|23|24)\\b"
+            - auto: input_boolean.haustuer_licht_auto
+              suche: "(?i)haust(ü|ue|u)r|eingang"
+              lampe: "(?i)haust(ü|ue|u)r|eingang"
+          sequence:
+            - variables:
+                melder: >-
+                  {{ states.binary_sensor | selectattr('attributes.device_class', 'defined')
+                     | selectattr('attributes.device_class', 'in', ['motion', 'occupancy', 'presence'])
+                     | selectattr('name', 'search', repeat.item.suche) | list }}
+                ruhig: >-
+                  {{ melder | selectattr('state', 'eq', 'on') | list | count == 0
+                     and (melder | map(attribute='last_changed') | max | default(now() - timedelta(hours=1))) < now() - timedelta(minutes=5) }}
+            - if: "{{ is_state(repeat.item.auto, 'on') and ruhig }}"
+              then:
+                - action: light.turn_off
+                  continue_on_error: true
+                  target:
+                    entity_id: >-
+                      {% set einzeln = states.light | selectattr('name', 'search', repeat.item.lampe)
+                         | rejectattr('attributes.entity_id', 'defined') | map(attribute='entity_id') | list %}
+                      {% set ns = namespace(l=einzeln) %}
+                      {% for g in states.light | selectattr('name', 'search', repeat.item.lampe) | selectattr('attributes.entity_id', 'defined') %}
+                        {% set ns.l = ns.l + (expand(g.entity_id) | map(attribute='entity_id') | list) %}
+                      {% endfor %}
+                      {% set ns2 = namespace(o=[]) %}
+                      {% for l in states.light %}
+                        {% if [l.name, l.entity_id, device_attr(l.entity_id, 'name') or '', device_attr(l.entity_id, 'name_by_user') or ''] | join(' ') is search('(?i)terrasse') %}
+                          {% set ns2.o = ns2.o + [l.entity_id] %}{% endif %}
+                      {% endfor %}
+                      {{ ns.l | unique | reject('in', ns2.o) | select('is_state', 'on') | list }}
+                - action: input_boolean.turn_off
+                  target:
+                    entity_id: "{{ repeat.item.auto }}"
