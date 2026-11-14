@@ -242,12 +242,22 @@ automation:
   - id: kamin_waerme_start
     alias: "Heizung: Kamin-Wärme ins Haus abgeben"
     mode: single
+    # Ab 55 °C oben ist der Puffer so warm, dass der Kamin seine Wärme bald nicht mehr loswird (Rücklauf um 56 °C).
+    # Vorher erst ab 62 °C – das wurde an langen Kamin-Tagen nie erreicht (14.11.2026: oben 60 °C, Zonen blieben zu).
     triggers:
       - trigger: numeric_state
         entity_id: sensor.hwr_warmepumpe_puffertemperatur_oben
-        above: 62
+        above: 55
         for: "00:10:00"
+      - trigger: time_pattern
+        minutes: "/10"
     conditions:
+      - condition: numeric_state
+        entity_id: sensor.hwr_warmepumpe_puffertemperatur_oben
+        above: 55
+      - condition: state
+        entity_id: binary_sensor.kamin_brennt
+        state: "on"
       - condition: state
         entity_id: input_boolean.kamin_waerme_abladen
         state: "on"
@@ -288,7 +298,7 @@ automation:
     triggers:
       - trigger: numeric_state
         entity_id: sensor.hwr_warmepumpe_puffertemperatur_oben
-        below: 50
+        below: 48
         for: "00:10:00"
       - trigger: state
         entity_id: binary_sensor.hwr_warmepumpe_kompressor
